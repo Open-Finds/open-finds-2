@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-black text-ink-primary font-sans antialiased;
+    min-height: 100vh;
+  }
+  * {
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Desktop-first: lock app to 800px centered column */
+.app-shell {
+  width: 800px;
+  max-width: 100vw;
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+.app-shell > * {
+  width: 800px;
+  max-width: 100vw;
+}
+
+@layer components {
+  .card {
+    @apply bg-surface rounded-card border border-gold/20 p-5;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-card bg-gold px-6 py-3 font-semibold text-black transition-all duration-200 active:scale-[0.98] active:shadow-gold-press;
+    min-height: 44px;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-card border border-gold bg-transparent px-6 py-3 font-semibold text-white transition-all duration-200 active:scale-[0.98] active:shadow-gold-press;
+    min-height: 44px;
+  }
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .gold-gradient-text {
+    background: linear-gradient(135deg, #F5D76E, #D4AF37);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .gold-gradient-bg {
+    background: linear-gradient(135deg, #F5D76E, #D4AF37);
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Scroll-snap container for the landing flow */
+.snap-container {
+  scroll-snap-type: y mandatory;
+  overflow-y: scroll;
+  height: 100vh;
+}
+.snap-section {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* Custom date input styling */
+input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(0.7) sepia(1) saturate(5) hue-rotate(15deg);
+  cursor: pointer;
+}
+
+/* Gold range slider */
+.slider-gold {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #D4AF37, #D4AF37) no-repeat,
+    rgba(212, 175, 55, 0.2);
+  outline: none;
+}
+.slider-gold::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #D4AF37;
+  border: 2px solid #000;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+  transition: transform 0.15s;
+}
+.slider-gold::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+.slider-gold::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #D4AF37;
+  border: 2px solid #000;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+}
+
+/* Confetti celebration */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-20vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+.confetti-particle {
+  position: fixed;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  animation: confetti-fall 1.5s ease-in forwards;
+  z-index: 100;
+  pointer-events: none;
+}
