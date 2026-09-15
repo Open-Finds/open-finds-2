@@ -26,6 +26,50 @@ import { Bell } from 'lucide-react';
 
 type View = 'home' | 'events' | 'venues' | 'friends' | 'settings';
 
+/**
+ * Authenticated chrome. The content column clears the mobile tab bar via
+ * padding-bottom and the desktop sidebar via padding-left (see .app-main),
+ * so pages themselves stay layout-agnostic.
+ */
+function Shell({
+  children,
+  view,
+  onChangeView,
+  unreadCount,
+  onOpenNotifications,
+  isEditingItinerary = false,
+}: {
+  children: React.ReactNode;
+  view: View;
+  onChangeView: (v: View) => void;
+  unreadCount: number;
+  onOpenNotifications: () => void;
+  isEditingItinerary?: boolean;
+}) {
+  return (
+    <>
+      <div className="app-main">
+        <div className="app-canvas">{children}</div>
+      </div>
+
+      <button
+        onClick={onOpenNotifications}
+        className="fixed right-4 top-4 z-50 flex size-11 items-center justify-center rounded-full border border-gold/20 bg-[#0d0d0d]/90 text-gold backdrop-blur-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-90 sm:right-5 sm:top-5"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+      >
+        <Bell size={20} />
+        {unreadCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-black">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      <ViewToggle view={view} onChange={onChangeView} isEditingItinerary={isEditingItinerary} />
+    </>
+  );
+}
+
 function AppInner() {
   const { route } = useRouter();
   const { session, loading: authLoading } = useAuth();
@@ -150,9 +194,16 @@ function AppInner() {
     setDashboardId(planId);
   };
 
+  const shellProps = {
+    view,
+    onChangeView: switchView,
+    unreadCount,
+    onOpenNotifications: () => setShowNotifications(true),
+  };
+
   if (editPlanId) {
     return (
-      <>
+      <Shell {...shellProps} isEditingItinerary>
         <HomePage
           editPlanId={editPlanId}
           onNavigateToDashboard={finishEditing}
@@ -161,31 +212,28 @@ function AppInner() {
             setDashboardId(editPlanId);
           }}
         />
-        <ViewToggle view={view} onChange={switchView} isEditingItinerary={true} />
-      </>
+      </Shell>
     );
   }
 
   if (dashboardId) {
     return (
-      <>
+      <Shell {...shellProps}>
         <DashboardPage id={dashboardId} onBack={closeDashboard} onEditPlan={handleEditPlan} />
-        <ViewToggle view={view} onChange={switchView} />
-      </>
+      </Shell>
     );
   }
 
   if (showNotifications) {
     return (
-      <>
+      <Shell {...shellProps}>
         <NotificationsPage onBack={() => { setShowNotifications(false); refreshUnread(); }} />
-        <ViewToggle view={view} onChange={switchView} />
-      </>
+      </Shell>
     );
   }
 
   return (
-    <>
+    <Shell {...shellProps}>
       <div key={view} className={`animate-slide-${slideDir}`}>
         {view === 'home' ? (
           <HomePage onNavigateToDashboard={openDashboard} />
@@ -199,27 +247,7 @@ function AppInner() {
           <VenuesPage />
         )}
       </div>
-
-      {/* Notifications bell */}
-      <button
-        onClick={() => setShowNotifications(true)}
-        className="fixed right-5 top-5 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-gold/20 bg-[#0d0d0d]/90 text-gold backdrop-blur-md transition-all active:scale-90"
-        aria-label="Notifications"
-      >
-        <Bell size={20} />
-        {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-black">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
-      </button>
-
-      <ViewToggle
-        view={view}
-        onChange={switchView}
-        isEditingItinerary={false}
-      />
-    </>
+    </Shell>
   );
 }
 

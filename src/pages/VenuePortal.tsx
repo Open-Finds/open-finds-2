@@ -18,7 +18,6 @@ import {
   Check,
   Loader2,
   AlertCircle,
-  Star,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -192,7 +191,7 @@ function VenueSignupForm({
             <option value="dessert">Dessert</option>
           </select>
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField icon={<Instagram size={16} />} label="Instagram (optional)">
             <input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@yourvenue" className={inputClass} />
           </FormField>
@@ -200,7 +199,7 @@ function VenueSignupForm({
             <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." className={inputClass} />
           </FormField>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField icon={<User size={16} />} label="Contact Name">
             <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Your name" className={inputClass} />
           </FormField>
@@ -208,7 +207,7 @@ function VenueSignupForm({
             <input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="you@venue.com" className={inputClass} />
           </FormField>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField icon={<DollarSign size={16} />} label="Monthly Budget (optional)">
             <input value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} type="number" min="0" step="0.01" placeholder="e.g. 100 (blank = unlimited)" className={inputClass} />
           </FormField>
@@ -336,7 +335,7 @@ function VenueDashboard({
         </div>
       ) : stats ? (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <StatCard icon={<Eye size={18} />} label="Impressions" value={stats.impressions} sub="Free" color="text-blue-400" />
             <StatCard icon={<Bookmark size={18} />} label="Saves" value={stats.saves} sub="Free" color="text-emerald-400" />
             <StatCard icon={<Footprints size={18} />} label="Visits" value={stats.visits} sub={`$${(partner.visit_rate_cents / 100).toFixed(2)} each`} color="text-gold" />
@@ -497,7 +496,7 @@ function VenueEditForm({
             <option value="dessert">Dessert</option>
           </select>
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField icon={<Instagram size={16} />} label="Instagram (optional)">
             <input value={instagram} onChange={(e) => setInstagram(e.target.value)} className={inputClass} />
           </FormField>
@@ -505,7 +504,7 @@ function VenueEditForm({
             <input value={website} onChange={(e) => setWebsite(e.target.value)} className={inputClass} />
           </FormField>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField icon={<User size={16} />} label="Contact Name">
             <input value={contactName} onChange={(e) => setContactName(e.target.value)} className={inputClass} />
           </FormField>
@@ -513,7 +512,7 @@ function VenueEditForm({
             <input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className={inputClass} />
           </FormField>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField icon={<DollarSign size={16} />} label="Monthly Budget (optional)">
             <input value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} type="number" min="0" step="0.01" placeholder="blank = unlimited" className={inputClass} />
           </FormField>

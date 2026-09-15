@@ -155,11 +155,11 @@ export function SavedVenuesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
       <div
-        className="flex h-[85vh] max-h-[85vh] w-[640px] max-w-[90vw] flex-col overflow-hidden rounded-3xl border border-gold/20 bg-[#0d0d0d]"
+        className="flex h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-gold/20 bg-[#0d0d0d] pb-[env(safe-area-inset-bottom,0px)] sm:h-[85vh] sm:max-h-[85vh] sm:w-[640px] sm:max-w-[90vw] sm:rounded-3xl sm:pb-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

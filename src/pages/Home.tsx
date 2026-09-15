@@ -146,7 +146,7 @@ function NextButton({
   label?: string;
 }) {
   return (
-    <div className="fixed bottom-20 left-1/2 z-50 flex w-[800px] max-w-[100vw] -translate-x-1/2 justify-center px-6">
+    <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8 lg:left-auto lg:right-8 lg:translate-x-0">
       <button
         onClick={onClick}
         disabled={disabled}

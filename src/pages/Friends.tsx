@@ -307,7 +307,7 @@ export function FriendsPage() {
                 <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gold/70">
                   Friend Requests ({pendingIncoming.length})
                 </h2>
-                <div className="space-y-3">
+                <div className="listing-grid">
                   {pendingIncoming.map((f) => (
                     <div key={f.friendship_id} className="flex items-center justify-between rounded-card border border-gold/30 bg-[#1a1a1a] p-4">
                       <div>
@@ -351,7 +351,7 @@ export function FriendsPage() {
                   <p className="text-sm text-ink-secondary">No friends yet. Search by username to add someone!</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="listing-grid">
                   {acceptedFriends.map((f) => (
                     <div key={f.friendship_id} className="flex items-center justify-between rounded-card border border-gold/20 bg-[#1a1a1a] p-4">
                       <div>
@@ -378,7 +378,7 @@ export function FriendsPage() {
                 <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gold/70">
                   Pending Requests ({pendingOutgoing.length})
                 </h2>
-                <div className="space-y-3">
+                <div className="listing-grid">
                   {pendingOutgoing.map((f) => (
                     <div key={f.friendship_id} className="flex items-center justify-between rounded-card border border-gold/10 bg-[#1a1a1a] p-4 opacity-70">
                       <div>
@@ -425,7 +425,7 @@ export function FriendsPage() {
                 <p className="text-sm text-ink-secondary">No groups yet. Create one to invite the same friends repeatedly!</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="listing-grid">
                 {groups.map((g) => (
                   <div key={g.id} className="rounded-card border border-gold/20 bg-[#1a1a1a] p-4">
                     <button
@@ -527,7 +527,7 @@ export function FriendsPage() {
                 <p className="text-sm text-ink-secondary">No shared collections yet. Create one to collaborate on venues with friends!</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="listing-grid">
                 {collections.map((c) => (
                   <div key={c.id} className="rounded-card border border-gold/20 bg-[#1a1a1a] p-4">
                     <button

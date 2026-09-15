@@ -11,6 +11,9 @@ dist
 dist-ssr
 *.local
 
+supabase/.temp
+.env.example
+.gitignore
 .vscode/*
 !.vscode/extensions.json
 .idea

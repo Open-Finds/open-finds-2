@@ -2,44 +2,165 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ──────────────────────────────────────────────────────────────
+   Design tokens — shadcn/ui variable contract, carrying the
+   Open Finds gold-on-black identity. The app commits to a single
+   dark world by design, so :root holds the dark palette outright.
+   ────────────────────────────────────────────────────────────── */
 @layer base {
+  :root {
+    color-scheme: dark;
+
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 100%;
+
+    /* Brand gold */
+    --primary: 46 65% 52%;
+    --primary-foreground: 0 0% 0%;
+    --primary-light: 47 87% 70%;
+    --primary-dark: 44 59% 41%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 63%;
+
+    --accent: 46 65% 52%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 46 95% 47%;
+    --warning-foreground: 0 0% 0%;
+
+    /* Gold-tinted chrome rather than neutral grey */
+    --border: 46 30% 20%;
+    --input: 46 30% 20%;
+    --ring: 46 65% 52%;
+
+    --surface: 0 0% 10%;
+
+    --radius: 1rem;
+  }
+
   html {
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
   }
+
   body {
-    @apply bg-black text-ink-primary font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     min-height: 100vh;
+    min-height: 100dvh;
   }
+
   * {
+    @apply border-border;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Visible keyboard focus everywhere, brand-coloured */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* Desktop-first: lock app to 800px centered column */
-.app-shell {
-  width: 800px;
-  max-width: 100vw;
-  margin: 0 auto;
-  min-height: 100vh;
-  position: relative;
-  overflow-x: hidden;
-}
-.app-shell > * {
-  width: 800px;
-  max-width: 100vw;
-}
-
+/* ──────────────────────────────────────────────────────────────
+   Responsive application shell.
+   Mobile: full-bleed single column above a bottom tab bar.
+   Desktop (lg+): persistent left sidebar, fluid centred content.
+   ────────────────────────────────────────────────────────────── */
 @layer components {
+  .app-shell {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* Every page's outer content column. Grows with the viewport
+     instead of being pinned to a fixed 800px strip. */
+  .app-container {
+    width: 100%;
+    max-width: 640px;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) {
+    .app-container {
+      max-width: 720px;
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .app-container {
+      max-width: 880px;
+      padding-inline: 2rem;
+    }
+  }
+  @media (min-width: 1280px) {
+    .app-container {
+      max-width: 1040px;
+    }
+  }
+
+  /* Reserve room for the mobile tab bar; reclaimed on desktop
+     where navigation moves into the sidebar. */
+  .app-main {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 1024px) {
+    .app-main {
+      padding-bottom: 2rem;
+      padding-left: 16rem;
+    }
+  }
+
+  /* Content canvas. Pages used to inherit their width from a fixed
+     800px shell; they are capped here instead, so a page stays
+     readable on a 2560px monitor without every page being rewritten. */
+  .app-canvas {
+    width: 100%;
+  }
+  @media (min-width: 1024px) {
+    .app-canvas {
+      max-width: 1100px;
+      margin-inline: auto;
+    }
+  }
+
   .card {
-    @apply bg-surface rounded-card border border-gold/20 p-5;
+    @apply rounded-card border border-gold/20 bg-surface p-4 sm:p-5;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-card bg-gold px-6 py-3 font-semibold text-black transition-all duration-200 active:scale-[0.98] active:shadow-gold-press;
+    @apply inline-flex items-center justify-center gap-2 rounded-card bg-gold px-5 py-3 font-semibold text-black transition-all duration-200 active:scale-[0.98] active:shadow-gold-press sm:px-6;
     min-height: 44px;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-card border border-gold bg-transparent px-6 py-3 font-semibold text-white transition-all duration-200 active:scale-[0.98] active:shadow-gold-press;
+    @apply inline-flex items-center justify-center gap-2 rounded-card border border-gold bg-transparent px-5 py-3 font-semibold text-white transition-all duration-200 active:scale-[0.98] active:shadow-gold-press sm:px-6;
     min-height: 44px;
   }
   .touch-target {
@@ -47,33 +168,59 @@
     min-width: 44px;
   }
   .gold-gradient-text {
-    background: linear-gradient(135deg, #F5D76E, #D4AF37);
+    background: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary)));
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
   .gold-gradient-bg {
-    background: linear-gradient(135deg, #F5D76E, #D4AF37);
+    background: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary)));
+  }
+
+  /* Responsive grid used by venue / event / trip listings.
+     One column on phones, two on tablets, three on wide screens. */
+  .listing-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  @media (min-width: 768px) {
+    .listing-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+  }
+  @media (min-width: 1280px) {
+    .listing-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
 }
 
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Scroll-snap container for the landing flow */
+/* Scroll-snap container for the landing flow — phone only.
+   On larger screens forced snapping fights normal page reading. */
 .snap-container {
-  scroll-snap-type: y mandatory;
-  overflow-y: scroll;
+  overflow-y: auto;
   height: 100vh;
+  height: 100dvh;
 }
-.snap-section {
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
+@media (min-width: 1024px) {
+  .snap-container {
+    height: auto;
+    overflow-y: visible;
+  }
+}
+@media (max-width: 1023px) and (prefers-reduced-motion: no-preference) {
+  .snap-container {
+    scroll-snap-type: y mandatory;
+  }
+  .snap-section {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
 }
 
-/* Custom date input styling */
+/* Date input picker indicator, tinted to the brand */
 input[type='date']::-webkit-calendar-picker-indicator {
   filter: invert(0.7) sepia(1) saturate(5) hue-rotate(15deg);
   cursor: pointer;
@@ -83,10 +230,11 @@ input[type='date']::-webkit-calendar-picker-indicator {
 .slider-gold {
   -webkit-appearance: none;
   appearance: none;
+  width: 100%;
   height: 6px;
   border-radius: 3px;
-  background: linear-gradient(to right, #D4AF37, #D4AF37) no-repeat,
-    rgba(212, 175, 55, 0.2);
+  background: linear-gradient(to right, hsl(var(--primary)), hsl(var(--primary))) no-repeat,
+    hsl(var(--primary) / 0.2);
   outline: none;
 }
 .slider-gold::-webkit-slider-thumb {
@@ -95,10 +243,10 @@ input[type='date']::-webkit-calendar-picker-indicator {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #D4AF37;
-  border: 2px solid #000;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
   cursor: pointer;
-  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+  box-shadow: 0 0 10px hsl(var(--primary) / 0.5);
   transition: transform 0.15s;
 }
 .slider-gold::-webkit-slider-thumb:active {
@@ -108,10 +256,10 @@ input[type='date']::-webkit-calendar-picker-indicator {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #D4AF37;
-  border: 2px solid #000;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
   cursor: pointer;
-  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+  box-shadow: 0 0 10px hsl(var(--primary) / 0.5);
 }
 
 /* Confetti celebration */

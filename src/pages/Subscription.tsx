@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, Check, Crown, Zap, Infinity as InfinityIcon, Loader2, Sparkles, Calendar, MapPin, Star, Ban } from 'lucide-react';
+import { ChevronLeft, Check, Crown, Zap, Infinity as InfinityIcon, Loader2, Sparkles, Ban } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { updateSubscriptionTier, SUBSCRIPTION_PLANS, type SubscriptionTier } from '../lib/supabase';
 
@@ -82,7 +82,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 xl:items-start">
           {PLAN_ORDER.map((tier) => {
             const plan = SUBSCRIPTION_PLANS[tier];
             const meta = PLAN_META[tier];

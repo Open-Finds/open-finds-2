@@ -9,8 +9,6 @@ const corsHeaders = {
 
 type Coord = { lat: number; lng: number };
 
-type Origin = string | { lat: number; lon: number };
-
 type Destination = string | { address: string; lat?: number; lon?: number };
 
 type VenueDistance = {

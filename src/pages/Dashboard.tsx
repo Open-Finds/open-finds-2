@@ -23,7 +23,6 @@ import { formatTime } from '../lib/time';
 export function DashboardPage({
   id,
   onBack,
-  onEditPlan: _onEditPlan,
 }: {
   id: string;
   onBack: () => void;

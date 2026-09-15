@@ -282,7 +282,7 @@ export function EventsPage({
             ) : (
               <>
                 {trips.length > 0 && (
-                  <div className="mb-6 space-y-3">
+                  <div className="listing-grid mb-6">
                     <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-secondary">
                       Trips
                     </h2>
@@ -291,7 +291,7 @@ export function EventsPage({
                 )}
 
                 {upcoming.length > 0 && (
-                  <div className="space-y-3">
+                  <div className="listing-grid">
                     {trips.length > 0 && (
                       <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-secondary">
                         Single Events
@@ -346,7 +346,7 @@ export function EventsPage({
             <p className="mb-6 text-sm text-ink-secondary">
               "{confirmPlan.title}" will be marked as canceled. Attendees with the share link will see a cancellation notice, but the itinerary stays visible.
             </p>
-            <div className="space-y-3">
+            <div className="listing-grid">
               <button
                 onClick={handleCancel}
                 disabled={canceling}

@@ -10,10 +10,10 @@ const safeStorage = {
     try { return localStorage.getItem(key); } catch { return null; }
   },
   setItem: (key: string, value: string): void => {
-    try { localStorage.setItem(key, value); } catch {}
+    try { localStorage.setItem(key, value); } catch { /* private mode — nothing to persist to */ }
   },
   removeItem: (key: string): void => {
-    try { localStorage.removeItem(key); } catch {}
+    try { localStorage.removeItem(key); } catch { /* private mode — nothing to remove */ }
   },
 };
 

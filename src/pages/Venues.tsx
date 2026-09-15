@@ -356,7 +356,7 @@ export function VenuesPage() {
                 className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
               />
             </div>
-            <div className="space-y-3">
+            <div className="listing-grid">
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 size={24} className="animate-spin text-gold/50" />
@@ -749,7 +749,7 @@ export function VenuesPage() {
             </div>
 
             {/* Venue list */}
-            <div className="mt-3 space-y-3">
+            <div className="listing-grid mt-3">
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 size={24} className="animate-spin text-gold/50" />
