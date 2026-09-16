@@ -30,6 +30,6 @@ if (!window.matchMedia) {
   })) as unknown as typeof window.matchMedia;
 }
 
-if (!window.scrollTo) {
-  window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
-}
+// jsdom ships a scrollTo that logs "Not implemented" on every call; the router
+// calls it on each navigate, so replace it outright rather than conditionally.
+window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
