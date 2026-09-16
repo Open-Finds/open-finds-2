@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, fetchProfile, type SubscriptionTier } from '../lib/supabase';
+import { supabase, fetchProfile, claimDeviceRows, type SubscriptionTier } from '../lib/supabase';
+import { setMonitoringUser } from '../lib/monitoring';
 
 type AuthContextType = {
   session: Session | null;
@@ -65,11 +66,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (s?.user.id) await loadProfile(s.user.id);
   };
 
+  /**
+   * Adopt this device's plans and trips into the account.
+   *
+   * Runs on every resolved session rather than only on sign-in, so a user who
+   * installed the app anonymously, created plans, and later signed in on the
+   * same browser keeps that work. The RPC only touches rows with no owner and
+   * is idempotent, so calling it more than once costs nothing.
+   */
+  const claimForSession = async () => {
+    try {
+      await claimDeviceRows();
+    } catch { /* non-fatal — device-scoped access still works */ }
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      setMonitoringUser(data.session?.user.id ?? null);
       if (data.session?.user.id) {
         loadProfile(data.session.user.id);
+        claimForSession();
       } else {
         setProfileLoaded(true);
       }
@@ -78,10 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
       setSession(s);
+      setMonitoringUser(s?.user.id ?? null);
       setProfileLoaded(false);
       (async () => {
         if (s?.user.id) {
           await loadProfile(s.user.id);
+          await claimForSession();
         } else {
           setDisplayName(null);
           setUsername(null);

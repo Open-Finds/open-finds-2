@@ -21,3 +21,9 @@ CREATE OR REPLACE FUNCTION auth.role() RETURNS text
 CREATE OR REPLACE FUNCTION rep(l text, ok boolean) RETURNS void
 LANGUAGE plpgsql AS $$ BEGIN
   RAISE NOTICE '%', rpad(l,36) || CASE WHEN ok THEN ': PASS' ELSE ': ** FAIL **' END; END $$;
+
+-- Real Supabase grants these to the API roles; the stub must too, or any policy
+-- calling auth.uid() fails with "permission denied for schema auth".
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO anon, authenticated, service_role;
+GRANT SELECT ON auth.users TO anon, authenticated, service_role;

@@ -79,7 +79,7 @@ export function ConfirmedPage({ id }: { id: string }) {
 
   const multiStopMapsUrl = (() => {
     if (stops.length === 0) {
-      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(plan.location)}`;
+      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(plan.location ?? '')}`;
     }
     const addresses = stops.map((s) => s.address);
     if (addresses.length === 1) {

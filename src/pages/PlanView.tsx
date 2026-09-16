@@ -68,7 +68,7 @@ export function PlanViewPage({ id }: { id: string }) {
 
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
   const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(
-    stops.map((s) => s.address).join(' | ') || plan.location
+    stops.map((s) => s.address).join(' | ') || (plan.location ?? '')
   )}`;
 
   const handleInviteFriend = async () => {

@@ -2,7 +2,11 @@ import { Component, StrictMode } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { initMonitoring, reportError } from './lib/monitoring';
 import './index.css';
+
+// Before render, so a crash during the first paint is still captured.
+initMonitoring();
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -16,6 +20,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('App crashed:', error, info);
+    reportError(error, { componentStack: info.componentStack });
   }
 
   render() {

@@ -420,7 +420,7 @@ export function HomePage({
         setPlan(existingPlan);
         setEventName(existingPlan.title);
         setEventDate(existingPlan.date);
-        setLocation(existingPlan.location);
+        setLocation(existingPlan.location ?? '');
         const vibes = (existingPlan.type || '')
           .split(',')
           .filter(Boolean) as Vibe[];

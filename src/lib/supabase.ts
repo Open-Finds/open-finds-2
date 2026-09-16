@@ -77,6 +77,45 @@ export function getUserId(): string {
   return id;
 }
 
+/**
+ * The signed-in user's id, or null when browsing anonymously.
+ *
+ * Plans and trips are moving from the device id to this. New rows written by a
+ * signed-in user are stamped with it immediately; older rows are adopted by
+ * claimDeviceRows() below.
+ */
+async function getAuthUserId(): Promise<string | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Adopts this device's plans and trips into the signed-in account.
+ *
+ * Nothing in the database links a localStorage device id to an account — the
+ * browser is the only place that association exists — so this runs client-side
+ * on sign-in. It only ever touches rows that have no owner yet, and once a row
+ * is claimed the device id stops granting access to it.
+ *
+ * Returns how many rows were adopted, or null if the call could not be made.
+ */
+export async function claimDeviceRows(): Promise<{ plans: number; trips: number } | null> {
+  try {
+    const { data, error } = await supabase.rpc('claim_device_rows', {
+      p_device_id: getUserId(),
+    });
+    if (error) throw error;
+    return data as { plans: number; trips: number };
+  } catch {
+    // Non-fatal: the user keeps device-scoped access and the next sign-in retries.
+    return null;
+  }
+}
+
 /* ── Types ── */
 
 export type SubscriptionTier = 'free' | 'premium_monthly' | 'premium_yearly' | 'lifetime';
@@ -97,10 +136,12 @@ export type Profile = {
 
 export type Plan = {
   id: string;
+  /** auth.users id once the plan has been claimed; null for device-only rows. */
+  owner_id?: string | null;
   title: string;
   date: string;
   host_name: string;
-  location: string;
+  location: string | null;
   type: string;
   status: string;
   share_link: string | null;
@@ -115,6 +156,8 @@ export type Plan = {
 
 export type Trip = {
   id: string;
+  /** auth.users id once the trip has been claimed; null for device-only rows. */
+  owner_id?: string | null;
   name: string;
   destination: string;
   start_date: string;
@@ -282,9 +325,12 @@ export async function createPlan(
   }
 ) {
   const userId = getUserId();
+  const ownerId = await getAuthUserId();
   const { data, error } = await supabase
     .from('plans')
-    .insert({ ...plan, user_id: userId })
+    // user_id is still written so an anonymous session keeps working; owner_id
+    // is what actually carries ownership once the user has an account.
+    .insert({ ...plan, user_id: userId, owner_id: ownerId })
     .select()
     .single();
   if (error) throw error;
@@ -439,6 +485,21 @@ export async function reorderStops(
 
 /* ── Trips (Travel Mode — multi-day itineraries) ── */
 
+/**
+ * Records a guest's decline reason.
+ *
+ * Guests cannot UPDATE rsvps directly — the only UPDATE policy requires owning
+ * the parent plan. The RPC accepts a reason exactly once, onto a row that is
+ * already declined.
+ */
+export async function setRsvpDeclineReason(rsvpId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('set_rsvp_decline_reason', {
+    p_rsvp_id: rsvpId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+}
+
 export async function createTrip(
   trip: Omit<Trip, 'id' | 'created_at' | 'share_link' | 'is_paid' | 'user_id' | 'status'> & {
     status?: string;
@@ -446,11 +507,13 @@ export async function createTrip(
   }
 ) {
   const userId = getUserId();
+  const ownerId = await getAuthUserId();
   const { data, error } = await supabase
     .from('trips')
     .insert({
       ...trip,
       user_id: userId,
+      owner_id: ownerId,
       status: trip.status ?? 'active',
       is_paid: trip.is_paid ?? false,
     })

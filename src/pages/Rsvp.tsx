@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { navigate } from '../lib/router';
 import { formatTime } from '../lib/time';
 import {
-  supabase,
   fetchPlan,
   fetchStops,
   fetchRsvps,
+  insertRsvp,
   sortStops,
   setGuestName,
   sendGuestRsvpPushNotification,
@@ -106,18 +106,10 @@ export function RsvpPage({ id }: { id: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      const { data, error: insErr } = await supabase
-        .from('rsvps')
-        .insert({
-          plan_id: id,
-          name: name.trim(),
-          status,
-          auth_uid: isSignedIn ? session!.user.id : null,
-        })
-        .select()
-        .single();
-      if (insErr) throw insErr;
-      const rsvpId = (data as Rsvp).id;
+      // Guests cannot INSERT into rsvps directly; insertRsvp() goes through the
+      // submit_plan_rsvp RPC, which validates the plan and bounds the input.
+      const created = await insertRsvp({ plan_id: id, name: name.trim(), status });
+      const rsvpId = created.id;
       await sendGuestRsvpPushNotification({ planId: id, rsvpName: name.trim(), rsvpStatus: status });
       if (status === 'in') {
         if (!isSignedIn) setGuestName(name.trim());

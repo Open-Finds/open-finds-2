@@ -41,3 +41,34 @@ BEGIN
   PERFORM rep('R17 rsvps still not listable', (SELECT count(*) FROM rsvps)=0);
 END $$;
 RESET ROLE;
+
+-- Guest decline-reason path (Declined.tsx). A guest has no UPDATE rights on
+-- rsvps, so this must go through the RPC and must be one-shot.
+SET ROLE anon;
+DO $$
+DECLARE pid uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'; rid uuid; ok boolean;
+BEGIN
+  rid := (submit_plan_rsvp(pid,'Decliner','declined')->>'id')::uuid;
+  PERFORM rep('R18 decline reason accepted',
+    set_rsvp_decline_reason(rid,'Double booked')->>'decline_reason'='Double booked');
+
+  BEGIN PERFORM set_rsvp_decline_reason(rid,'changed my mind'); ok:=false;
+  EXCEPTION WHEN others THEN ok:=true; END;
+  PERFORM rep('R19 reason cannot be overwritten', ok);
+
+  BEGIN PERFORM set_rsvp_decline_reason(rid,''); ok:=false;
+  EXCEPTION WHEN others THEN ok:=true; END;
+  PERFORM rep('R20 empty reason rejected', ok);
+
+  -- An RSVP that is "in" is not a decline and must be refused.
+  rid := (submit_plan_rsvp(pid,'Attender','in')->>'id')::uuid;
+  BEGIN PERFORM set_rsvp_decline_reason(rid,'nope'); ok:=false;
+  EXCEPTION WHEN others THEN ok:=true; END;
+  PERFORM rep('R21 non-decline refused', ok);
+
+  -- Guests still cannot UPDATE rsvps directly.
+  UPDATE rsvps SET name='Hijacked' WHERE id=rid;
+  PERFORM rep('R22 direct rsvp update still blocked',
+    (SELECT count(*) FROM rsvps WHERE name='Hijacked')=0);
+END $$;
+RESET ROLE;

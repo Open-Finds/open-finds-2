@@ -60,13 +60,21 @@ export type VenueCandidate = {
 
 const VALID_TYPES: VenueType[] = ['food', 'activity', 'dessert'];
 
-function normalizeType(raw: unknown): VenueType | null {
+/**
+ * Maps a free-text type from the model onto one of the three venue types.
+ *
+ * Order matters. `dessert` is tested before `food` because the food keywords
+ * include "bar", which would otherwise swallow "dessert bar" and "ice cream
+ * bar" — both of which this app's own extraction prompt defines as desserts.
+ * Exported for tests; not part of the module's intended public surface.
+ */
+export function normalizeType(raw: unknown): VenueType | null {
   if (typeof raw !== 'string') return null;
   const lower = raw.toLowerCase().trim();
   if (VALID_TYPES.includes(lower as VenueType)) return lower as VenueType;
-  if (lower.includes('food') || lower.includes('restaurant') || lower.includes('dinner') || lower.includes('cafe') || lower.includes('bar') || lower.includes('eat')) return 'food';
-  if (lower.includes('activity') || lower.includes('adventure') || lower.includes('experience') || lower.includes('escape') || lower.includes('game') || lower.includes('sport')) return 'activity';
   if (lower.includes('dessert') || lower.includes('sweet') || lower.includes('cake') || lower.includes('ice cream') || lower.includes('gelato') || lower.includes('bakery')) return 'dessert';
+  if (lower.includes('activity') || lower.includes('adventure') || lower.includes('experience') || lower.includes('escape') || lower.includes('game') || lower.includes('sport')) return 'activity';
+  if (lower.includes('food') || lower.includes('restaurant') || lower.includes('dinner') || lower.includes('cafe') || lower.includes('bar') || lower.includes('eat')) return 'food';
   return null;
 }
 

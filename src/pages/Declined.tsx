@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { navigate } from '../lib/router';
 import {
-  supabase,
   fetchPlan,
   fetchRsvps,
   type Plan,
   type Rsvp,
+  setRsvpDeclineReason,
 } from '../lib/supabase';
 import { RsvpList } from '../components/Shared';
 import { Frown, Send } from 'lucide-react';
@@ -86,11 +86,8 @@ export function DeclinedPage({ id }: { id: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      const { error: updErr } = await supabase
-        .from('rsvps')
-        .update({ decline_reason: finalReason })
-        .eq('id', rsvpId);
-      if (updErr) throw updErr;
+      // A guest has no UPDATE rights on rsvps; this RPC is the narrow path.
+      await setRsvpDeclineReason(rsvpId, finalReason);
       setDone(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to submit');

@@ -2,10 +2,10 @@ import { useEffect, useState, useRef } from 'react';
 import { navigate } from '../lib/router';
 import {
   supabase,
+  createPlan,
   fetchSavedVenues,
   getUserId,
   updateSavedVenueCoords,
-  type Plan,
   type SavedVenue,
   type VenueType,
 } from '../lib/supabase';
@@ -263,23 +263,17 @@ export function PlanBuilderPage() {
     setSubmitting(true);
     setError(null);
     try {
+      // createPlan() stamps owner_id for signed-in users, which a raw insert
+      // here would skip — leaving the plan device-scoped forever.
       const userId = getUserId();
-      const { data: plan, error: planErr } = await supabase
-        .from('plans')
-        .insert({
-          title,
-          date,
-          host_name: 'You',
-          location: location.trim() || (originCoord ? `GPS: ${originCoord.lat.toFixed(4)}, ${originCoord.lon.toFixed(4)}` : null),
-          type: selected.join(',') || picked.map((p) => p.type).join(','),
-          status: 'active',
-          user_id: userId,
-        })
-        .select()
-        .single();
-      if (planErr) throw planErr;
-
-      const created = plan as Plan;
+      const created = await createPlan({
+        title,
+        date,
+        host_name: 'You',
+        location: location.trim() || (originCoord ? `GPS: ${originCoord.lat.toFixed(4)}, ${originCoord.lon.toFixed(4)}` : null),
+        type: selected.join(',') || picked.map((p) => p.type).join(','),
+        status: 'active',
+      });
       await supabase
         .from('plans')
         .update({ share_link: `/plan/${created.id}` })
