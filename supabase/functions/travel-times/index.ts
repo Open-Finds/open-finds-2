@@ -1,11 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { json, preflight } from "../_shared/cors.ts";
+import { requireUser, serviceClient } from "../_shared/auth.ts";
+import { consumeRateLimit } from "../_shared/ratelimit.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
 
 type Coord = { lat: number; lng: number };
 
@@ -19,12 +16,8 @@ type VenueDistance = {
   lon?: number | null;
 };
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
 async function getGoogleMapsApiKey(): Promise<string> {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const { data, error } = await supabase
+  const { data, error } = await serviceClient()
     .from("app_secrets")
     .select("value")
     .eq("key", "GOOGLE_MAPS_API_KEY")
@@ -58,24 +51,39 @@ function formatDuration(seconds: number): string {
   return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
 }
 
+const RATE_LIMIT = 60;
+const RATE_WINDOW_SECONDS = 60 * 60;
+
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+  const pre = preflight(req);
+  if (pre) return pre;
+
+  if (req.method !== "POST") {
+    return json(req, { error: "Method not allowed" }, 405);
   }
 
   try {
-    const { origin, destinations } = await req.json();
-    if (!origin) {
-      return new Response(
-        JSON.stringify({ error: "origin is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    // This endpoint spends Google Maps quota, so it requires a real signed-in
+    // user rather than the public anon key, and is capped per user.
+    const auth = await requireUser(req);
+    if (!auth.ok) return json(req, { error: auth.error }, auth.status);
+
+    const limit = await consumeRateLimit("travel-times", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS);
+    if (!limit.allowed) {
+      return json(
+        req,
+        { error: "Rate limit reached. Try again shortly." },
+        429,
+        { "Retry-After": String(limit.retryAfter) },
       );
     }
+
+    const { origin, destinations } = await req.json();
+    if (!origin) {
+      return json(req, { error: "origin is required" }, 400);
+    }
     if (!Array.isArray(destinations) || destinations.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "destinations must be a non-empty array" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return json(req, { error: "destinations must be a non-empty array" }, 400);
     }
 
     const apiKey = await getGoogleMapsApiKey();
@@ -94,10 +102,7 @@ Deno.serve(async (req: Request) => {
         durationText: null,
         error: true,
       }));
-      return new Response(
-        JSON.stringify({ distances: results }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return json(req, { distances: results });
     }
 
     // Resolve each destination's coordinates
@@ -176,14 +181,11 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ distances: results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return json(req, { distances: results });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    // Upstream/config detail is logged, not returned — error text from the
+    // Maps client can leak key state and internal identifiers.
+    console.error("[travel-times] internal error", String(err));
+    return json(req, { error: "Internal error" }, 500);
   }
 });

@@ -91,11 +91,20 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Resolve target user IDs
+    // Resolve target user IDs and the notification text. Guest pushes have
+    // their text composed server-side; only the authenticated path may supply it.
     let userIds: string[] = [];
+    let resolvedTitle = "";
+    let resolvedBody = "";
+    let resolvedType = "general";
+    let resolvedData: Record<string, unknown> | null = null;
 
     if (isGuestRsvp) {
-      // Guest RSVP flow — validate the plan exists before sending any notification.
+      // Guest RSVP flow — unauthenticated, so nothing the caller sends is
+      // trusted as display text. We verify the RSVP genuinely exists and then
+      // compose the notification ourselves; previously title/body came
+      // straight from the request, which made this an open channel for
+      // pushing arbitrary text to any host whose plan id was known.
       const { data: plan } = await supabase
         .from("plans")
         .select("user_id")
@@ -107,12 +116,51 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      const guestName = (body.rsvp_name ?? "").trim().slice(0, 80);
+      if (!guestName) {
+        return new Response(JSON.stringify({ error: "rsvp_name is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // The RSVP must already be on record. This ties a push to a real action
+      // rather than letting anyone with a plan id generate notifications.
+      const { data: rsvpRow } = await supabase
+        .from("rsvps")
+        .select("id, status")
+        .eq("plan_id", body.plan_id)
+        .eq("name", guestName)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!rsvpRow) {
+        return new Response(JSON.stringify({ error: "No matching RSVP for this plan" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const isIn = (rsvpRow as { status?: string }).status === "in";
+      resolvedTitle = isIn ? `${guestName} is coming!` : `${guestName} can't make it`;
+      resolvedBody = isIn
+        ? `${guestName} just RSVP'd "I'm In" to your plan.`
+        : `${guestName} just declined your plan.`;
+      resolvedType = "rsvp";
+      resolvedData = { type: "rsvp", url: `/plan/${body.plan_id}` };
+
       userIds = [plan.user_id];
     } else {
       userIds = body.user_ids ?? (body.user_id ? [body.user_id] : []);
+      resolvedTitle = (body.title ?? "").slice(0, 200);
+      resolvedBody = (body.body ?? "").slice(0, 500);
+      resolvedType = body.type ?? body.data?.type as string | undefined ?? "general";
+      resolvedData = body.data ?? null;
     }
 
-    if (userIds.length === 0 || !body.title) {
+    if (userIds.length === 0 || !resolvedTitle) {
       return new Response(JSON.stringify({ error: "Unable to resolve notification target" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -136,10 +184,10 @@ Deno.serve(async (req: Request) => {
     // Insert in-app notification rows for each user
     const notifications = userIds.map((uid) => ({
       user_id: uid,
-      type: body.type ?? body.data?.type ?? "general",
-      title: body.title,
-      body: body.body ?? null,
-      data: body.data ?? null,
+      type: resolvedType,
+      title: resolvedTitle,
+      body: resolvedBody || null,
+      data: resolvedData,
     }));
     await supabase.from("notifications").insert(notifications);
 
@@ -156,9 +204,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload = JSON.stringify({
-      title: body.title,
-      body: body.body ?? "",
-      data: { ...(body.data ?? {}), url: body.data?.url ?? (isGuestRsvp && body.plan_id ? `/plan/${body.plan_id}` : "/") },
+      title: resolvedTitle,
+      body: resolvedBody,
+      data: { ...(resolvedData ?? {}), url: (resolvedData?.url as string | undefined) ?? "/" },
       icon: "/icon-192.png",
       badge: "/badge-72.png",
     });

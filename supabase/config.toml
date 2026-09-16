@@ -1,0 +1,34 @@
+# Supabase CLI configuration.
+#
+# Until now this file did not exist, so whether an edge function verified a JWT
+# depended on the flags used at deploy time rather than on anything in the repo.
+# Declaring it here makes the gate reviewable and reproducible.
+#
+# verify_jwt only proves the caller holds *a* valid key — and the anon key is
+# public, shipped in the browser bundle. Functions that spend money therefore
+# also call requireUser() internally to prove a real end-user session. Both
+# layers are needed; neither is sufficient alone.
+
+project_id = "gsoshbdfjozomsxtbize"
+
+[functions.ai-proxy]
+verify_jwt = true
+
+[functions.geocode]
+verify_jwt = true
+
+[functions.travel-times]
+verify_jwt = true
+
+[functions.resolve-place]
+verify_jwt = true
+
+[functions.extract-venue-meta]
+verify_jwt = true
+
+# Guests RSVP without an account, so this one is reachable with the anon key.
+# It does its own validation instead: the plan must exist, a matching RSVP row
+# must already be on record, and the notification text is composed server-side
+# rather than taken from the request.
+[functions.send-push-notification]
+verify_jwt = true

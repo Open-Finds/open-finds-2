@@ -1,10 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { json, preflight } from "../_shared/cors.ts";
+import { requireUser } from "../_shared/auth.ts";
+import { consumeRateLimit } from "../_shared/ratelimit.ts";
+import { assertPublicUrl, safeFetch } from "../_shared/urlguard.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const RATE_LIMIT = 60;
+const RATE_WINDOW_SECONDS = 60 * 60;
 
 type Platform = "instagram" | "facebook" | "tiktok" | "youtube" | "other";
 
@@ -165,7 +166,7 @@ async function fetchWithHeaders(
     const ua = mobile
       ? "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
       : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: {
         "User-Agent": ua,
         Accept:
@@ -176,9 +177,8 @@ async function fetchWithHeaders(
         "Sec-Fetch-Mode": "navigate",
         "Sec-Fetch-Site": "none",
       },
-      redirect: "follow",
     });
-    if (!res.ok) return null;
+    if (!res || !res.ok) return null;
     const html = await res.text();
     return html;
   } catch {
@@ -302,17 +302,37 @@ async function fetchTikTokOEmbed(
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+  const pre = preflight(req);
+  if (pre) return pre;
+
+  if (req.method !== "POST") {
+    return json(req, { error: "Method not allowed" }, 405);
   }
 
   try {
+    // Fetching arbitrary URLs on a caller's behalf is only offered to
+    // signed-in users, and is capped per user.
+    const auth = await requireUser(req);
+    if (!auth.ok) return json(req, { error: auth.error }, auth.status);
+
+    const limit = await consumeRateLimit("extract-venue-meta", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS);
+    if (!limit.allowed) {
+      return json(
+        req,
+        { error: "Rate limit reached. Try again shortly." },
+        429,
+        { "Retry-After": String(limit.retryAfter) },
+      );
+    }
+
     const { url } = await req.json();
     if (!url || typeof url !== "string") {
-      return new Response(
-        JSON.stringify({ error: "URL is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json(req, { error: "URL is required" }, 400);
+    }
+
+    const guard = assertPublicUrl(url);
+    if (!guard.ok) {
+      return json(req, { error: guard.error }, 400);
     }
 
     const platform = detectPlatform(url);
@@ -398,9 +418,7 @@ Deno.serve(async (req: Request) => {
         oembedHtml,
         fetched: oembedTitle !== null || oembedAuthor !== null,
       };
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json(req, result);
     }
 
     const meta = extractMeta(html);
@@ -450,13 +468,9 @@ Deno.serve(async (req: Request) => {
       fetched: true,
     };
 
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json(req, result);
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("[extract-venue-meta] internal error", String(err));
+    return json(req, { error: "Internal error" }, 500);
   }
 });

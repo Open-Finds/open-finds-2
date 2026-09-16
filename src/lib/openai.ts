@@ -1,5 +1,6 @@
 import type { VenueType, SavedVenue } from './supabase';
 import { isGoogleMapsLink, resolveGoogleMapsLink } from './apiKeys';
+import { edgeAuthHeaders } from './edgeAuth';
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -16,10 +17,7 @@ async function callAI(
 
   const res = await fetch(apiUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    },
+    headers: await edgeAuthHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -95,10 +93,7 @@ async function fetchPageMeta(url: string): Promise<MetaResult | null> {
     const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-venue-meta`;
     const res = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
+      headers: await edgeAuthHeaders(),
       body: JSON.stringify({ url }),
     });
     if (!res.ok) return null;

@@ -197,6 +197,23 @@ export function sortStops(stops: Stop[]): Stop[] {
 
 /* ── Public queries (share link — no user_id filter) ── */
 
+/*
+ * Share-link reads.
+ *
+ * Direct table access is owner-scoped now, so a guest holding a share link
+ * gets nothing back from a plain select. These helpers try the owner path
+ * first and fall back to the get_shared_plan RPC, which requires the caller
+ * to present the exact plan id. Guest pages therefore need no changes, and
+ * the host continues to read their own rows through normal RLS.
+ */
+type SharedPlanPayload = { plan: Plan; stops: Stop[]; rsvps: Rsvp[] } | null;
+
+async function fetchSharedPlanPayload(planId: string): Promise<SharedPlanPayload> {
+  const { data, error } = await supabase.rpc('get_shared_plan', { p_plan_id: planId });
+  if (error) throw error;
+  return (data ?? null) as SharedPlanPayload;
+}
+
 export async function fetchPlan(id: string) {
   const { data, error } = await supabase
     .from('plans')
@@ -204,7 +221,10 @@ export async function fetchPlan(id: string) {
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
-  return data as Plan | null;
+  if (data) return data as Plan;
+
+  const shared = await fetchSharedPlanPayload(id);
+  return shared?.plan ?? null;
 }
 
 export async function fetchStops(planId: string) {
@@ -214,7 +234,10 @@ export async function fetchStops(planId: string) {
     .eq('plan_id', planId)
     .order('sort_order', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as Stop[];
+  if (data && data.length > 0) return data as Stop[];
+
+  const shared = await fetchSharedPlanPayload(planId);
+  return (shared?.stops ?? []) as Stop[];
 }
 
 export async function fetchRsvps(planId: string) {
@@ -224,7 +247,10 @@ export async function fetchRsvps(planId: string) {
     .eq('plan_id', planId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as Rsvp[];
+  if (data && data.length > 0) return data as Rsvp[];
+
+  const shared = await fetchSharedPlanPayload(planId);
+  return (shared?.rsvps ?? []) as Rsvp[];
 }
 
 export async function insertRsvp(
@@ -233,11 +259,14 @@ export async function insertRsvp(
     auth_uid?: string | null;
   }
 ) {
-  const { data, error } = await supabase
-    .from('rsvps')
-    .insert(rsvp)
-    .select()
-    .single();
+  // Guests no longer INSERT directly. The RPC validates the plan exists and is
+  // not canceled, bounds the name, and constrains status server-side.
+  const { data, error } = await supabase.rpc('submit_plan_rsvp', {
+    p_plan_id: rsvp.plan_id,
+    p_name: rsvp.name,
+    p_status: rsvp.status,
+    p_decline_reason: rsvp.decline_reason ?? null,
+  });
   if (error) throw error;
   return data as Rsvp;
 }
@@ -431,6 +460,15 @@ export async function createTrip(
   return data as Trip;
 }
 
+type SharedTripPayload =
+  { trip: Trip; days: Plan[]; stops: Stop[]; stop_rsvps: StopRsvp[] } | null;
+
+async function fetchSharedTripPayload(tripId: string): Promise<SharedTripPayload> {
+  const { data, error } = await supabase.rpc('get_shared_trip', { p_trip_id: tripId });
+  if (error) throw error;
+  return (data ?? null) as SharedTripPayload;
+}
+
 export async function fetchTrip(id: string): Promise<Trip | null> {
   const { data, error } = await supabase
     .from('trips')
@@ -438,7 +476,10 @@ export async function fetchTrip(id: string): Promise<Trip | null> {
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
-  return data as Trip | null;
+  if (data) return data as Trip;
+
+  const shared = await fetchSharedTripPayload(id);
+  return shared?.trip ?? null;
 }
 
 export async function fetchAllTrips(): Promise<Trip[]> {
@@ -460,7 +501,10 @@ export async function fetchTripDays(tripId: string): Promise<Plan[]> {
     .eq('trip_id', tripId)
     .order('day_number', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as Plan[];
+  if (data && data.length > 0) return data as Plan[];
+
+  const shared = await fetchSharedTripPayload(tripId);
+  return (shared?.days ?? []) as Plan[];
 }
 
 export async function updateTrip(
@@ -508,7 +552,10 @@ export async function fetchStopRsvps(tripId: string): Promise<StopRsvp[]> {
     .eq('trip_id', tripId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as StopRsvp[];
+  if (data && data.length > 0) return data as StopRsvp[];
+
+  const shared = await fetchSharedTripPayload(tripId);
+  return (shared?.stop_rsvps ?? []) as StopRsvp[];
 }
 
 export async function fetchStopRsvpsByPlan(planId: string): Promise<StopRsvp[]> {
@@ -526,11 +573,13 @@ export async function insertStopRsvp(
     auth_uid?: string | null;
   }
 ) {
-  const { data, error } = await supabase
-    .from('stop_rsvps')
-    .insert(rsvp)
-    .select()
-    .single();
+  // Direct INSERT is closed; the RPC resolves plan_id/trip_id from the stop
+  // itself rather than trusting whatever the caller supplied.
+  const { data, error } = await supabase.rpc('submit_stop_rsvp', {
+    p_stop_id: rsvp.stop_id,
+    p_name: rsvp.name,
+    p_status: rsvp.status,
+  });
   if (error) throw error;
   return data as StopRsvp;
 }
@@ -542,31 +591,18 @@ export async function upsertStopRsvp(
   name: string,
   status: 'in' | 'out'
 ): Promise<StopRsvp> {
-  const { data: existing } = await supabase
-    .from('stop_rsvps')
-    .select('id')
-    .eq('stop_id', stopId)
-    .eq('name', name.trim())
-    .maybeSingle();
-
-  if (existing) {
-    const { data, error } = await supabase
-      .from('stop_rsvps')
-      .update({ status })
-      .eq('id', (existing as { id: string }).id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data as StopRsvp;
-  }
-
-  return insertStopRsvp({
-    stop_id: stopId,
-    plan_id: planId,
-    trip_id: tripId,
-    name: name.trim(),
-    status,
+  // submit_stop_rsvp performs the update-or-insert in one server-side call.
+  // The previous read-then-write could not work for guests once stop_rsvps
+  // reads became owner-scoped, and was racy besides.
+  void planId;
+  void tripId;
+  const { data, error } = await supabase.rpc('submit_stop_rsvp', {
+    p_stop_id: stopId,
+    p_name: name,
+    p_status: status,
   });
+  if (error) throw error;
+  return data as StopRsvp;
 }
 
 /* ── Saved venues (auth-scoped — RLS filters by auth.uid()) ── */
@@ -1673,18 +1709,19 @@ export type VenueEventStats = {
 };
 
 export async function fetchVenueEventStats(venueId: string, visitRateCents: number): Promise<VenueEventStats> {
-  const events = await fetchVenueEvents(venueId);
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const thisMonthVisits = events.filter(
-    (e) => e.event_type === 'visited' && new Date(e.created_at) >= monthStart
-  ).length;
+  // Aggregated server-side. The old client-side version summed at most 500
+  // fetched rows, so any busy venue under-reported — and spend was computed
+  // in the browser from that truncated set.
+  void visitRateCents;
+  const { data, error } = await supabase.rpc('get_venue_event_stats', { p_venue_id: venueId });
+  if (error) throw error;
+  const d = (data ?? {}) as Partial<VenueEventStats>;
   return {
-    impressions: events.filter((e) => e.event_type === 'impression').length,
-    saves: events.filter((e) => e.event_type === 'saved').length,
-    visits: events.filter((e) => e.event_type === 'visited').length,
-    thisMonthVisits,
-    thisMonthSpendCents: thisMonthVisits * visitRateCents,
+    impressions: d.impressions ?? 0,
+    saves: d.saves ?? 0,
+    visits: d.visits ?? 0,
+    thisMonthVisits: d.thisMonthVisits ?? 0,
+    thisMonthSpendCents: d.thisMonthSpendCents ?? 0,
   };
 }
 

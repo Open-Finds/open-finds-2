@@ -1,18 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { json, preflight } from "../_shared/cors.ts";
+import { requireUser, serviceClient } from "../_shared/auth.ts";
+import { consumeRateLimit } from "../_shared/ratelimit.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 async function getGoogleMapsApiKey(): Promise<string> {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const { data, error } = await supabase
+  const { data, error } = await serviceClient()
     .from("app_secrets")
     .select("value")
     .eq("key", "GOOGLE_MAPS_API_KEY")
@@ -181,26 +174,41 @@ async function forwardGeocode(
   }
 }
 
+const RATE_LIMIT = 60;
+const RATE_WINDOW_SECONDS = 60 * 60;
+
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+  const pre = preflight(req);
+  if (pre) return pre;
+
+  if (req.method !== "POST") {
+    return json(req, { error: "Method not allowed" }, 405);
   }
 
   try {
+    // This endpoint spends Google Maps quota, so it requires a real signed-in
+    // user rather than the public anon key, and is capped per user.
+    const auth = await requireUser(req);
+    if (!auth.ok) return json(req, { error: auth.error }, auth.status);
+
+    const limit = await consumeRateLimit("resolve-place", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS);
+    if (!limit.allowed) {
+      return json(
+        req,
+        { error: "Rate limit reached. Try again shortly." },
+        429,
+        { "Retry-After": String(limit.retryAfter) },
+      );
+    }
+
     const { url } = await req.json();
     if (typeof url !== "string" || !url.trim()) {
-      return new Response(
-        JSON.stringify({ error: "url is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return json(req, { error: "url is required" }, 400);
     }
 
     const lower = url.toLowerCase();
     if (!lower.includes("google.com/maps") && !lower.includes("maps.google.com") && !lower.includes("maps.app.goo.gl")) {
-      return new Response(
-        JSON.stringify({ name: null, address: null, lat: null, lon: null }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return json(req, { name: null, address: null, lat: null, lon: null });
     }
 
     const apiKey = await getGoogleMapsApiKey();
@@ -210,16 +218,10 @@ Deno.serve(async (req: Request) => {
     if (coords) {
       const result = await reverseGeocode(coords.lat, coords.lon, apiKey);
       if (result.address) {
-        return new Response(
-          JSON.stringify(result),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+        return json(req, result);
       }
       // Coords found but reverse geocode failed — return coords only
-      return new Response(
-        JSON.stringify({ name: null, address: null, lat: coords.lat, lon: coords.lon }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return json(req, { name: null, address: null, lat: coords.lat, lon: coords.lon });
     }
 
     // Strategy 2: Extract a place name from the URL and forward geocode it
@@ -227,22 +229,16 @@ Deno.serve(async (req: Request) => {
     if (placeQuery) {
       const result = await forwardGeocode(placeQuery, apiKey);
       if (result.address) {
-        return new Response(
-          JSON.stringify(result),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+        return json(req, result);
       }
     }
 
     // Could not resolve
-    return new Response(
-      JSON.stringify({ name: null, address: null, lat: null, lon: null }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return json(req, { name: null, address: null, lat: null, lon: null });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    // Upstream/config detail is logged, not returned — error text from the
+    // Maps client can leak key state and internal identifiers.
+    console.error("[resolve-place] internal error", String(err));
+    return json(req, { error: "Internal error" }, 500);
   }
 });

@@ -1,3 +1,4 @@
+import { edgeAuthHeaders } from './edgeAuth';
 export type VenueDistance = {
   venueKey: string;
   durationSeconds: number | null;
@@ -16,7 +17,6 @@ export type DestinationInput = string | {
 export type OriginInput = string | { lat: number; lon: number };
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 // Fetches driving times from one origin to multiple destinations via the
 // deployed travel-times edge function. The origin can be a street address
@@ -37,10 +37,7 @@ export async function fetchDistanceMatrix(
     const apiUrl = `${SUPABASE_URL}/functions/v1/travel-times`;
     const res = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-      },
+      headers: await edgeAuthHeaders(),
       body: JSON.stringify({ origin, destinations }),
     });
 
@@ -95,10 +92,7 @@ export async function resolveGoogleMapsLink(url: string): Promise<ResolvedPlace 
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-      },
+      headers: await edgeAuthHeaders(),
       body: JSON.stringify({ url }),
     });
     if (!res.ok) return null;
@@ -120,10 +114,7 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; lo
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/geocode`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-      },
+      headers: await edgeAuthHeaders(),
       body: JSON.stringify({ address }),
     });
     if (!res.ok) return null;
