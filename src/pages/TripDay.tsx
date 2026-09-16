@@ -6,6 +6,8 @@ import {
   fetchStops,
   fetchStopRsvpsByPlan,
   sortStops,
+  sortStopsByTime,
+  resequenceStopsByTime,
   updatePlan,
   insertStop,
   deleteStop,
@@ -113,8 +115,15 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
     }
   }, [venuePickerCollection]);
 
-  const handleStopSaved = (updated: Stop) => {
-    setStops((prev) => sortStops(prev.map((s) => (s.id === updated.id ? updated : s))));
+  const handleStopSaved = async (updated: Stop) => {
+    // Persist the chronological order, not just the on-screen one.
+    const next = stops.map((s) => (s.id === updated.id ? updated : s));
+    setStops(sortStopsByTime(next));
+    try {
+      setStops(await resequenceStopsByTime(dayId, next));
+    } catch {
+      // The stop itself saved; only the ordering write failed.
+    }
   };
 
   const handleDeleteStop = async (stopId: string) => {

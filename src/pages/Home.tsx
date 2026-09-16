@@ -75,6 +75,38 @@ const VIBE_LABELS: Record<Vibe, { icon: string; label: string }> = {
   dessert: { icon: '🍰', label: 'Dessert' },
 };
 
+/**
+ * Picks one venue at random per selected vibe, and reports which vibes had no
+ * candidates at all.
+ *
+ * Previously an empty bucket was skipped in silence: ask for Food + Dessert,
+ * get back only Food, and the night is simply one stop shorter with nothing
+ * said. The caller uses `missing` to tell the user what could not be filled.
+ */
+function pickOnePerVibe<T extends { type: Vibe }>(
+  candidates: T[],
+  vibes: Vibe[]
+): { picked: T[]; missing: Vibe[] } {
+  const picked: T[] = [];
+  const missing: Vibe[] = [];
+  for (const vibe of vibes) {
+    const options = candidates.filter((c) => c.type === vibe);
+    if (options.length > 0) {
+      picked.push(options[Math.floor(Math.random() * options.length)]);
+    } else {
+      missing.push(vibe);
+    }
+  }
+  return { picked, missing };
+}
+
+/** "Dessert", or "Activity and Dessert" — for telling the user what is missing. */
+function describeVibes(vibes: Vibe[]): string {
+  const labels = vibes.map((v) => VIBE_LABELS[v].label);
+  if (labels.length <= 1) return labels[0] ?? '';
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
 const VIBE_DEFAULT_TIMES: Record<Vibe, string> = {
   food: '18:30',
   activity: '20:30',
@@ -632,16 +664,15 @@ export function HomePage({
         setRandomNightError(`No saved venues within ${travelTime} min. Try increasing your travel time or try 'Something New'.`);
         return;
       }
-      const picked: SavedVenue[] = [];
-      for (const vibe of selectedVibes) {
-        const vibeOptions = filtered.filter((v) => v.type === vibe);
-        if (vibeOptions.length > 0) {
-          picked.push(vibeOptions[Math.floor(Math.random() * vibeOptions.length)]);
-        }
-      }
+      const { picked, missing } = pickOnePerVibe(filtered, selectedVibes);
       if (picked.length === 0) {
         setRandomNightError('No venues found. Try different vibes or location.');
         return;
+      }
+      if (missing.length > 0) {
+        setRandomNightError(
+          `You have no saved ${describeVibes(missing)} venues within ${travelTime} min. Building the night without it.`
+        );
       }
       await buildAndCreatePlan(picked.map((v) => ({ name: v.name, address: v.address, type: v.type, vibe_link: v.link })));
     } catch (e) {
@@ -674,16 +705,19 @@ export function HomePage({
       }
 
       // Pick one random venue per selected vibe from the full AI-suggested set
-      const picked: VenueCandidate[] = [];
-      for (const vibe of selectedVibes) {
-        const vibeOptions = candidates.filter((c) => c.type === vibe);
-        if (vibeOptions.length > 0) {
-          picked.push(vibeOptions[Math.floor(Math.random() * vibeOptions.length)]);
-        }
-      }
+      const { picked, missing } = pickOnePerVibe(candidates, selectedVibes);
       if (picked.length === 0) {
         setNewNightError('No venues found. Try different vibes or location.');
         return;
+      }
+      if (missing.length > 0) {
+        // Say which vibe could not be filled instead of quietly returning a
+        // shorter night than was asked for.
+        setNewNightError(
+          `Couldn't find anything for ${describeVibes(missing)} near ${
+            typeof effectiveOrigin === 'string' ? effectiveOrigin : 'you'
+          }. Showing the rest — try a wider travel time or a different area.`
+        );
       }
       setDiscoveredVenues(picked);
 

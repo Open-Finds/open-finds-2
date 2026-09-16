@@ -67,6 +67,24 @@ export async function updateUserPassword(password: string) {
 /* ── Anonymous user ID (used for plans / stops / rsvps — no login required) ── */
 
 const USER_ID_KEY = 'onlyfinds_user_id';
+const GUEST_KEY = 'onlyfinds_guest_key';
+
+/**
+ * Identifies this browser when RSVPing as a guest.
+ *
+ * Kept separate from the device ownership id: that one is transitional and will
+ * be retired once every plan has an owner, whereas guest identity is permanent.
+ * Per-stop RSVPs used to be keyed on the typed name, so two guests called "Sam"
+ * overwrote each other's answer.
+ */
+export function getGuestKey(): string {
+  let key = safeStorage.getItem(GUEST_KEY);
+  if (!key) {
+    key = crypto.randomUUID();
+    safeStorage.setItem(GUEST_KEY, key);
+  }
+  return key;
+}
 
 export function getUserId(): string {
   let id = safeStorage.getItem(USER_ID_KEY);
@@ -172,6 +190,8 @@ export type Trip = {
 
 export type StopRsvp = {
   id: string;
+  /** Per-browser guest identity; null for signed-in users, who key on auth_uid. */
+  guest_key?: string | null;
   stop_id: string;
   plan_id: string;
   trip_id: string | null;
@@ -234,8 +254,27 @@ export type Collection = {
 
 /* ── Helpers ── */
 
+/**
+ * Orders stops for display.
+ *
+ * `sort_order` is the source of truth. It used to sort by `time` instead, which
+ * meant fetchStops' ORDER BY sort_order was discarded on every render and
+ * drag-to-reorder silently did nothing. `time` is only a tiebreaker now, for
+ * rows that share an index.
+ *
+ * Where a chronological list is wanted after someone edits a time, call
+ * resequenceStopsByTime() — that persists the new sequence rather than
+ * re-deriving a different order on each render.
+ */
 export function sortStops(stops: Stop[]): Stop[] {
-  return [...stops].sort((a, b) => a.time.localeCompare(b.time));
+  return [...stops].sort(
+    (a, b) => a.sort_order - b.sort_order || a.time.localeCompare(b.time)
+  );
+}
+
+/** Chronological order, without touching what is stored. */
+export function sortStopsByTime(stops: Stop[]): Stop[] {
+  return [...stops].sort((a, b) => a.time.localeCompare(b.time) || a.sort_order - b.sort_order);
 }
 
 /* ── Public queries (share link — no user_id filter) ── */
@@ -467,20 +506,40 @@ export async function deleteStop(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Persists a new stop order in a single statement.
+ *
+ * This was a client-side loop issuing one awaited UPDATE per stop: N round
+ * trips, and a failure partway left the order half-written with no rollback.
+ * The RPC validates that every id belongs to the plan and applies the whole
+ * ordering atomically.
+ */
 export async function reorderStops(
   planId: string,
   orderedStopIds: string[]
 ): Promise<void> {
-  const userId = getUserId();
-  for (let i = 0; i < orderedStopIds.length; i++) {
-    const { error } = await supabase
-      .from('stops')
-      .update({ sort_order: i })
-      .eq('id', orderedStopIds[i])
-      .eq('plan_id', planId)
-      .eq('user_id', userId);
-    if (error) throw error;
+  if (orderedStopIds.length === 0) return;
+  const { error } = await supabase.rpc('reorder_plan_stops', {
+    p_plan_id: planId,
+    p_stop_ids: orderedStopIds,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Renumbers a plan's stops into chronological order and saves it.
+ *
+ * Called after a time edit so that what the user sees and what is stored agree
+ * — previously the list re-sorted by time on screen while sort_order kept
+ * whatever it had, and the two drifted apart permanently.
+ */
+export async function resequenceStopsByTime(planId: string, stops: Stop[]): Promise<Stop[]> {
+  const ordered = sortStopsByTime(stops);
+  const alreadyInOrder = ordered.every((s, i) => s.sort_order === i);
+  if (!alreadyInOrder) {
+    await reorderStops(planId, ordered.map((s) => s.id));
   }
+  return ordered.map((s, i) => ({ ...s, sort_order: i }));
 }
 
 /* ── Trips (Travel Mode — multi-day itineraries) ── */
@@ -642,6 +701,7 @@ export async function insertStopRsvp(
     p_stop_id: rsvp.stop_id,
     p_name: rsvp.name,
     p_status: rsvp.status,
+    p_guest_key: getGuestKey(),
   });
   if (error) throw error;
   return data as StopRsvp;
@@ -663,6 +723,7 @@ export async function upsertStopRsvp(
     p_stop_id: stopId,
     p_name: name,
     p_status: status,
+    p_guest_key: getGuestKey(),
   });
   if (error) throw error;
   return data as StopRsvp;

@@ -4,6 +4,8 @@ import {
   fetchStops,
   fetchRsvps,
   sortStops,
+  sortStopsByTime,
+  resequenceStopsByTime,
   fetchFriends,
   fetchFriendGroups,
   inviteUserToPlan,
@@ -139,6 +141,21 @@ export function DashboardPage({
     details,
   }).toString()}`;
 
+  /**
+   * A time edit changes the chronological order, so persist the new sequence
+   * rather than only re-sorting on screen — sort_order is what the next load
+   * reads back.
+   */
+  const handleStopSaved = async (updated: Stop) => {
+    const next = stops.map((s) => (s.id === updated.id ? updated : s));
+    setStops(sortStopsByTime(next));
+    try {
+      setStops(await resequenceStopsByTime(id, next));
+    } catch {
+      // Ordering is cosmetic if this fails; the edit itself already saved.
+    }
+  };
+
   return (
     <div className="relative min-h-screen overflow-y-auto bg-black px-6 pt-20 pb-24">
       <button
@@ -230,11 +247,7 @@ export function DashboardPage({
                 key={stop.id}
                 stop={stop}
                 index={i}
-                onSaved={(updated) =>
-                  setStops((prev) =>
-                    sortStops(prev.map((s) => (s.id === updated.id ? updated : s)))
-                  )
-                }
+                onSaved={handleStopSaved}
               />
             ))}
           </div>

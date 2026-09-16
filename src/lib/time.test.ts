@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { formatTime } from './time';
 import { useCountdown, formatCountdown } from './countdown';
-import { sortStops, type Stop } from './supabase';
+import { sortStops, sortStopsByTime, type Stop } from './supabase';
 
 describe('formatTime', () => {
   it('converts 24h to 12h with a period', () => {
@@ -23,27 +23,57 @@ describe('formatTime', () => {
   });
 });
 
-describe('sortStops', () => {
-  const stop = (name: string, time: string): Stop =>
-    ({ id: name, plan_id: 'p', name, address: 'a', time, vibe_link: null, sort_order: 0, user_id: 'u' } as Stop);
+const stop = (name: string, time: string, sort_order: number): Stop =>
+  ({ id: name, plan_id: 'p', name, address: 'a', time, vibe_link: null, sort_order, user_id: 'u' } as Stop);
 
-  it('orders by time ascending', () => {
-    const sorted = sortStops([stop('late', '22:00'), stop('early', '18:00'), stop('mid', '20:30')]);
-    expect(sorted.map((s) => s.name)).toEqual(['early', 'mid', 'late']);
+describe('sortStops', () => {
+  it('orders by sort_order, the single source of truth', () => {
+    // Regression: this used to sort by time, which threw away fetchStops'
+    // ORDER BY sort_order and made drag-to-reorder a silent no-op.
+    const sorted = sortStops([
+      stop('dinner', '20:00', 1),
+      stop('drinks', '18:00', 0),
+      stop('dessert', '22:00', 2),
+    ]);
+    expect(sorted.map((s) => s.name)).toEqual(['drinks', 'dinner', 'dessert']);
   });
 
-  it('sorts zero-padded 24h strings correctly', () => {
-    // The implementation compares strings, which only works because times are
-    // zero-padded and 24-hour. "09:00" must sort before "10:00".
-    const sorted = sortStops([stop('ten', '10:00'), stop('nine', '09:00')]);
-    expect(sorted.map((s) => s.name)).toEqual(['nine', 'ten']);
+  it('keeps an explicit order even when it contradicts the times', () => {
+    // A user who drags dessert to the front gets dessert at the front.
+    const sorted = sortStops([
+      stop('dinner', '20:00', 1),
+      stop('dessert', '22:00', 0),
+    ]);
+    expect(sorted.map((s) => s.name)).toEqual(['dessert', 'dinner']);
+  });
+
+  it('falls back to time when sort_order ties', () => {
+    const sorted = sortStops([stop('late', '22:00', 0), stop('early', '18:00', 0)]);
+    expect(sorted.map((s) => s.name)).toEqual(['early', 'late']);
   });
 
   it('does not mutate its input', () => {
-    const input = [stop('b', '20:00'), stop('a', '18:00')];
+    const input = [stop('b', '20:00', 1), stop('a', '18:00', 0)];
     const before = input.map((s) => s.name);
     sortStops(input);
     expect(input.map((s) => s.name)).toEqual(before);
+  });
+});
+
+describe('sortStopsByTime', () => {
+  it('orders chronologically regardless of sort_order', () => {
+    const sorted = sortStopsByTime([
+      stop('dessert', '22:00', 0),
+      stop('drinks', '18:00', 2),
+      stop('dinner', '20:00', 1),
+    ]);
+    expect(sorted.map((s) => s.name)).toEqual(['drinks', 'dinner', 'dessert']);
+  });
+
+  it('compares zero-padded 24h strings correctly', () => {
+    // String comparison only works because times are zero-padded and 24-hour.
+    const sorted = sortStopsByTime([stop('ten', '10:00', 0), stop('nine', '09:00', 1)]);
+    expect(sorted.map((s) => s.name)).toEqual(['nine', 'ten']);
   });
 });
 
