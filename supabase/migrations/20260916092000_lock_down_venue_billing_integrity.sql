@@ -71,6 +71,23 @@ CREATE POLICY "insert_venue_events" ON venue_events FOR INSERT
 One event per (user, venue, type, day). Without this, the policy above still
 allows a single account to insert the same event thousands of times.
 */
+/*
+Adding a UNIQUE index to a populated table aborts if duplicates already exist,
+which would fail the whole migration. Collapse any pre-existing duplicates to
+the earliest row per group first. In practice recordVenueEvent() has no call
+sites, so this is expected to be a no-op — it is here so the migration is safe
+regardless of what the table actually holds.
+*/
+DELETE FROM venue_events a
+USING venue_events b
+WHERE a.auth_uid IS NOT NULL
+  AND b.auth_uid IS NOT NULL
+  AND a.venue_id = b.venue_id
+  AND a.auth_uid = b.auth_uid
+  AND a.event_type = b.event_type
+  AND (a.created_at AT TIME ZONE 'UTC')::date = (b.created_at AT TIME ZONE 'UTC')::date
+  AND a.ctid > b.ctid;
+
 -- created_at::date is STABLE (it depends on the session TimeZone), and index
 -- expressions must be IMMUTABLE. Pinning the zone explicitly makes it so.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_venue_events_one_per_user_day
