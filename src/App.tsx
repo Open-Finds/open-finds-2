@@ -87,6 +87,12 @@ function AppInner() {
       setDashboardId(route.id);
     } else if (route.name === 'home') {
       setDashboardId(null);
+    } else if (route.name === 'venues') {
+      // Deep link (e.g. from a shared-collection notification). The Venues
+      // page reads any ?collection= param itself.
+      setDashboardId(null);
+      setEditPlanId(null);
+      setView('venues');
     }
   }, [route]);
 

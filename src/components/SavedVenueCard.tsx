@@ -25,6 +25,8 @@ type Props = {
   onSaved: (updated: SavedVenue) => void;
   /** Called after the venue has been removed. Omit to hide the delete control. */
   onDeleted?: (id: string) => void;
+  /** Someone else's venue in a shared collection: viewable, not editable. */
+  readOnly?: boolean;
   selectable?: boolean;
   isSelected?: boolean;
   onSelect?: () => void;
@@ -40,6 +42,7 @@ export function SavedVenueCard({
   onEditEnd,
   onSaved,
   onDeleted,
+  readOnly = false,
   selectable = false,
   isSelected = false,
   onSelect,
@@ -370,7 +373,7 @@ export function SavedVenueCard({
         </div>
         {venue.personal_note && <p className="mt-2 line-clamp-2 text-xs italic text-ink-secondary">“{venue.personal_note}”</p>}
       </div>
-      <button
+      {!readOnly && <button
         onClick={(e) => {
           e.stopPropagation();
           handleEdit();
@@ -379,7 +382,7 @@ export function SavedVenueCard({
         className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-gold/30 bg-black/40 text-gold transition-all hover:bg-gold/20 active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
       >
         <Pencil size={14} />
-      </button>
+      </button>}
       {isSelected && (
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">

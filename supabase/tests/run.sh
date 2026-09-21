@@ -37,7 +37,7 @@ echo "  ✓ $(ls supabase/migrations/*.sql | wc -l) migrations applied"
 
 echo "→ asserting security properties"
 fails=0
-for t in supabase/tests/0[1234]_*.sql; do
+for t in supabase/tests/0[12345]_*.sql; do
   docker cp "$t" "$NAME":/tmp/"$(basename "$t")" >/dev/null
   out=$(docker exec "$NAME" psql -U postgres -d $DB -q -t -A -f /tmp/"$(basename "$t")" 2>&1 \
         | grep -E 'PASS|FAIL|ERROR' | sed 's/^psql.*NOTICE:  //')

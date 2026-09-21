@@ -795,6 +795,70 @@ export async function fetchCollections(): Promise<Collection[]> {
   return (data ?? []) as Collection[];
 }
 
+/* ── Shared collections ──
+   A collection has one owner (collections.user_id) and any number of members.
+   Members can read it and add their own venues; only the owner shares,
+   renames, or deletes. Membership is managed by RPCs that check friendship. */
+
+export type CollectionMember = {
+  user_id: string;
+  display_name: string | null;
+  username: string | null;
+  added_at: string;
+};
+
+/** A venue inside a collection, with who put it there. */
+export type CollectionVenue = SavedVenue & {
+  added_by: string | null;
+  added_at: string;
+};
+
+/**
+ * Every venue in a collection, including other members' — the one place a
+ * member sees rows from someone else's saved_venues. fetchSavedVenues() stays
+ * scoped to the caller's own venues.
+ */
+export async function fetchCollectionVenues(collectionId: string): Promise<CollectionVenue[]> {
+  const { data, error } = await supabase.rpc('get_collection_venues', { p_collection_id: collectionId });
+  if (error) throw error;
+  return (data ?? []) as CollectionVenue[];
+}
+
+export async function fetchCollectionMembers(collectionId: string): Promise<CollectionMember[]> {
+  const { data, error } = await supabase.rpc('get_collection_members', { p_collection_id: collectionId });
+  if (error) throw error;
+  return (data ?? []) as CollectionMember[];
+}
+
+/** Returns how many were actually added; non-friends are skipped server-side. */
+export async function shareCollectionWithFriends(collectionId: string, userIds: string[]): Promise<number> {
+  if (userIds.length === 0) return 0;
+  const { data, error } = await supabase.rpc('share_collection_with_users', {
+    p_collection_id: collectionId,
+    p_user_ids: userIds,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+export async function shareCollectionWithGroup(collectionId: string, groupId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('share_collection_with_group', {
+    p_collection_id: collectionId,
+    p_group_id: groupId,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/** Owner removes a member, or a member removes themselves. */
+export async function removeCollectionMember(collectionId: string, userId: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_collection_member', {
+    p_collection_id: collectionId,
+    p_user_id: userId,
+  });
+  if (error) throw error;
+}
+
 export async function createCollection(name: string): Promise<Collection> {
   const { data, error } = await supabase
     .from('collections')
@@ -1212,139 +1276,13 @@ export async function deleteFriendGroup(groupId: string): Promise<void> {
 }
 
 // ── Shared Collections ──
-
-export type SharedCollection = {
-  id: string;
-  name: string;
-  owner_id: string;
-  created_at: string;
-};
-
-export type SharedCollectionWithMembers = SharedCollection & {
-  members: { user_id: string; display_name: string; username: string | null }[];
-  venues: SharedCollectionVenue[];
-};
-
-export type SharedCollectionVenue = {
-  id: string;
-  collection_id: string;
-  name: string;
-  address: string;
-  type: string;
-  link: string | null;
-  added_by: string;
-  created_at: string;
-};
-
-export async function createSharedCollection(name: string): Promise<SharedCollection> {
-  const { data, error } = await supabase
-    .from('shared_collections')
-    .insert({ name })
-    .select('id, name, owner_id, created_at')
-    .single();
-  if (error) throw error;
-  return data as SharedCollection;
-}
-
-export async function fetchSharedCollections(): Promise<SharedCollectionWithMembers[]> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return [];
-  const uid = session.user.id;
-  const { data: memberships, error: membershipError } = await supabase
-    .from('shared_collection_members')
-    .select('collection_id')
-    .eq('user_id', uid);
-  if (membershipError) throw membershipError;
-  const memberCollectionIds = (memberships ?? []).map((m) => m.collection_id as string);
-  const { data: ownedCollections, error: ownedError } = await supabase
-    .from('shared_collections')
-    .select('id, name, owner_id, created_at')
-    .eq('owner_id', uid)
-    .order('created_at', { ascending: false });
-  if (ownedError) throw ownedError;
-  const { data: memberCollections, error: memberError } = memberCollectionIds.length > 0
-    ? await supabase.from('shared_collections').select('id, name, owner_id, created_at').in('id', memberCollectionIds)
-    : { data: [], error: null };
-  if (memberError) throw memberError;
-  const collectionMap = new Map<string, SharedCollection>();
-  for (const collection of [...(ownedCollections ?? []), ...(memberCollections ?? [])] as SharedCollection[]) collectionMap.set(collection.id, collection);
-  const collections = Array.from(collectionMap.values());
-  if (collections.length === 0) return [];
-
-  const collectionIds = collections.map((c) => c.id);
-
-  const [membersResult, venuesResult] = await Promise.all([
-    supabase.from('shared_collection_members').select('collection_id, user_id').in('collection_id', collectionIds),
-    supabase.from('shared_collection_venues').select('*').in('collection_id', collectionIds).order('created_at', { ascending: true }),
-  ]);
-
-  const memberUserIds = [...new Set((membersResult.data ?? []).map((m) => m.user_id))];
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, display_name, username')
-    .in('id', memberUserIds.length > 0 ? memberUserIds : ['00000000-0000-0000-0000-000000000000']);
-
-  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
-  const membersByCollection = new Map<string, { user_id: string; display_name: string; username: string | null }[]>();
-  for (const m of membersResult.data ?? []) {
-    const arr = membersByCollection.get(m.collection_id) ?? [];
-    const p = profileMap.get(m.user_id) as { display_name: string; username: string | null } | undefined;
-    arr.push({ user_id: m.user_id, display_name: p?.display_name ?? 'Unknown', username: p?.username ?? null });
-    membersByCollection.set(m.collection_id, arr);
-  }
-
-  const venuesByCollection = new Map<string, SharedCollectionVenue[]>();
-  for (const v of (venuesResult.data as SharedCollectionVenue[]) ?? []) {
-    const arr = venuesByCollection.get(v.collection_id) ?? [];
-    arr.push(v);
-    venuesByCollection.set(v.collection_id, arr);
-  }
-
-  return (collections as SharedCollection[]).map((c) => ({
-    ...c,
-    members: membersByCollection.get(c.id) ?? [],
-    venues: venuesByCollection.get(c.id) ?? [],
-  }));
-}
-
-export async function addCollectionMember(collectionId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('shared_collection_members')
-    .insert({ collection_id: collectionId, user_id: userId });
-  if (error) throw error;
-}
-
-export async function removeCollectionMember(collectionId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('shared_collection_members')
-    .delete()
-    .eq('collection_id', collectionId)
-    .eq('user_id', userId);
-  if (error) throw error;
-}
-
-export async function addCollectionVenue(collectionId: string, venue: { name: string; address: string; type: string; link: string | null }): Promise<void> {
-  const { error } = await supabase
-    .from('shared_collection_venues')
-    .insert({ collection_id: collectionId, ...venue });
-  if (error) throw error;
-}
-
-export async function removeCollectionVenue(venueId: string): Promise<void> {
-  const { error } = await supabase
-    .from('shared_collection_venues')
-    .delete()
-    .eq('id', venueId);
-  if (error) throw error;
-}
-
-export async function deleteSharedCollection(collectionId: string): Promise<void> {
-  const { error } = await supabase
-    .from('shared_collections')
-    .delete()
-    .eq('id', collectionId);
-  if (error) throw error;
-}
+// The former shared_collections / shared_collection_members /
+// shared_collection_venues API lived here. Those tables held their own
+// copy-pasted venue rows, disconnected from saved_venues, so a "shared
+// collection" could never contain anything the user had actually saved. The
+// tables remain in the database (nothing is dropped) but the app no longer
+// reads or writes them; sharing is now a property of the real collections —
+// see fetchCollectionVenues / shareCollectionWithFriends above.
 
 // ── Plan Invites ──
 

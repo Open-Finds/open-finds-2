@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   UserPlus, Check, X, Users, Trash2, UserMinus,
-  FolderPlus, MapPin, Plus, ChevronRight, Loader2, FolderOpen, AtSign,
+  Plus, ChevronRight, Loader2, FolderOpen, AtSign,
 } from 'lucide-react';
 import {
   fetchFriends, sendFriendRequest, acceptFriendRequest, declineFriendRequest, removeFriend,
   searchUserByUsername,
   createFriendGroup, fetchFriendGroups, addGroupMember, removeGroupMember, deleteFriendGroup,
-  createSharedCollection, fetchSharedCollections, addCollectionMember, removeCollectionMember,
-  removeCollectionVenue, deleteSharedCollection,
-  type FriendWithProfile, type FriendGroupWithMembers, type SharedCollectionWithMembers,
+  fetchCollections, removeCollectionMember,
+  type FriendWithProfile, type FriendGroupWithMembers, type Collection,
 } from '../lib/supabase';
+import { navigate } from '../lib/router';
 import { useAuth } from '../context/AuthContext';
 
 type Tab = 'friends' | 'groups' | 'collections';
@@ -38,12 +38,10 @@ export function FriendsPage() {
   const [groupAddFriendId, setGroupAddFriendId] = useState('');
 
   // Collections state
-  const [collections, setCollections] = useState<SharedCollectionWithMembers[]>([]);
+  // Collections other people have shared with me. Sharing itself happens
+  // from the Venues page, where collections live.
+  const [sharedWithMe, setSharedWithMe] = useState<Collection[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(true);
-  const [newCollectionName, setNewCollectionName] = useState('');
-  const [creatingCollection, setCreatingCollection] = useState(false);
-  const [expandedCollection, setExpandedCollection] = useState<string | null>(null);
-  const [collectionAddFriendId, setCollectionAddFriendId] = useState('');
 
   const loadFriends = useCallback(async () => {
     setFriendsLoading(true);
@@ -66,11 +64,14 @@ export function FriendsPage() {
   const loadCollections = useCallback(async () => {
     setCollectionsLoading(true);
     try {
-      setCollections(await fetchSharedCollections());
+      // fetchCollections returns everything I can access; keep only the ones
+      // someone else owns.
+      const all = await fetchCollections();
+      setSharedWithMe(all.filter((c) => c.user_id !== session?.user.id));
     } catch { /* ignore */ } finally {
       setCollectionsLoading(false);
     }
-  }, []);
+  }, [session?.user.id]);
 
   useEffect(() => { loadFriends(); }, [loadFriends]);
   useEffect(() => { if (tab === 'groups') loadGroups(); }, [tab, loadGroups]);
@@ -179,45 +180,10 @@ export function FriendsPage() {
     } catch { /* ignore */ }
   };
 
-  const handleCreateCollection = async () => {
-    if (!newCollectionName.trim()) return;
-    setCreatingCollection(true);
+  const handleLeaveCollection = async (collectionId: string) => {
+    if (!session?.user.id) return;
     try {
-      await createSharedCollection(newCollectionName.trim());
-      setNewCollectionName('');
-      await loadCollections();
-    } catch { /* ignore */ } finally {
-      setCreatingCollection(false);
-    }
-  };
-
-  const handleAddCollectionMember = async (collectionId: string) => {
-    if (!collectionAddFriendId) return;
-    try {
-      await addCollectionMember(collectionId, collectionAddFriendId);
-      setCollectionAddFriendId('');
-      await loadCollections();
-    } catch { /* ignore */ }
-  };
-
-  const handleRemoveCollectionMember = async (collectionId: string, userId: string) => {
-    try {
-      await removeCollectionMember(collectionId, userId);
-      await loadCollections();
-    } catch { /* ignore */ }
-  };
-
-  const handleRemoveVenue = async (venueId: string) => {
-    try {
-      await removeCollectionVenue(venueId);
-      await loadCollections();
-    } catch { /* ignore */ }
-  };
-
-  const handleDeleteCollection = async (collectionId: string) => {
-    if (!window.confirm('Delete this shared collection?')) return;
-    try {
-      await deleteSharedCollection(collectionId);
+      await removeCollectionMember(collectionId, session.user.id);
       await loadCollections();
     } catch { /* ignore */ }
   };
@@ -495,135 +461,41 @@ export function FriendsPage() {
           </div>
         )}
 
-        {/* ── COLLECTIONS TAB ── */}
         {tab === 'collections' && (
-          <div className="space-y-6">
-            <div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newCollectionName}
-                  onChange={(e) => setNewCollectionName(e.target.value)}
-                  placeholder="Collection name (e.g. Robert & Michael's Spots)"
-                  className="flex-1 rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary/60 outline-none focus:border-gold"
-                />
-                <button
-                  onClick={handleCreateCollection}
-                  disabled={creatingCollection || !newCollectionName.trim()}
-                  className="flex items-center gap-1.5 rounded-card bg-gold px-4 py-3 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
-                >
-                  {creatingCollection ? <Loader2 size={16} className="animate-spin" /> : <FolderPlus size={16} />}
-                  Create
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-ink-secondary">Shared venue collections that all members can add to and remove from.</p>
-            </div>
+          <div className="space-y-4">
+            <p className="text-sm text-ink-secondary">
+              Collections friends have shared with you. Open one to browse it and add your own venues;
+              share your own collections from the Venues tab.
+            </p>
 
             {collectionsLoading ? (
-              <p className="text-sm text-ink-secondary">Loading...</p>
-            ) : collections.length === 0 ? (
-              <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-8 text-center">
-                <FolderOpen size={32} className="mx-auto mb-3 text-gold/30" />
-                <p className="text-sm text-ink-secondary">No shared collections yet. Create one to collaborate on venues with friends!</p>
+              <div className="flex justify-center py-10">
+                <Loader2 size={24} className="animate-spin text-gold" />
+              </div>
+            ) : sharedWithMe.length === 0 ? (
+              <div className="rounded-card border border-gold/20 bg-surface p-6 text-center">
+                <FolderOpen size={28} className="mx-auto mb-2 text-gold/60" />
+                <p className="text-sm text-ink-secondary">Nothing shared with you yet.</p>
               </div>
             ) : (
               <div className="listing-grid">
-                {collections.map((c) => (
-                  <div key={c.id} className="rounded-card border border-gold/20 bg-[#1a1a1a] p-4">
+                {sharedWithMe.map((c) => (
+                  <div key={c.id} className="card flex items-center justify-between gap-3">
                     <button
-                      onClick={() => setExpandedCollection(expandedCollection === c.id ? null : c.id)}
-                      className="flex w-full items-center justify-between text-left"
+                      onClick={() => navigate(`/venues?collection=${c.id}`)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
                     >
-                      <div>
-                        <p className="font-bold text-white">{c.name}</p>
-                        <p className="text-sm text-ink-secondary">{c.members.length} member{c.members.length === 1 ? '' : 's'} · {c.venues.length} venue{c.venues.length === 1 ? '' : 's'}</p>
-                      </div>
-                      <ChevronRight size={20} className={`text-gold/50 transition-transform ${expandedCollection === c.id ? 'rotate-90' : ''}`} />
+                      <FolderOpen size={20} className="shrink-0 text-gold" />
+                      <span className="truncate font-semibold text-white">{c.name}</span>
+                      <ChevronRight size={16} className="ml-auto shrink-0 text-ink-secondary" />
                     </button>
-
-                    {expandedCollection === c.id && (
-                      <div className="mt-4 space-y-4 border-t border-gold/10 pt-4">
-                        {/* Venues */}
-                        {c.venues.length > 0 && (
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-gold/70">Venues</p>
-                            {c.venues.map((v) => (
-                              <div key={v.id} className="flex items-start justify-between rounded-lg border border-gold/10 bg-black/40 p-3">
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-sm font-medium text-white">{v.name}</p>
-                                  <p className="mt-0.5 flex items-center gap-1 text-xs text-ink-secondary">
-                                    <MapPin size={11} className="text-gold/60" /> {v.address}
-                                  </p>
-                                </div>
-                                <button
-                                  onClick={() => handleRemoveVenue(v.id)}
-                                  className="ml-2 shrink-0 text-danger/60 transition-colors hover:text-danger"
-                                  aria-label="Remove venue"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Members */}
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gold/70">Members</p>
-                          {c.members.map((m) => (
-                            <div key={m.user_id} className="flex items-center justify-between">
-                              <div>
-                                <p className="text-sm font-medium text-white">{m.display_name}</p>
-                                <p className="text-xs text-ink-secondary">@{m.username}</p>
-                              </div>
-                              {c.owner_id === currentUserId && m.user_id !== currentUserId && (
-                                <button
-                                  onClick={() => handleRemoveCollectionMember(c.id, m.user_id)}
-                                  className="text-danger/60 transition-colors hover:text-danger"
-                                  aria-label="Remove member"
-                                >
-                                  <UserMinus size={16} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-
-                          {/* Add friend to collection */}
-                          {c.owner_id === currentUserId && (
-                            <div className="flex gap-2 pt-2">
-                              <select
-                                value={collectionAddFriendId}
-                                onChange={(e) => setCollectionAddFriendId(e.target.value)}
-                                className="flex-1 rounded-card border border-gold/20 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-gold"
-                              >
-                                <option value="">Add a friend...</option>
-                                {acceptedFriends.map((f) => (
-                                  <option key={f.user_id} value={f.user_id} disabled={c.members.some((m) => m.user_id === f.user_id)}>
-                                    {f.display_name} (@{f.username})
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={() => handleAddCollectionMember(c.id)}
-                                disabled={!collectionAddFriendId}
-                                className="flex items-center gap-1 rounded-card bg-gold px-3 py-2 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
-                              >
-                                <Plus size={15} />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {c.owner_id === currentUserId && (
-                          <button
-                            onClick={() => handleDeleteCollection(c.id)}
-                            className="flex w-full items-center justify-center gap-1.5 rounded-card border border-danger/30 py-2 text-sm font-medium text-danger transition-all hover:bg-danger/10"
-                          >
-                            <Trash2 size={14} /> Delete Collection
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <button
+                      onClick={() => handleLeaveCollection(c.id)}
+                      aria-label={`Leave ${c.name}`}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-danger/10 hover:text-danger"
+                    >
+                      <UserMinus size={16} />
+                    </button>
                   </div>
                 ))}
               </div>

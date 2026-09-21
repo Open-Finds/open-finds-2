@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Plus, X, Loader2, Check, Link2, Sparkles, Folder, FolderPlus, Trash2, Pencil, ChevronLeft, MapPin } from 'lucide-react';
+import { Search, Plus, X, Loader2, Check, Link2, Sparkles, Folder, FolderPlus, Trash2, Pencil, ChevronLeft, MapPin, Share2, Users, UserMinus } from 'lucide-react';
 import {
   fetchSavedVenues,
   insertSavedVenue,
@@ -11,6 +11,10 @@ import {
   addVenueToCollection,
   removeVenueFromCollection,
   fetchAllCollectionMemberships,
+  fetchCollectionVenues,
+  fetchCollectionMembers,
+  removeCollectionMember,
+  type CollectionVenue,
   type SavedVenue,
   type VenueType,
   type Collection,
@@ -19,6 +23,8 @@ import { extractVenuesFromLink, type ExtractedVenueItem } from '../lib/openai';
 import { geocodeAddress } from '../lib/apiKeys';
 import { navigate } from '../lib/router';
 import { SavedVenueCard } from '../components/SavedVenueCard';
+import { ShareCollectionModal } from '../components/ShareCollectionModal';
+import { useAuth } from '../context/AuthContext';
 
 export function VenuesPage() {
   const [venues, setVenues] = useState<SavedVenue[]>([]);
@@ -36,6 +42,42 @@ export function VenuesPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [openCollectionId, setOpenCollectionId] = useState<string | null>(null);
+  const { session } = useAuth();
+  const myId = session?.user.id ?? null;
+
+  /* ── Shared collections ──
+     Other members' venues are not in `venues` (that list is mine, via RLS), so
+     an open collection fetches its full contents through the RPC and the view
+     merges them: my rows stay live and editable, theirs render read-only. */
+  const [sharedVenues, setSharedVenues] = useState<CollectionVenue[]>([]);
+  const [memberCount, setMemberCount] = useState(0);
+  const [showShare, setShowShare] = useState(false);
+
+  const loadCollectionContents = useCallback(async (collectionId: string) => {
+    try {
+      const [cv, members] = await Promise.all([
+        fetchCollectionVenues(collectionId),
+        fetchCollectionMembers(collectionId),
+      ]);
+      setSharedVenues(cv);
+      setMemberCount(members.length);
+    } catch {
+      setSharedVenues([]);
+      setMemberCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (openCollectionId) loadCollectionContents(openCollectionId);
+    else { setSharedVenues([]); setMemberCount(0); }
+  }, [openCollectionId, loadCollectionContents]);
+
+  // Deep link: /venues?collection=<id> (from a notification or the Friends tab).
+  useEffect(() => {
+    const q = window.location.hash.split('?')[1];
+    const id = q ? new URLSearchParams(q).get('collection') : null;
+    if (id) setOpenCollectionId(id);
+  }, []);
 
   // Add form state
   const [linkInput, setLinkInput] = useState('');
@@ -93,9 +135,12 @@ export function VenuesPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let result = venues;
+    let result: SavedVenue[] = venues;
     if (openCollectionId) {
-      result = result.filter((v) => (memberships[v.id] ?? []).includes(openCollectionId));
+      const mine = result.filter((v) => (memberships[v.id] ?? []).includes(openCollectionId));
+      const mineIds = new Set(mine.map((v) => v.id));
+      const theirs = sharedVenues.filter((v) => !mineIds.has(v.id) && v.user_id !== myId);
+      result = [...mine, ...theirs];
     }
     if (dietaryFilter) {
       result = result.filter((v) => (v.tags ?? []).some((tag) => tag.toLowerCase().includes(dietaryFilter)));
@@ -110,7 +155,7 @@ export function VenuesPage() {
       });
     }
     return result;
-  }, [venues, search, dietaryFilter, openCollectionId, memberships]);
+  }, [venues, search, dietaryFilter, openCollectionId, memberships, sharedVenues, myId]);
 
   const resetForm = () => {
     setName('');
@@ -334,11 +379,38 @@ export function VenuesPage() {
               <ChevronLeft size={24} strokeWidth={2.5} /> All venues
             </button>
             <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Folder size={22} className="text-gold" />
-                <h1 className="text-2xl font-bold text-gold">{openCollection.name}</h1>
+              <div className="flex min-w-0 items-center gap-2">
+                <Folder size={22} className="shrink-0 text-gold" />
+                <h1 className="truncate text-2xl font-bold text-gold">{openCollection.name}</h1>
                 <span className="text-sm text-ink-secondary">{filtered.length}</span>
+                {memberCount > 0 && (
+                  <span className="flex items-center gap-1 rounded-full border border-gold/30 px-2 py-0.5 text-xs text-gold" title="Shared collection">
+                    <Users size={12} /> {memberCount + 1}
+                  </span>
+                )}
               </div>
+              {openCollection.user_id === myId ? (
+                <button
+                  onClick={() => setShowShare(true)}
+                  className="flex items-center gap-2 rounded-card border border-gold px-4 py-2.5 text-sm font-bold text-gold transition-all active:scale-95"
+                >
+                  <Share2 size={16} /> Share
+                </button>
+              ) : (
+                <button
+                  onClick={async () => {
+                    if (!myId) return;
+                    try {
+                      await removeCollectionMember(openCollectionId!, myId);
+                      setOpenCollectionId(null);
+                      setCollections((prev) => prev.filter((c) => c.id !== openCollectionId));
+                    } catch { /* ignore */ }
+                  }}
+                  className="flex items-center gap-2 rounded-card border border-ink-secondary/40 px-4 py-2.5 text-sm font-medium text-ink-secondary transition-all active:scale-95"
+                >
+                  <UserMinus size={16} /> Leave
+                </button>
+              )}
               <button
                 onClick={() => navigate('/trip-setup')}
                 className="flex items-center gap-2 rounded-card bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-95"
@@ -356,6 +428,12 @@ export function VenuesPage() {
                 className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
               />
             </div>
+            <ShareCollectionModal
+              collection={openCollection}
+              open={showShare}
+              onOpenChange={setShowShare}
+              onChanged={() => loadCollectionContents(openCollection.id)}
+            />
             <div className="listing-grid">
               {loading ? (
                 <div className="flex items-center justify-center py-12">
@@ -370,6 +448,7 @@ export function VenuesPage() {
                   <SavedVenueCard
                     key={v.id}
                     venue={v}
+                    readOnly={v.user_id !== myId}
                     isEditing={editingId === v.id}
                     onEditStart={() => setEditingId(v.id)}
                     onEditEnd={() => setEditingId(null)}
@@ -687,23 +766,29 @@ export function VenuesPage() {
                               onClick={() => setOpenCollectionId(c.id)}
                               className="flex items-center gap-1"
                             >
-                              <Folder size={11} /> {c.name}
+                              {c.user_id === myId ? <Folder size={11} /> : <Users size={11} />}
+                              {c.name}
                               <span className="text-ink-secondary/60">{count}</span>
                             </button>
-                            <button
-                              onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }}
-                              className="ml-0.5 text-gold/40 opacity-0 transition-opacity hover:text-gold group-hover:opacity-100"
-                              aria-label="Rename collection"
-                            >
-                              <Pencil size={10} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCollection(c.id)}
-                              className="text-gold/40 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
-                              aria-label="Delete collection"
-                            >
-                              <Trash2 size={10} />
-                            </button>
+                            {/* Rename and delete are owner-only; members see the shared icon instead. */}
+                            {c.user_id === myId && (
+                              <>
+                                <button
+                                  onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }}
+                                  className="ml-0.5 text-gold/40 opacity-0 transition-opacity hover:text-gold group-hover:opacity-100"
+                                  aria-label="Rename collection"
+                                >
+                                  <Pencil size={10} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCollection(c.id)}
+                                  className="text-gold/40 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+                                  aria-label="Delete collection"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
