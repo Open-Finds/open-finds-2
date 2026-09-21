@@ -58,6 +58,8 @@ import {
 } from '../lib/openai';
 import { fetchDistanceMatrix, geocodeAddress, type OriginInput } from '../lib/apiKeys';
 import { loadPlanDraft, savePlanDraft, clearPlanDraft } from '../lib/draft';
+import { findSimilarVenues } from '../lib/venueMatch';
+import { DuplicateVenueDialog, type PendingDuplicate } from '../components/DuplicateVenueDialog';
 
 type Page =
   | 'hero'
@@ -308,6 +310,13 @@ export function HomePage({
      piece of wizard state above. Save the user-entered parts and resume. */
   const hydrated = useRef(false);
 
+  /* ── Duplicate guard (same pattern as the Venues page) ──
+     The wizard doesn't hold the user's venue list, so the check reads it
+     fresh; it's RLS-scoped to the caller and cheap. */
+  const [dupPending, setDupPending] = useState<PendingDuplicate[] | null>(null);
+  const [dupProceed, setDupProceed] = useState<{ all: () => void; newOnly?: () => void } | null>(null);
+  const closeDup = () => { setDupPending(null); setDupProceed(null); };
+
   useEffect(() => {
     if (editPlanId) { hydrated.current = true; return; }
     const d = loadPlanDraft();
@@ -446,6 +455,27 @@ export function HomePage({
       setQaError('Select at least one venue to save.');
       return;
     }
+    const link = qaLinkInput.trim() || null;
+    const existing = await fetchSavedVenues().catch(() => []);
+    const flagged: PendingDuplicate[] = [];
+    const clean: typeof picked = [];
+    for (const item of picked) {
+      const matches = findSimilarVenues({ name: item.name, address: item.address, link, lat: item.lat, lon: item.lon }, existing);
+      if (matches.length > 0) flagged.push({ candidate: { name: item.name, address: item.address, link }, matches });
+      else clean.push(item);
+    }
+    if (flagged.length > 0) {
+      setDupPending(flagged);
+      setDupProceed({
+        all: () => { closeDup(); void qaPerformSaveMulti(picked); },
+        newOnly: clean.length > 0 ? () => { closeDup(); void qaPerformSaveMulti(clean); } : undefined,
+      });
+      return;
+    }
+    await qaPerformSaveMulti(picked);
+  };
+
+  const qaPerformSaveMulti = async (picked: ExtractedVenueItem[]) => {
     setQaSavingMulti(true);
     setQaError(null);
     try {
@@ -481,6 +511,21 @@ export function HomePage({
       setQaError('Name and address are required.');
       return;
     }
+    const candidate = {
+      name: qaName.trim(), address: qaAddress.trim(), link: qaLinkInput.trim() || null,
+      lat: qaExtractedCoords?.lat ?? null, lon: qaExtractedCoords?.lon ?? null,
+    };
+    const existing = await fetchSavedVenues().catch(() => []);
+    const matches = findSimilarVenues(candidate, existing);
+    if (matches.length > 0) {
+      setDupPending([{ candidate, matches }]);
+      setDupProceed({ all: () => { closeDup(); void performQuickAddSave(); } });
+      return;
+    }
+    await performQuickAddSave();
+  };
+
+  const performQuickAddSave = async () => {
     setQaSaving(true);
     setQaError(null);
     try {
@@ -655,6 +700,18 @@ export function HomePage({
   const handleSaveDiscoveredVenue = async (v: VenueCandidate) => {
     const key = `${v.name}|${v.address}`;
     if (savedDiscoveredIds.has(key) || savingDiscoveredId) return;
+    const existing = await fetchSavedVenues().catch(() => []);
+    const matches = findSimilarVenues({ name: v.name, address: v.address, link: v.vibe_link }, existing);
+    if (matches.length > 0) {
+      setDupPending([{ candidate: { name: v.name, address: v.address, link: v.vibe_link }, matches }]);
+      setDupProceed({ all: () => { closeDup(); void performSaveDiscoveredVenue(v); } });
+      return;
+    }
+    await performSaveDiscoveredVenue(v);
+  };
+
+  const performSaveDiscoveredVenue = async (v: VenueCandidate) => {
+    const key = `${v.name}|${v.address}`;
     setSavingDiscoveredId(key);
     try {
       const saved = await insertSavedVenue({
@@ -884,10 +941,22 @@ export function HomePage({
     setTimeout(() => setInviteCopied(false), 2000);
   };
 
+  // Mounted on every page that can save a venue. Radix portals it to <body>,
+  // so its position in the tree doesn't matter — only that it's rendered.
+  const dupDialog = (
+    <DuplicateVenueDialog
+      pending={dupPending}
+      onAddAnyway={() => dupProceed?.all()}
+      onSkipDuplicates={dupProceed?.newOnly}
+      onCancel={closeDup}
+    />
+  );
+
   /* ── PAGE: HERO ── */
   if (page === 'hero') {
     return (
       <div className="relative flex min-h-screen flex-col items-center overflow-y-auto bg-black px-6 pb-28 pt-16 text-center">
+        {dupDialog}
         <div
           className="absolute inset-0"
           style={{
@@ -1405,6 +1474,7 @@ export function HomePage({
     };
     return (
       <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-44">
+        {dupDialog}
         <BackButton onClick={() => setPage('planMyNight')} />
         <div className="flex w-full flex-1 flex-col justify-center">
           <h2 className="mb-2 text-3xl font-bold text-gold">Something New</h2>

@@ -10,6 +10,8 @@ import { geocodeAddress } from '../lib/apiKeys';
 import { extractVenueFromLink } from '../lib/openai';
 import { useAuth } from '../context/AuthContext';
 import { SavedVenueCard } from './SavedVenueCard';
+import { DuplicateVenueDialog, type PendingDuplicate } from './DuplicateVenueDialog';
+import { findSimilarVenues } from '../lib/venueMatch';
 import {
   X,
   Link2,
@@ -31,6 +33,9 @@ export function SavedVenuesModal({
 }) {
   const { session } = useAuth();
   const [venues, setVenues] = useState<SavedVenue[]>([]);
+  const [dupPending, setDupPending] = useState<PendingDuplicate[] | null>(null);
+  const [dupProceed, setDupProceed] = useState<(() => void) | null>(null);
+  const closeDup = () => { setDupPending(null); setDupProceed(null); };
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set(selectedIds));
   const [showAddForm, setShowAddForm] = useState(false);
@@ -117,6 +122,21 @@ export function SavedVenuesModal({
       setError('Name and address are required.');
       return;
     }
+    // The modal already holds the user's venues, so the duplicate check is local.
+    const candidate = {
+      name: name.trim(), address: address.trim(), link: linkInput.trim() || null,
+      lat: extractedCoords?.lat ?? null, lon: extractedCoords?.lon ?? null,
+    };
+    const matches = findSimilarVenues(candidate, venues);
+    if (matches.length > 0) {
+      setDupPending([{ candidate, matches }]);
+      setDupProceed(() => () => { closeDup(); void performSave(); });
+      return;
+    }
+    await performSave();
+  };
+
+  const performSave = async () => {
     setSaving(true);
     setError(null);
     try {
@@ -158,6 +178,11 @@ export function SavedVenuesModal({
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
+      <DuplicateVenueDialog
+        pending={dupPending}
+        onAddAnyway={() => dupProceed?.()}
+        onCancel={closeDup}
+      />
       <div
         className="flex h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-gold/20 bg-[#0d0d0d] pb-[env(safe-area-inset-bottom,0px)] sm:h-[85vh] sm:max-h-[85vh] sm:w-[640px] sm:max-w-[90vw] sm:rounded-3xl sm:pb-0"
         onClick={(e) => e.stopPropagation()}

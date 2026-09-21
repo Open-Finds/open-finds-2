@@ -24,6 +24,8 @@ import { geocodeAddress } from '../lib/apiKeys';
 import { navigate } from '../lib/router';
 import { SavedVenueCard } from '../components/SavedVenueCard';
 import { ShareCollectionModal } from '../components/ShareCollectionModal';
+import { DuplicateVenueDialog, type PendingDuplicate } from '../components/DuplicateVenueDialog';
+import { findSimilarVenues } from '../lib/venueMatch';
 import { useAuth } from '../context/AuthContext';
 
 export function VenuesPage() {
@@ -52,6 +54,15 @@ export function VenuesPage() {
   const [sharedVenues, setSharedVenues] = useState<CollectionVenue[]>([]);
   const [memberCount, setMemberCount] = useState(0);
   const [showShare, setShowShare] = useState(false);
+
+  /* ── Duplicate guard ──
+     Before any save, look for venues the user already has that are probably
+     the same place, and let them confirm. `dupPending` holds the dialog's
+     contents; `dupProceed` is what to run if they choose to go ahead. */
+  const [dupPending, setDupPending] = useState<PendingDuplicate[] | null>(null);
+  const [dupProceed, setDupProceed] = useState<{ all: () => void; newOnly?: () => void } | null>(null);
+
+  const closeDup = () => { setDupPending(null); setDupProceed(null); };
 
   const loadCollectionContents = useCallback(async (collectionId: string) => {
     try {
@@ -295,6 +306,26 @@ export function VenuesPage() {
       setError('Select at least one venue to save.');
       return;
     }
+    const link = linkInput.trim() || null;
+    const flagged: PendingDuplicate[] = [];
+    const clean: typeof picked = [];
+    for (const item of picked) {
+      const matches = findSimilarVenues({ name: item.name, address: item.address, link, lat: item.lat, lon: item.lon }, venues);
+      if (matches.length > 0) flagged.push({ candidate: { name: item.name, address: item.address, link }, matches });
+      else clean.push(item);
+    }
+    if (flagged.length > 0) {
+      setDupPending(flagged);
+      setDupProceed({
+        all: () => { closeDup(); void performSaveMulti(picked); },
+        newOnly: clean.length > 0 ? () => { closeDup(); void performSaveMulti(clean); } : undefined,
+      });
+      return;
+    }
+    await performSaveMulti(picked);
+  };
+
+  const performSaveMulti = async (picked: ExtractedVenueItem[]) => {
     setSavingMulti(true);
     setError(null);
     try {
@@ -332,6 +363,17 @@ export function VenuesPage() {
       setError('Name and address are required.');
       return;
     }
+    const candidate = { name: name.trim(), address: address.trim(), link: linkInput.trim() || null };
+    const matches = findSimilarVenues(candidate, venues);
+    if (matches.length > 0) {
+      setDupPending([{ candidate, matches }]);
+      setDupProceed({ all: () => { closeDup(); void performSave(); } });
+      return;
+    }
+    await performSave();
+  };
+
+  const performSave = async () => {
     setSaving(true);
     setError(null);
     try {
@@ -368,6 +410,12 @@ export function VenuesPage() {
 
   return (
     <div className="min-h-screen overflow-y-auto bg-black px-6 pt-8 pb-24">
+      <DuplicateVenueDialog
+        pending={dupPending}
+        onAddAnyway={() => dupProceed?.all()}
+        onSkipDuplicates={dupProceed?.newOnly}
+        onCancel={closeDup}
+      />
       <div className="mx-auto w-full">
         {/* Collection detail view */}
         {openCollection ? (
