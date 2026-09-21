@@ -4,6 +4,9 @@ import {
   Sparkles,
   Send,
   Compass,
+  Folder,
+  Users,
+  MapPin,
   ChevronRight,
   X,
   Check,
@@ -11,26 +14,46 @@ import {
 } from 'lucide-react';
 import { updateDietaryPreferences } from '../lib/supabase';
 
+/*
+ * One step per workflow the client wants a new user walked through on first
+ * open. Each is a single action they can go and do, in the order they'd
+ * naturally do it: save → organise → plan → share → go.
+ */
 const STEPS = [
   {
     icon: Link2,
-    title: 'Save Venues from Links',
-    desc: 'Paste any Instagram, website, or map link and we\u2019ll pull the venue details automatically. Build your personal collection over time.',
+    title: 'Save a venue from any link',
+    desc: 'Paste a link from Instagram, TikTok, Facebook, Google Maps or a website. We pull out the name, address and type — no typing. Every venue you save builds your taste profile.',
+  },
+  {
+    icon: Folder,
+    title: 'Organise into collections',
+    desc: 'Group venues into collections like “Sydney” or “Date nights”. Tags are added automatically — search “pho” and every pho place you’ve saved comes up.',
+  },
+  {
+    icon: Users,
+    title: 'Build collections together',
+    desc: 'Share a collection with friends or a whole group. Everyone can add their own finds to it, so the next night out plans itself from what you’ve all saved.',
   },
   {
     icon: Sparkles,
-    title: 'Plan a Night Out',
-    desc: 'Pick your vibe \u2014 food, activity, or dessert \u2014 and we\u2019ll curate a multi-stop itinerary with travel times between each spot.',
+    title: 'Plan a night out',
+    desc: 'Pick your vibes — food, bar, activity, dessert — set how far you’ll travel, and get a multi-stop itinerary with times and travel between stops. Use your saved spots, or let Something New find places you haven’t tried.',
   },
   {
     icon: Send,
-    title: 'Invite Your Friends',
-    desc: 'Share your plan with a link. Friends can RSVP in one tap \u2014 no account needed. See who\u2019s in, who\u2019s out, live.',
+    title: 'Invite friends and see who’s in',
+    desc: 'Send the plan as a link or straight to a group. Friends RSVP in one tap with no account. You get a notification as each one answers.',
+  },
+  {
+    icon: MapPin,
+    title: 'On the night',
+    desc: 'Open every stop in Maps as one route, add the whole plan to your calendar, and check the vibes from each venue’s page before you go.',
   },
   {
     icon: Compass,
-    title: 'Plan Trips Too',
-    desc: 'Going further? Use the Trip Planner to map out multi-day adventures with daily itineraries and shared RSVPs.',
+    title: 'Plan trips too',
+    desc: 'Going away? The Trip Planner maps out multi-day itineraries, with a day-by-day plan and per-stop RSVPs so people can join what suits them.',
   },
 ] as const;
 

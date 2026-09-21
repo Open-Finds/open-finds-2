@@ -39,6 +39,7 @@ import {
   insertRsvp,
   sendGuestRsvpPushNotification,
   fetchSavedVenues,
+  fetchRecentPlanHistory,
   insertSavedVenue,
   updateSavedVenueCoords,
   sortStops,
@@ -765,14 +766,20 @@ export function HomePage({
     setDiscoveredVenues([]);
     setNewNightTravelTimes({});
     try {
-      const allSaved = await fetchSavedVenues();
+      // Saved venues say what they like; plan history says what they do.
+      // History failing to load must never block discovery.
+      const [allSaved, history] = await Promise.all([
+        fetchSavedVenues(),
+        fetchRecentPlanHistory().catch(() => []),
+      ]);
       const combinedDietary = Array.from(new Set([...dietaryPreferences, ...adHocDietaryFilters]));
       const candidates = await discoverSmartVenueCandidates(
         selectedVibes,
         effectiveOrigin,
         allSaved,
         travelTime,
-        combinedDietary.length > 0 ? combinedDietary : undefined
+        combinedDietary.length > 0 ? combinedDietary : undefined,
+        history
       );
       if (candidates.length === 0) {
         setNewNightError('No venues found. Try a different suburb or postcode.');

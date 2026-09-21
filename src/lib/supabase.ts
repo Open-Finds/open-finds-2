@@ -404,6 +404,52 @@ export async function fetchAllPlans() {
   return (data ?? []) as Plan[];
 }
 
+/** One past outing, condensed for the discovery prompt. */
+export type PlanHistoryEntry = {
+  title: string;
+  date: string;
+  location: string | null;
+  stops: { name: string; address: string; type: string }[];
+};
+
+/**
+ * The user's recent plans with their stops — what they actually went out and
+ * did, as opposed to what they saved. Feeds the "learns over time" behaviour
+ * in discovery: suburbs they return to, how far they travel, which vibes they
+ * favour. Read through RLS, so it is the caller's own plans on either key.
+ */
+export async function fetchRecentPlanHistory(limit = 12): Promise<PlanHistoryEntry[]> {
+  const { data: plans, error } = await supabase
+    .from('plans')
+    .select('id, title, date, location')
+    .eq('canceled', false)
+    .is('trip_id', null)
+    .order('date', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  const rows = (plans ?? []) as { id: string; title: string; date: string; location: string | null }[];
+  if (rows.length === 0) return [];
+
+  const { data: stops } = await supabase
+    .from('stops')
+    .select('plan_id, name, address, type')
+    .in('plan_id', rows.map((p) => p.id))
+    .order('sort_order', { ascending: true });
+
+  const byPlan = new Map<string, PlanHistoryEntry['stops']>();
+  for (const st of (stops ?? []) as { plan_id: string; name: string; address: string; type?: string }[]) {
+    const list = byPlan.get(st.plan_id) ?? [];
+    list.push({ name: st.name, address: st.address, type: st.type ?? 'food' });
+    byPlan.set(st.plan_id, list);
+  }
+  return rows.map((p) => ({
+    title: p.title,
+    date: p.date,
+    location: p.location,
+    stops: byPlan.get(p.id) ?? [],
+  }));
+}
+
 export async function fetchCanceledPlans(): Promise<Plan[]> {
   const userId = getUserId();
   const { data, error } = await supabase

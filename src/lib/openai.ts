@@ -1,4 +1,4 @@
-import type { VenueType, SavedVenue } from './supabase';
+import type { VenueType, SavedVenue, PlanHistoryEntry } from './supabase';
 import { isGoogleMapsLink, resolveGoogleMapsLink } from './apiKeys';
 import { edgeAuthHeaders } from './edgeAuth';
 
@@ -330,7 +330,8 @@ export async function discoverSmartVenueCandidates(
   location: string | { lat: number; lon: number },
   savedVenues: SavedVenue[],
   travelTimeMinutes?: number,
-  dietaryPreferences?: string[]
+  dietaryPreferences?: string[],
+  history: PlanHistoryEntry[] = []
 ): Promise<VenueCandidate[]> {
   const locationStr =
     typeof location === 'string'
@@ -360,6 +361,21 @@ export async function discoverSmartVenueCandidates(
     ? `The user has previously saved these venues they enjoy:\n${savedSummary}\n\nUse these to understand the user's taste — consider the cuisine style, venue type, price range, atmosphere, and suburbs they tend to visit. Find venues that are SIMILAR in style and vibe to what the user already likes, but that they have NOT already saved. Aim for variety: suggest a mix of well-known favourites and hidden gems that match their taste profile.`
     : `The user has no saved venues yet, so suggest broadly popular, well-reviewed venues that are good starting points.`;
 
+  /*
+   * What the user has actually done, not just saved. Over time this is what
+   * lets suggestions drift toward the suburbs they keep returning to and the
+   * distances they are really willing to travel — the "learns over time" ask.
+   * Capped so a heavy user does not blow out the prompt.
+   */
+  const recent = history.filter((h) => h.stops.length > 0).slice(0, 10);
+  const historyGuidance = recent.length > 0
+    ? `\n\nRecent nights out this user has actually planned (most recent first):\n${recent
+        .map((h) => `- ${h.date}${h.location ? ` near ${h.location}` : ''}: ${h.stops
+          .map((st) => `${st.name} (${st.type}, ${st.address})`).join(' → ')}`)
+        .join('\n')}\n\nLook for patterns here and weight your suggestions toward them: the suburbs and areas they return to, how far from "${locationStr}" they have been willing to go, the kinds of venues and cuisines they choose when it counts, and the order they like to do things in. Treat what they have done as a stronger signal than what they have merely saved. Do not suggest venues that appear in this history.`
+    : '';
+  const historyNames = recent.flatMap((h) => h.stops.map((st) => st.name.toLowerCase()));
+
   const dietaryGuidance = dietaryPreferences && dietaryPreferences.length > 0
     ? `\n\nIMPORTANT — DIETARY REQUIREMENTS: The user has these dietary preferences/restrictions: ${dietaryPreferences.join(', ')}. You MUST only recommend venues that can genuinely accommodate these dietary needs. For food venues, ensure they have suitable menu options (e.g. vegetarian/vegan dishes, gluten-free options, halal certification, kosher options, dairy-free alternatives, or nut-free menus as applicable). Exclude any venue that cannot cater to these requirements. If recommending a dessert spot, it must also accommodate the dietary needs.`
     : '';
@@ -369,7 +385,7 @@ export async function discoverSmartVenueCandidates(
       {
         role: 'system',
         content:
-          `You are a local venue discovery assistant for Australia. Use web search to find 8 real, well-known venues near "${locationStr}". ${travelHint} The user is looking for: ${vibeLabels}. ${tasteGuidance}${dietaryGuidance} ${savedNames ? `Do NOT include any of these venues the user has already saved: ${savedNames}.` : ''} For each venue return: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'), (3) the type which must be exactly one of: 'food', 'activity', 'dessert', 'bar', and (4) a link to the venue's Instagram or website if findable, or null. Return a JSON object: {"venues": [{"name": "...", "address": "...", "type": "food|activity|dessert|bar", "vibe_link": "..." or null}]}. Only include real venues that actually exist. Do not invent or hallucinate venues.`,
+          `You are a local venue discovery assistant for Australia. Use web search to find 8 real, well-known venues near "${locationStr}". ${travelHint} The user is looking for: ${vibeLabels}. ${tasteGuidance}${historyGuidance}${dietaryGuidance} ${savedNames || historyNames.length ? `Do NOT include any of these venues the user has already saved or visited: ${[savedNames, ...historyNames].filter(Boolean).join(', ')}.` : ''} For each venue return: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'), (3) the type which must be exactly one of: 'food', 'activity', 'dessert', 'bar', and (4) a link to the venue's Instagram or website if findable, or null. Return a JSON object: {"venues": [{"name": "...", "address": "...", "type": "food|activity|dessert|bar", "vibe_link": "..." or null}]}. Only include real venues that actually exist. Do not invent or hallucinate venues.`,
       },
       { role: 'user', content: `Find ${vibeLabels} near ${locationStr} that match my taste${dietaryPreferences && dietaryPreferences.length > 0 ? ` and accommodate my dietary needs (${dietaryPreferences.join(', ')})` : ''}` },
     ],
