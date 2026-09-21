@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2, Trash2 } from 'lucide-react';
+import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2, Trash2, Play, ExternalLink } from 'lucide-react';
 import {
   deleteSavedVenue,
   updateSavedVenue,
@@ -16,6 +16,15 @@ const TYPE_LABELS: Record<VenueType, string> = {
   dessert: 'Dessert',
   bar: 'Bar',
 };
+
+function hrefFor(link: string): string {
+  return /^https?:\/\//i.test(link) ? link : `https://${link}`;
+}
+
+function isVideoLink(link: string): boolean {
+  const l = link.toLowerCase();
+  return /tiktok\.com|youtube\.com|youtu\.be|\/reels?\/|facebook\.com\/(?:reel|watch)/.test(l);
+}
 
 type Props = {
   venue: SavedVenue;
@@ -372,6 +381,18 @@ export function SavedVenueCard({
           ))}
         </div>
         {venue.personal_note && <p className="mt-2 line-clamp-2 text-xs italic text-ink-secondary">“{venue.personal_note}”</p>}
+        {venue.link && (
+          <a
+            href={hrefFor(venue.link)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="mt-2 inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 text-xs font-medium text-gold transition-colors hover:bg-gold/20"
+          >
+            {isVideoLink(venue.link) ? <Play size={11} fill="currentColor" /> : <ExternalLink size={11} />}
+            {isVideoLink(venue.link) ? 'Watch video' : 'Open source'}
+          </a>
+        )}
       </div>
       {!readOnly && <button
         onClick={(e) => {
