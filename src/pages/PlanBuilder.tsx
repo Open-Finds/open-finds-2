@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { navigate } from '../lib/router';
+import { locateUser } from '../lib/geolocation';
 import {
   supabase,
   createPlan,
@@ -228,33 +229,17 @@ export function PlanBuilderPage() {
     setPicked(picks);
   };
 
-  const handleUseMyLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported on this device.');
-      return;
-    }
+  const handleUseMyLocation = async () => {
     setLocating(true);
     setLocationError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setOriginCoord({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-        setLocation('');
-        setLocating(false);
-      },
-      (err) => {
-        setLocating(false);
-        if (err.code === err.PERMISSION_DENIED) {
-          setLocationError('Location permission denied. Enter an address instead.');
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          setLocationError('Could not determine your location. Enter an address instead.');
-        } else if (err.code === err.TIMEOUT) {
-          setLocationError('Location request timed out. Try again or enter an address.');
-        } else {
-          setLocationError('Could not get your location. Enter an address instead.');
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+    try {
+      setOriginCoord(await locateUser());
+      setLocation('');
+    } catch (e) {
+      setLocationError(e instanceof Error ? e.message : 'Could not get your location. Enter a suburb or postcode instead.');
+    } finally {
+      setLocating(false);
+    }
   };
 
   const canSubmit =
