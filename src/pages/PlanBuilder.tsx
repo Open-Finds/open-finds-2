@@ -14,6 +14,7 @@ import {
   UtensilsCrossed,
   Target,
   Cake,
+  Wine,
   Plus,
   ExternalLink,
   ChevronRight as Chevron,
@@ -35,12 +36,14 @@ const TYPES = [
   { key: 'food', label: 'Food', icon: UtensilsCrossed },
   { key: 'activity', label: 'Activity', icon: Target },
   { key: 'dessert', label: 'Dessert', icon: Cake },
+  { key: 'bar', label: 'Bar', icon: Wine },
 ] as const;
 
 const TYPE_ICON: Record<VenueType, typeof UtensilsCrossed> = {
   food: UtensilsCrossed,
   activity: Target,
   dessert: Cake,
+  bar: Wine,
 };
 
 type PickedVenue = {
@@ -593,6 +596,7 @@ function defaultTimeForType(type: string, order: number): string {
   if (type === 'food') return '7:00pm';
   if (type === 'activity') return '8:30pm';
   if (type === 'dessert') return '10:00pm';
+  if (type === 'bar') return '9:00pm';
   return `${6 + order}:00pm`;
 }
 
@@ -600,5 +604,6 @@ function defaultNameForType(type: string): string {
   if (type === 'food') return 'Dinner spot';
   if (type === 'activity') return 'Activity';
   if (type === 'dessert') return 'Dessert bar';
+  if (type === 'bar') return 'Drinks';
   return 'Stop';
 }

@@ -58,7 +58,7 @@ export type VenueCandidate = {
   vibe_link: string | null;
 };
 
-const VALID_TYPES: VenueType[] = ['food', 'activity', 'dessert'];
+const VALID_TYPES: VenueType[] = ['food', 'activity', 'dessert', 'bar'];
 
 /**
  * Maps a free-text type from the model onto one of the three venue types.
@@ -73,8 +73,10 @@ export function normalizeType(raw: unknown): VenueType | null {
   const lower = raw.toLowerCase().trim();
   if (VALID_TYPES.includes(lower as VenueType)) return lower as VenueType;
   if (lower.includes('dessert') || lower.includes('sweet') || lower.includes('cake') || lower.includes('ice cream') || lower.includes('gelato') || lower.includes('bakery')) return 'dessert';
+  // Bar before food: "bar" used to be a food keyword, so a wine bar was food.
+  if (lower.includes('bar') || lower.includes('pub') || lower.includes('cocktail') || lower.includes('brewery') || lower.includes('wine') || lower.includes('drinks') || lower.includes('nightclub') || lower.includes('lounge')) return 'bar';
   if (lower.includes('activity') || lower.includes('adventure') || lower.includes('experience') || lower.includes('escape') || lower.includes('game') || lower.includes('sport')) return 'activity';
-  if (lower.includes('food') || lower.includes('restaurant') || lower.includes('dinner') || lower.includes('cafe') || lower.includes('bar') || lower.includes('eat')) return 'food';
+  if (lower.includes('food') || lower.includes('restaurant') || lower.includes('dinner') || lower.includes('cafe') || lower.includes('eat')) return 'food';
   return null;
 }
 
@@ -226,7 +228,7 @@ export async function extractVenuesFromLink(
       {
         role: 'system',
         content:
-          "You are a venue research assistant. You will be given metadata extracted from a social media page or video (Instagram, Facebook, TikTok, or a website) including the page title, description, handle, structured data, video caption, and visible text. Your job is to extract venue details from this metadata FIRST. If the metadata contains enough information to identify venue names, addresses, and types, use it directly. If any field is missing or unclear, use web search to find the missing information — search for the venue name or handle plus 'address' or 'location'. CRITICAL for reels/videos: There are TWO possibilities — (1) the reel/video is posted BY the venue itself (the creator IS the venue — many venues post their own reels), or (2) the reel/video features or reviews one or more venues. FIRST check if the creator name sounds like a business name and search for it as a venue. THEN look for other venue names mentioned in the caption, description, hashtags, or @ mentions. IMPORTANT: If the caption or description already contains venue names, extract them directly from the text — do NOT do unnecessary web searches. Only use web search to find the full street address for venues you've already identified from the caption, or to find venues when the caption is vague or missing. The content may mention MULTIPLE distinct venues (e.g. a reel listing 'top 5 spots'). You must identify ALL distinct venues mentioned and return them as a list, ordered by the sequence they appear in the content (first mentioned = order 1, second = order 2, etc.). Do NOT duplicate the same venue. If only one venue is mentioned, return a list with one item. For each venue extract: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'), and (3) the venue type which must be exactly one of: 'food', 'activity', or 'dessert'. A restaurant, cafe, bar, or pub is 'food'. An escape room, bowling, arcade, mini-golf, or experience is 'activity'. A gelato shop, cake shop, ice creamery, or dessert bar is 'dessert'. If you can find the venue but only a suburb (no street address), return the suburb as the address. If the metadata is sparse or the page could not be fully fetched, use web search — search for the creator name plus caption text, or search for the full URL to find articles or blog posts discussing the content and the venues it features. For each venue also extract 0-5 short lowercase tags describing the cuisine, style, or vibe (e.g. \"italian\", \"cocktails\", \"rooftop\", \"brunch\", \"korean bbq\", \"craft beer\", \"family-friendly\", \"date-night\"). COORDINATES: If the structured data (JSON-LD), page text, or web search results contain exact latitude and longitude for a venue (e.g. from schema.org GeoCoordinates, a Google Maps link, or a business listing), include them as numeric \"lat\" and \"lon\" fields. Only include coordinates you are confident are for that specific venue — do NOT guess or estimate. If you cannot find exact coordinates, omit lat and lon (or set them to null). Return JSON: {\"venues\": [{\"name\": \"...\", \"address\": \"...\", \"type\": \"food|activity|dessert\", \"order\": 1, \"tags\": [\"...\"], \"lat\": number|null, \"lon\": number|null}]}. If you cannot find any venue, return {\"venues\": []}.",
+          "You are a venue research assistant. You will be given metadata extracted from a social media page or video (Instagram, Facebook, TikTok, or a website) including the page title, description, handle, structured data, video caption, and visible text. Your job is to extract venue details from this metadata FIRST. If the metadata contains enough information to identify venue names, addresses, and types, use it directly. If any field is missing or unclear, use web search to find the missing information — search for the venue name or handle plus 'address' or 'location'. CRITICAL for reels/videos: There are TWO possibilities — (1) the reel/video is posted BY the venue itself (the creator IS the venue — many venues post their own reels), or (2) the reel/video features or reviews one or more venues. FIRST check if the creator name sounds like a business name and search for it as a venue. THEN look for other venue names mentioned in the caption, description, hashtags, or @ mentions. IMPORTANT: If the caption or description already contains venue names, extract them directly from the text — do NOT do unnecessary web searches. Only use web search to find the full street address for venues you've already identified from the caption, or to find venues when the caption is vague or missing. The content may mention MULTIPLE distinct venues (e.g. a reel listing 'top 5 spots'). You must identify ALL distinct venues mentioned and return them as a list, ordered by the sequence they appear in the content (first mentioned = order 1, second = order 2, etc.). Do NOT duplicate the same venue. If only one venue is mentioned, return a list with one item. For each venue extract: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'), and (3) the venue type which must be exactly one of: 'food', 'activity', 'dessert', or 'bar'. A restaurant or cafe is 'food'. A bar, pub, cocktail bar, wine bar, brewery, or nightclub is 'bar'. An escape room, bowling, arcade, mini-golf, or experience is 'activity'. A gelato shop, cake shop, ice creamery, or dessert bar is 'dessert'. If you can find the venue but only a suburb (no street address), return the suburb as the address. If the metadata is sparse or the page could not be fully fetched, use web search — search for the creator name plus caption text, or search for the full URL to find articles or blog posts discussing the content and the venues it features. For each venue also extract 0-5 short lowercase tags describing the cuisine, style, or vibe (e.g. \"italian\", \"cocktails\", \"rooftop\", \"brunch\", \"korean bbq\", \"craft beer\", \"family-friendly\", \"date-night\"). COORDINATES: If the structured data (JSON-LD), page text, or web search results contain exact latitude and longitude for a venue (e.g. from schema.org GeoCoordinates, a Google Maps link, or a business listing), include them as numeric \"lat\" and \"lon\" fields. Only include coordinates you are confident are for that specific venue — do NOT guess or estimate. If you cannot find exact coordinates, omit lat and lon (or set them to null). Return JSON: {\"venues\": [{\"name\": \"...\", \"address\": \"...\", \"type\": \"food|activity|dessert|bar\", \"order\": 1, \"tags\": [\"...\"], \"lat\": number|null, \"lon\": number|null}]}. If you cannot find any venue, return {\"venues\": []}.",
       },
       { role: 'user', content: context },
     ],
@@ -282,7 +284,8 @@ export async function discoverVenueCandidates(
   location: string
 ): Promise<VenueCandidate[]> {
   const vibeLabel =
-    vibe === 'food' ? 'restaurants, cafes, bars, or pubs' :
+    vibe === 'food' ? 'restaurants or cafes' :
+    vibe === 'bar' ? 'bars, pubs, cocktail bars, wine bars, or breweries' :
     vibe === 'activity' ? 'activities like escape rooms, bowling, arcade, mini-golf, or experiences' :
     'dessert spots like gelato shops, cake shops, ice creameries, or dessert bars';
 
@@ -335,7 +338,8 @@ export async function discoverSmartVenueCandidates(
       : `latitude ${location.lat.toFixed(4)}, longitude ${location.lon.toFixed(4)}`;
   const vibeLabels = vibes
     .map((v) =>
-      v === 'food' ? 'restaurants, cafes, bars, or pubs' :
+      v === 'food' ? 'restaurants or cafes' :
+      v === 'bar' ? 'bars, pubs, cocktail bars, wine bars, or breweries' :
       v === 'activity' ? 'activities like escape rooms, bowling, arcade, mini-golf, or experiences' :
       'dessert spots like gelato shops, cake shops, ice creameries, or dessert bars'
     )
@@ -365,7 +369,7 @@ export async function discoverSmartVenueCandidates(
       {
         role: 'system',
         content:
-          `You are a local venue discovery assistant for Australia. Use web search to find 8 real, well-known venues near "${locationStr}". ${travelHint} The user is looking for: ${vibeLabels}. ${tasteGuidance}${dietaryGuidance} ${savedNames ? `Do NOT include any of these venues the user has already saved: ${savedNames}.` : ''} For each venue return: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'), (3) the type which must be exactly one of: 'food', 'activity', 'dessert', and (4) a link to the venue's Instagram or website if findable, or null. Return a JSON object: {"venues": [{"name": "...", "address": "...", "type": "food|activity|dessert", "vibe_link": "..." or null}]}. Only include real venues that actually exist. Do not invent or hallucinate venues.`,
+          `You are a local venue discovery assistant for Australia. Use web search to find 8 real, well-known venues near "${locationStr}". ${travelHint} The user is looking for: ${vibeLabels}. ${tasteGuidance}${dietaryGuidance} ${savedNames ? `Do NOT include any of these venues the user has already saved: ${savedNames}.` : ''} For each venue return: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'), (3) the type which must be exactly one of: 'food', 'activity', 'dessert', 'bar', and (4) a link to the venue's Instagram or website if findable, or null. Return a JSON object: {"venues": [{"name": "...", "address": "...", "type": "food|activity|dessert|bar", "vibe_link": "..." or null}]}. Only include real venues that actually exist. Do not invent or hallucinate venues.`,
       },
       { role: 'user', content: `Find ${vibeLabels} near ${locationStr} that match my taste${dietaryPreferences && dietaryPreferences.length > 0 ? ` and accommodate my dietary needs (${dietaryPreferences.join(', ')})` : ''}` },
     ],

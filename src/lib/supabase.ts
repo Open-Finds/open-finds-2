@@ -226,7 +226,7 @@ export type Rsvp = {
   created_at: string;
 };
 
-export type VenueType = 'food' | 'activity' | 'dessert';
+export type VenueType = 'food' | 'activity' | 'dessert' | 'bar';
 
 export type SavedVenue = {
   id: string;

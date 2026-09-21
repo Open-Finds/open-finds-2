@@ -200,7 +200,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
     setAiResults([]);
     setAiSelected(new Set());
     try {
-      const vibes: VenueType[] = ['food', 'activity', 'dessert'];
+      const vibes: VenueType[] = ['food', 'activity', 'dessert', 'bar'];
       const results = await discoverSmartVenueCandidates(
         vibes,
         plan?.location ?? trip?.destination ?? '',
@@ -557,7 +557,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                 className="rounded-lg border border-gold/30 bg-black/50 px-2 py-2 text-sm text-gold focus:border-gold focus:outline-none [color-scheme:dark]"
               />
               <div className="flex gap-1">
-                {(['food', 'activity', 'dessert'] as VenueType[]).map((v) => (
+                {(['food', 'activity', 'dessert', 'bar'] as VenueType[]).map((v) => (
                   <button
                     key={v}
                     onClick={() => setAddStopVibe(v)}

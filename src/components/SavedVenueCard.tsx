@@ -14,6 +14,7 @@ const TYPE_LABELS: Record<VenueType, string> = {
   food: 'Food',
   activity: 'Activity',
   dessert: 'Dessert',
+  bar: 'Bar',
 };
 
 type Props = {
@@ -188,6 +189,7 @@ export function SavedVenueCard({
               <option value="food">Food</option>
               <option value="activity">Activity</option>
               <option value="dessert">Dessert</option>
+              <option value="bar">Bar</option>
             </select>
           </div>
           <div>

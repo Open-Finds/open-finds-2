@@ -7,10 +7,11 @@ import { normalizeType } from './openai';
  * vibe filter, the default stop time, the itinerary composition — keys off it.
  */
 describe('normalizeType', () => {
-  it('accepts the three canonical values', () => {
+  it('accepts the four canonical values', () => {
     expect(normalizeType('food')).toBe('food');
     expect(normalizeType('activity')).toBe('activity');
     expect(normalizeType('dessert')).toBe('dessert');
+    expect(normalizeType('bar')).toBe('bar');
   });
 
   it('is case and whitespace insensitive', () => {
@@ -19,8 +20,16 @@ describe('normalizeType', () => {
   });
 
   it('maps food synonyms', () => {
-    for (const s of ['restaurant', 'a great cafe', 'dinner spot', 'wine bar', 'somewhere to eat']) {
+    for (const s of ['restaurant', 'a great cafe', 'dinner spot', 'somewhere to eat']) {
       expect(normalizeType(s)).toBe('food');
+    }
+  });
+
+  it('maps bar synonyms to bar, not food', () => {
+    // "bar" was a food keyword until the 4th type was added; a wine bar is
+    // now its own thing.
+    for (const s of ['wine bar', 'cocktail lounge', 'a pub', 'brewery', 'drinks', 'nightclub']) {
+      expect(normalizeType(s)).toBe('bar');
     }
   });
 

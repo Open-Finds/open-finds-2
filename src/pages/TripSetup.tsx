@@ -47,12 +47,14 @@ const DEFAULT_TEMPLATE: StopTemplate[] = [
   { id: 'afternoon-activity', label: 'Afternoon Activity', vibe: 'activity', time: '14:30' },
   { id: 'dinner', label: 'Dinner', vibe: 'food', time: '19:00' },
   { id: 'dessert', label: 'Dessert', vibe: 'dessert', time: '21:00' },
+  { id: 'drinks', label: 'Drinks', vibe: 'bar', time: '21:30' },
 ];
 
 const VIBE_OPTIONS: { value: VenueType; label: string; icon: string }[] = [
   { value: 'food', label: 'Food', icon: '🍔' },
   { value: 'activity', label: 'Activity', icon: '🎯' },
   { value: 'dessert', label: 'Dessert', icon: '🍰' },
+  { value: 'bar', label: 'Bar', icon: '🍸' },
 ];
 
 function addDays(dateStr: string, days: number): string {

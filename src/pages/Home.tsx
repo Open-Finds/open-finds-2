@@ -72,6 +72,7 @@ type Vibe = VenueType;
 
 const VIBE_LABELS: Record<Vibe, { icon: string; label: string }> = {
   food: { icon: '🍔', label: 'Food' },
+  bar: { icon: '🍸', label: 'Bar' },
   activity: { icon: '🎯', label: 'Activity' },
   dessert: { icon: '🍰', label: 'Dessert' },
 };
@@ -110,6 +111,7 @@ function describeVibes(vibes: Vibe[]): string {
 
 const VIBE_DEFAULT_TIMES: Record<Vibe, string> = {
   food: '18:30',
+  bar: '21:00',
   activity: '20:30',
   dessert: '22:00',
 };
@@ -1030,6 +1032,7 @@ export function HomePage({
                   <option value="food">Food</option>
                   <option value="activity">Activity</option>
                   <option value="dessert">Dessert</option>
+                  <option value="bar">Bar</option>
                 </select>
               </div>
               <div className="mb-3">

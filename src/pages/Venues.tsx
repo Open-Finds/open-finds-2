@@ -532,6 +532,7 @@ export function VenuesPage() {
                         <option value="food">Food</option>
                         <option value="activity">Activity</option>
                         <option value="dessert">Dessert</option>
+                        <option value="bar">Bar</option>
                       </select>
                     </div>
                     <div className="mb-4">
