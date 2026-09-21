@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { formatTime } from './time';
+import { formatTime, parseLocalDate } from './time';
 import { useCountdown, formatCountdown } from './countdown';
 import { sortStops, sortStopsByTime, type Stop } from './supabase';
 
@@ -25,6 +25,23 @@ describe('formatTime', () => {
 
 const stop = (name: string, time: string, sort_order: number): Stop =>
   ({ id: name, plan_id: 'p', name, address: 'a', time, vibe_link: null, sort_order, user_id: 'u' } as Stop);
+
+describe('parseLocalDate', () => {
+  it('treats a date-only string as local midnight, not UTC', () => {
+    // new Date('2026-12-31') is UTC midnight — the evening of the 30th anywhere
+    // west of Greenwich. This must come back as the 31st regardless of TZ.
+    const d = parseLocalDate('2026-12-31');
+    expect(d.getFullYear()).toBe(2026);
+    expect(d.getMonth()).toBe(11);
+    expect(d.getDate()).toBe(31);
+    expect(d.getHours()).toBe(0);
+  });
+
+  it('leaves a full timestamp alone', () => {
+    const iso = '2026-12-31T10:00:00Z';
+    expect(parseLocalDate(iso).getTime()).toBe(new Date(iso).getTime());
+  });
+});
 
 describe('sortStops', () => {
   it('orders by sort_order, the single source of truth', () => {

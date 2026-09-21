@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { parseLocalDate } from '../lib/time';
 import {
   fetchPlan,
   fetchStops,
@@ -158,7 +159,7 @@ export function DashboardPage({
           <h1 className="text-2xl font-bold text-gold">{plan.title}</h1>
           <p className="mt-2 flex items-center gap-1.5 text-sm text-ink-secondary">
             <CalendarPlus size={14} className="text-gold/70" />
-            {new Date(plan.date).toLocaleDateString('en-AU', {
+            {parseLocalDate(plan.date).toLocaleDateString('en-AU', {
               weekday: 'long',
               day: 'numeric',
               month: 'long',

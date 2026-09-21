@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { parseLocalDate } from '../lib/time';
 import { navigate } from '../lib/router';
 import {
   fetchTrip,
@@ -164,13 +165,13 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
           </span>
           <span className="inline-flex items-center gap-1">
             <CalendarDays size={15} />
-            {new Date(trip.start_date).toLocaleDateString('en-AU', {
+            {parseLocalDate(trip.start_date).toLocaleDateString('en-AU', {
               day: 'numeric',
               month: 'short',
             })}
             {' — '}
             {new Date(
-              new Date(trip.start_date).getTime() +
+              parseLocalDate(trip.start_date).getTime() +
                 (trip.num_days - 1) * 86400000
             ).toLocaleDateString('en-AU', {
               day: 'numeric',

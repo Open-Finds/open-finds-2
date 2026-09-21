@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { parseLocalDate } from '../lib/time';
 import { navigate } from '../lib/router';
 import {
   fetchTrip,
@@ -314,7 +315,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-black/80">
           <span className="inline-flex items-center gap-1">
             <CalendarDays size={15} />
-            {new Date(plan.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {parseLocalDate(plan.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
           </span>
           <span className="inline-flex items-center gap-1">
             <MapPin size={15} /> {plan.location}

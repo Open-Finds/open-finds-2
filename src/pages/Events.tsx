@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { parseLocalDate } from '../lib/time';
 import {
   fetchAllPlans,
   fetchCanceledPlans,
@@ -89,7 +90,7 @@ export function EventsPage({
 
       // Auto-delete canceled events older than 30 days
       const oldCanceled = hostedCanceled.filter(
-        (p) => today.getTime() - new Date(p.date).getTime() > THIRTY_DAYS_MS
+        (p) => today.getTime() - parseLocalDate(p.date).getTime() > THIRTY_DAYS_MS
       );
       if (oldCanceled.length > 0) {
         await Promise.all(oldCanceled.map((p) => deletePlan(p.id)));
@@ -105,7 +106,7 @@ export function EventsPage({
 
       // Merge newly-auto-canceled with existing canceled (minus deleted old ones)
       const remainingCanceled = hostedCanceled.filter(
-        (p) => today.getTime() - new Date(p.date).getTime() <= THIRTY_DAYS_MS
+        (p) => today.getTime() - parseLocalDate(p.date).getTime() <= THIRTY_DAYS_MS
       );
       const allCanceled = [...remainingCanceled, ...pastActive, ...pastStillActive];
       const dedupedCanceled = Array.from(
@@ -188,7 +189,7 @@ export function EventsPage({
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-secondary">
             <span className="inline-flex items-center gap-1">
               <CalendarDays size={14} className="text-gold/70" />
-              {new Date(p.date).toLocaleDateString('en-AU', {
+              {parseLocalDate(p.date).toLocaleDateString('en-AU', {
                 day: 'numeric',
                 month: 'short',
                 year: 'numeric',
@@ -246,12 +247,12 @@ export function EventsPage({
             </span>
             <span className="inline-flex items-center gap-1">
               <CalendarDays size={14} className="text-gold/70" />
-              {new Date(t.start_date).toLocaleDateString('en-AU', {
+              {parseLocalDate(t.start_date).toLocaleDateString('en-AU', {
                 day: 'numeric',
                 month: 'short',
               })}
               {t.num_days > 1 && (
-                <> — {new Date(new Date(t.start_date).getTime() + (t.num_days - 1) * 86400000).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</>
+                <> — {new Date(parseLocalDate(t.start_date).getTime() + (t.num_days - 1) * 86400000).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</>
               )}
             </span>
             <span className="inline-flex items-center gap-1">

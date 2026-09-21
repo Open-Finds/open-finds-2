@@ -167,10 +167,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // The in-app notification is the reliable channel and is written first,
+    // unconditionally. Push is best-effort on top of it: previously a missing
+    // VAPID key returned 500 *before* this insert, so an unconfigured push
+    // silently cost the host their in-app notification too.
+    const notifications = userIds.map((uid) => ({
+      user_id: uid,
+      type: resolvedType,
+      title: resolvedTitle,
+      body: resolvedBody || null,
+      data: resolvedData,
+    }));
+    const { error: insertErr } = await supabase.from("notifications").insert(notifications);
+    if (insertErr) {
+      console.error("[push] in-app notification insert failed", insertErr.message);
+    }
+
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
     if (!vapidPrivateKey) {
-      return new Response(JSON.stringify({ error: "VAPID_PRIVATE_KEY not configured" }), {
-        status: 500,
+      // Not an error from the caller's point of view — they asked for a
+      // notification and got one. Push just isn't set up on this project.
+      return new Response(JSON.stringify({ sent: 0, failed: 0, total: 0, push: "not_configured" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -180,16 +197,6 @@ Deno.serve(async (req: Request) => {
       contactInformation: "mailto:noreply@openfinds.app",
       vapidKeys,
     });
-
-    // Insert in-app notification rows for each user
-    const notifications = userIds.map((uid) => ({
-      user_id: uid,
-      type: resolvedType,
-      title: resolvedTitle,
-      body: resolvedBody || null,
-      data: resolvedData,
-    }));
-    await supabase.from("notifications").insert(notifications);
 
     // Fetch all push subscriptions for the target users
     const { data: subs } = await supabase

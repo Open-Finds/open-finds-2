@@ -1634,26 +1634,20 @@ export async function sendGuestRsvpPushNotification(params: {
 }): Promise<void> {
   try {
     const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push-notification`;
-    const title = params.rsvpStatus === 'in'
-      ? `${params.rsvpName} is coming!`
-      : `${params.rsvpName} can't make it`;
-    const body = params.rsvpStatus === 'in'
-      ? `${params.rsvpName} just RSVP'd "I'm In" to your plan.`
-      : `${params.rsvpName} just declined your plan.`;
     await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        // The gateway's verify_jwt wants a bearer token even for guests. The
+        // anon key is a valid JWT; the function's guest branch then verifies
+        // the RSVP itself rather than trusting the caller.
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({
         plan_id: params.planId,
         rsvp_name: params.rsvpName,
         rsvp_status: params.rsvpStatus,
-        title,
-        body,
-        type: 'rsvp',
-        data: { plan_id: params.planId, url: `/plan/${params.planId}` },
       }),
     });
   } catch {

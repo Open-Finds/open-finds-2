@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { parseLocalDate } from '../lib/time';
 import { navigate } from '../lib/router';
 import {
   fetchPlan,
@@ -135,7 +136,7 @@ export function RsvpPage({ id }: { id: string }) {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-black/80">
           <span className="inline-flex items-center gap-1">
             <CalendarDays size={15} />
-            {new Date(plan.date).toLocaleDateString('en-AU', {
+            {parseLocalDate(plan.date).toLocaleDateString('en-AU', {
               weekday: 'long',
               day: 'numeric',
               month: 'long',
