@@ -73,10 +73,14 @@ export function Onboarding({ onComplete }: { onComplete: (dontShowAgain: boolean
   const [dontShowAgain, setDontShowAgain] = useState(true);
   const [dietarySelections, setDietarySelections] = useState<Set<string>>(new Set());
   const [savingDietary, setSavingDietary] = useState(false);
-  const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
   const isDietaryStep = step === STEPS.length;
-  const Icon = current.icon;
+  // The dietary step lives one past the end of STEPS, so indexing it here
+  // returned undefined and `.icon` threw — every new user crashed to the error
+  // boundary on the final step. Guard the lookup; the dietary branch renders
+  // its own icon.
+  const current = isDietaryStep ? null : STEPS[step];
+  const Icon = current?.icon ?? Utensils;
 
   const toggleDietary = (key: string) => {
     setDietarySelections((prev) => {
@@ -128,7 +132,7 @@ export function Onboarding({ onComplete }: { onComplete: (dontShowAgain: boolean
       </button>
 
       <div className="relative z-10 flex w-full max-w-md flex-col items-center text-center">
-        {isDietaryStep ? (
+        {!current ? (
           <>
             {/* Dietary preferences step */}
             <div className="flex h-20 w-20 items-center justify-center rounded-full border border-gold/30 bg-gold/10 shadow-gold-glow">

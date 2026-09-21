@@ -7,11 +7,13 @@ INSERT INTO auth.users (id,email) VALUES
  ('66666666-6666-6666-6666-666666666666','bob@x.com'),
  ('77777777-7777-7777-7777-777777777777','mallory2@x.com')
 ON CONFLICT DO NOTHING;
+-- The auth.users trigger (20260921140000) already made profiles named from
+-- the email; set the display names the assertions look for.
 INSERT INTO profiles (id, display_name) VALUES
  ('55555555-5555-5555-5555-555555555555','Alice'),
  ('66666666-6666-6666-6666-666666666666','Bob'),
  ('77777777-7777-7777-7777-777777777777','Mallory')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name;
 INSERT INTO friendships (requester_id, addressee_id, status) VALUES
  ('55555555-5555-5555-5555-555555555555','66666666-6666-6666-6666-666666666666','accepted');
 
@@ -134,5 +136,34 @@ BEGIN
   PERFORM remove_collection_member('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0','66666666-6666-6666-6666-666666666666');
   PERFORM rep('S18 member can leave',
     (SELECT count(*) FROM collections WHERE id='c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0')=0);
+END $$;
+RESET ROLE;
+
+-- ── Regression: a real user creating a collection through RLS ──
+-- Fixtures above are inserted as the superuser, which never exercises the
+-- INSERT … RETURNING path PostgREST uses. That path is what broke in prod.
+SET ROLE authenticated;
+DO $$
+DECLARE new_id uuid; n int; ok boolean;
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub','55555555-5555-5555-5555-555555555555',true);
+  PERFORM set_config('request.headers','{}',true);
+
+  INSERT INTO collections (name) VALUES ('ZZ RLS Insert') RETURNING id INTO new_id;
+  PERFORM rep('S19 user can INSERT … RETURNING a collection', new_id IS NOT NULL);
+
+  PERFORM rep('S20 and immediately read it back',
+    (SELECT count(*) FROM collections WHERE id = new_id) = 1);
+
+  -- Adding a venue to it through RLS, with RETURNING, must also work.
+  INSERT INTO collection_venues (collection_id, venue_id)
+  VALUES (new_id, 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a0a0a0')
+  RETURNING 1 INTO n;
+  PERFORM rep('S21 user can add own venue with RETURNING', n = 1);
+
+  -- Owner still cannot see a collection they neither own nor belong to.
+  PERFORM set_config('request.jwt.claim.sub','77777777-7777-7777-7777-777777777777',true);
+  PERFORM rep('S22 outsider still blocked after fix',
+    (SELECT count(*) FROM collections WHERE id = new_id) = 0);
 END $$;
 RESET ROLE;
