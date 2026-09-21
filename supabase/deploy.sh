@@ -9,8 +9,9 @@
 #   ALLOWED_ORIGINS=https://app.example.com \
 #   ./supabase/deploy.sh
 #
-# Needs a CLI login with access to the project (`supabase login`), and the
-# database password on first link. Run `./supabase/tests/run.sh` first: it
+# Needs a CLI login with access to the project (`supabase login`). With
+# SUPABASE_DB_PASSWORD set, migrations go through `db push`; without it they
+# go through the Management API (see migrate-via-api.mjs) — same result. Run `./supabase/tests/run.sh` first: it
 # applies the same migration chain to a throwaway Postgres and asserts the
 # security properties, so a bad migration fails there instead of in production.
 #
@@ -28,9 +29,17 @@ SB="${SUPABASE_CLI:-supabase}"
 echo "→ project: $SUPABASE_PROJECT_REF"
 
 # ── 1. migrations ─────────────────────────────────────────────
-echo "→ pending migrations:"
-$SB db push --dry-run --project-ref "$SUPABASE_PROJECT_REF" 2>&1 | grep -E '•|up to date' || true
-$SB db push --project-ref "$SUPABASE_PROJECT_REF"
+# `db push` needs the database password. Without one (org member with only an
+# access token), migrate-via-api.mjs does the same job through the Management
+# API and keeps the migration history consistent for a later `db push`.
+if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
+  echo "→ pending migrations:"
+  $SB db push --dry-run --project-ref "$SUPABASE_PROJECT_REF" 2>&1 | grep -E '•|up to date' || true
+  $SB db push --project-ref "$SUPABASE_PROJECT_REF"
+else
+  echo "→ no SUPABASE_DB_PASSWORD; applying migrations through the Management API"
+  node supabase/migrate-via-api.mjs "$SUPABASE_PROJECT_REF" --apply
+fi
 
 # ── 2. edge functions ─────────────────────────────────────────
 # verify_jwt settings come from supabase/config.toml.
@@ -58,10 +67,9 @@ fi
 # service role at request time.
 if [ -n "${GOOGLE_MAPS_API_KEY:-}" ]; then
   echo "→ storing GOOGLE_MAPS_API_KEY in app_secrets"
-  $SB db query --project-ref "$SUPABASE_PROJECT_REF" \
+  node supabase/migrate-via-api.mjs "$SUPABASE_PROJECT_REF" --sql \
     "INSERT INTO app_secrets (key, value) VALUES ('GOOGLE_MAPS_API_KEY', '$GOOGLE_MAPS_API_KEY')
-     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;" \
-    || echo "  (db query unsupported by this CLI — run the INSERT in the SQL editor instead)"
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;" > /dev/null
 else
   echo "→ no GOOGLE_MAPS_API_KEY provided (skipping)"
 fi
