@@ -1,14 +1,21 @@
 import type { Plan } from './supabase';
 
-export function buildInviteMessage(plan: Plan): string {
-  const shareUrl = `${window.location.origin}${window.location.pathname}#/plan/${plan.id}/rsvp`;
-  const formattedDate = new Date(`${plan.date}T00:00:00`).toLocaleDateString('en-US', {
+/**
+ * Human-readable invite text, without the link.
+ *
+ * The share sheet (navigator.share) carries the URL as its own field, so
+ * embedding it here as well showed the raw address twice — and on WhatsApp /
+ * iMessage the long hash URL dominated the message. The clipboard fallback
+ * appends it, because a copied message with no link is useless.
+ */
+export function buildInviteMessage(plan: Plan, opts: { includeUrl?: boolean } = {}): string {
+  const formattedDate = new Date(`${plan.date}T00:00:00`).toLocaleDateString('en-AU', {
     weekday: 'long',
-    month: 'long',
     day: 'numeric',
-    year: 'numeric',
+    month: 'long',
   });
-  return `${plan.host_name} has invited you to ${plan.title} on ${formattedDate} through Open Finds\n${shareUrl}`;
+  const body = `${plan.host_name} invited you to ${plan.title} — ${formattedDate}. Tap to see the plan and RSVP.`;
+  return opts.includeUrl ? `${body}\n${getShareUrl(plan.id)}` : body;
 }
 
 export function getShareUrl(planId: string): string {
@@ -33,5 +40,6 @@ export async function shareOrCopy(title: string, text: string, url: string): Pro
       // cancelled — fall through to clipboard
     }
   }
-  await copyToClipboard(text);
+  // Clipboard has no separate URL field, so append it here.
+  await copyToClipboard(text.includes(url) ? text : `${text}\n${url}`);
 }

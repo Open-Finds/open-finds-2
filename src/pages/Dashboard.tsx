@@ -20,7 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCountdown } from '../lib/countdown';
 import { ChevronLeft, CalendarPlus, Clock, Check, X, Clock3, Navigation, Send, Copy, Share2, Users } from 'lucide-react';
 import { StopCard } from '../components/StopCard';
-import { formatTime } from '../lib/time';
+import { AddToCalendar } from '../components/AddToCalendar';
 
 export function DashboardPage({
   id,
@@ -115,7 +115,6 @@ export function DashboardPage({
   };
 
   // Multi-stop Google Maps directions — all stops in chronological order
-  const firstStop = stops[0];
   const navUrl = (() => {
     if (stops.length === 0) return '#';
     const params = new URLSearchParams({ api: '1', origin: 'Current Location' });
@@ -127,19 +126,6 @@ export function DashboardPage({
     }
     return `https://www.google.com/maps/dir/?${params.toString()}`;
   })();
-
-  // Google Calendar deep link
-  const start = new Date(`${plan.date}T19:00:00`);
-  const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const details = stops.map((s, i) => `${i + 1}. ${formatTime(s.time)} — ${s.name}, ${s.address}`).join('\n');
-  const calendarUrl = `https://calendar.google.com/calendar/render?${new URLSearchParams({
-    action: 'TEMPLATE',
-    text: plan.title,
-    dates: `${fmt(start)}/${fmt(end)}`,
-    location: firstStop?.address ?? plan.location,
-    details,
-  }).toString()}`;
 
   /**
    * A time edit changes the chronological order, so persist the new sequence
@@ -263,14 +249,7 @@ export function DashboardPage({
           >
             <Navigation size={18} /> Open in Maps
           </a>
-          <a
-            href={calendarUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
-          >
-            <CalendarPlus size={18} /> Add to Calendar
-          </a>
+          <AddToCalendar plan={plan} stops={stops} />
           <button
             onClick={() => setShowShare(true)}
             className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"

@@ -9,6 +9,7 @@ import {
   type Rsvp,
 } from '../lib/supabase';
 import { Timeline, RsvpList } from '../components/Shared';
+import { AddToCalendar } from '../components/AddToCalendar';
 import { useCountdown, formatCountdown } from '../lib/countdown';
 import { MapPin, PartyPopper, Clock, Smartphone, Check } from 'lucide-react';
 import { buildInviteMessage, shareOrCopy } from '../lib/invite';
@@ -130,6 +131,8 @@ export function ConfirmedPage({ id }: { id: string }) {
           {inviteCopied ? <Check size={18} /> : <Smartphone size={18} />}
           {inviteCopied ? 'Copied!' : 'Invite a Friend'}
         </button>
+        {/* Guests get the same actions as the host — this was missing here. */}
+        <AddToCalendar plan={plan} stops={stops} className="col-span-2" />
       </div>
 
       {/* Countdown */}

@@ -376,6 +376,10 @@ export function VenuesPage() {
                     onSaved={(updated) =>
                       setVenues((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
                     }
+                    onDeleted={(id) => {
+                      setVenues((prev) => prev.filter((p) => p.id !== id));
+                      setEditingId(null);
+                    }}
                     collections={collections}
                     venueCollectionIds={memberships[v.id] ?? []}
                     onToggleCollection={(cid) => handleToggleVenueInCollection(v.id, cid)}
@@ -789,6 +793,10 @@ export function VenuesPage() {
                     onSaved={(updated) =>
                       setVenues((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
                     }
+                    onDeleted={(id) => {
+                      setVenues((prev) => prev.filter((p) => p.id !== id));
+                      setEditingId(null);
+                    }}
                     collections={collections}
                     venueCollectionIds={memberships[v.id] ?? []}
                     onToggleCollection={(cid) => handleToggleVenueInCollection(v.id, cid)}

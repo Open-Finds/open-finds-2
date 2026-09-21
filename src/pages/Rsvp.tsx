@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { navigate } from '../lib/router';
-import { formatTime } from '../lib/time';
 import {
   fetchPlan,
   fetchStops,
@@ -16,7 +15,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Timeline, RsvpList } from '../components/Shared';
 import { Confetti } from '../components/Confetti';
-import { CalendarDays, MapPin, Check, X, CalendarPlus } from 'lucide-react';
+import { AddToCalendar } from '../components/AddToCalendar';
+import { CalendarDays, MapPin, Check, X } from 'lucide-react';
 
 export function RsvpPage({ id }: { id: string }) {
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -86,17 +86,6 @@ export function RsvpPage({ id }: { id: string }) {
 
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
 
-  const openGoogleCalendar = () => {
-    const start = new Date(plan.date);
-    const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-    const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    const details = stops.length > 0
-      ? stops.map((s) => `${formatTime(s.time)} ${s.name} - ${s.address}`).join('\n')
-      : `Join us for ${plan.title}`;
-    const location = stops[0]?.address ?? plan.location;
-    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(plan.title)}&dates=${fmt(start)}/${fmt(end)}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(location)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
 
   const submitRsvp = async (status: 'in' | 'declined') => {
     if (!name.trim()) {
@@ -165,12 +154,7 @@ export function RsvpPage({ id }: { id: string }) {
 
       {!plan.canceled && (
         <div className="mt-6">
-          <button
-            onClick={openGoogleCalendar}
-            className="btn-secondary w-full"
-          >
-            <CalendarPlus size={18} /> Add to Calendar
-          </button>
+          <AddToCalendar plan={plan} stops={stops} />
         </div>
       )}
 

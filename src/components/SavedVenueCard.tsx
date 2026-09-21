@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2 } from 'lucide-react';
+import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2, Trash2 } from 'lucide-react';
 import {
+  deleteSavedVenue,
   updateSavedVenue,
   updateSavedVenueCoords,
   type SavedVenue,
@@ -21,6 +22,8 @@ type Props = {
   onEditStart: () => void;
   onEditEnd: () => void;
   onSaved: (updated: SavedVenue) => void;
+  /** Called after the venue has been removed. Omit to hide the delete control. */
+  onDeleted?: (id: string) => void;
   selectable?: boolean;
   isSelected?: boolean;
   onSelect?: () => void;
@@ -35,6 +38,7 @@ export function SavedVenueCard({
   onEditStart,
   onEditEnd,
   onSaved,
+  onDeleted,
   selectable = false,
   isSelected = false,
   onSelect,
@@ -47,6 +51,25 @@ export function SavedVenueCard({
   const [editType, setEditType] = useState<VenueType>(venue.type);
   const [editTags, setEditTags] = useState<string[]>((venue.tags ?? []).map((t) => t));
   const [tagInput, setTagInput] = useState('');
+  // Two-tap delete: the first tap arms it, the second confirms. Cheap
+  // protection against a mis-tap on a card full of adjacent controls.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteSavedVenue(venue.id);
+      onDeleted?.(venue.id);
+    } catch {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
   const [editCollection, setEditCollection] = useState(venue.collection ?? '');
   const [editNote, setEditNote] = useState(venue.personal_note ?? '');
   const [editRating, setEditRating] = useState(venue.rating ?? 0);
@@ -276,6 +299,22 @@ export function SavedVenueCard({
             <X size={16} /> Cancel
           </button>
         </div>
+        {onDeleted && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            onBlur={() => setConfirmDelete(false)}
+            disabled={saving || deleting}
+            className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border py-2.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-50 ${
+              confirmDelete
+                ? 'border-danger bg-danger/15 text-danger'
+                : 'border-danger/30 bg-transparent text-danger/80 hover:bg-danger/10'
+            }`}
+          >
+            <Trash2 size={16} />
+            {deleting ? 'Removing…' : confirmDelete ? 'Tap again to remove this venue' : 'Remove venue'}
+          </button>
+        )}
       </div>
     );
   }
@@ -335,7 +374,7 @@ export function SavedVenueCard({
           handleEdit();
         }}
         aria-label="Edit venue"
-        className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-gold/30 bg-black/40 text-gold opacity-0 transition-all hover:bg-gold/20 group-hover:opacity-100 active:scale-90"
+        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-gold/30 bg-black/40 text-gold transition-all hover:bg-gold/20 active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
       >
         <Pencil size={14} />
       </button>

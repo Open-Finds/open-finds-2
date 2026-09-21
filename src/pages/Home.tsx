@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   ChevronLeft,
@@ -56,6 +56,7 @@ import {
   type ExtractedVenueItem,
 } from '../lib/openai';
 import { fetchDistanceMatrix, geocodeAddress, type OriginInput } from '../lib/apiKeys';
+import { loadPlanDraft, savePlanDraft, clearPlanDraft } from '../lib/draft';
 
 type Page =
   | 'hero'
@@ -297,6 +298,74 @@ export function HomePage({
   const [qaSelectedItems, setQaSelectedItems] = useState<Set<number>>(new Set());
   const [qaSavingMulti, setQaSavingMulti] = useState(false);
   const [qaExtractedCoords, setQaExtractedCoords] = useState<{ lat: number; lon: number } | null>(null);
+
+  /* ── Draft persistence ──────────────────────────────────────────
+     Backgrounding the browser (which "check the vibes" forces by opening
+     Instagram) can evict the tab on iOS, reloading the page and wiping every
+     piece of wizard state above. Save the user-entered parts and resume. */
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    if (editPlanId) { hydrated.current = true; return; }
+    const d = loadPlanDraft();
+    if (d) {
+      setPage(d.page as Page);
+      setEventName(d.eventName);
+      setEventDate(d.eventDate);
+      setSelectedVibes(d.selectedVibes as Vibe[]);
+      setLocation(d.location);
+      setOriginCoord(d.originCoord);
+      setTravelTime(d.travelTime);
+      setStopTimes(d.stopTimes);
+      setDiscoveredVenues(d.discoveredVenues as VenueCandidate[]);
+      setSavedVenueSelectedIds(new Set(d.savedVenueSelectedIds));
+      setAdHocDietaryFilters(new Set(d.adHocDietaryFilters));
+      setQaName(d.qa.name);
+      setQaAddress(d.qa.address);
+      setQaType(d.qa.type as VenueType);
+      setQaTags(d.qa.tags);
+      setQaCollection(d.qa.collection);
+      // A created plan is re-fetched rather than trusted from storage, so the
+      // itinerary and RSVP list reflect what is actually in the database.
+      if (d.planId) {
+        fetchPlan(d.planId)
+          .then(async (p) => {
+            if (!p) return;
+            setPlan(p);
+            const stops = await fetchStops(p.id);
+            setExistingStops(sortStops(stops));
+            refreshRsvps(p.id);
+          })
+          .catch(() => { /* plan gone — draft page still shows the inputs */ });
+      }
+    }
+    hydrated.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editPlanId]);
+
+  useEffect(() => {
+    if (!hydrated.current || editPlanId) return;
+    if (page === 'hero') { clearPlanDraft(); return; }
+    savePlanDraft({
+      page,
+      eventName,
+      eventDate,
+      selectedVibes,
+      location,
+      originCoord,
+      travelTime,
+      stopTimes,
+      planId: plan?.id ?? null,
+      discoveredVenues,
+      savedVenueSelectedIds: Array.from(savedVenueSelectedIds),
+      adHocDietaryFilters: Array.from(adHocDietaryFilters),
+      qa: { name: qaName, address: qaAddress, type: qaType, tags: qaTags, collection: qaCollection },
+    });
+  }, [
+    editPlanId, page, eventName, eventDate, selectedVibes, location, originCoord, travelTime,
+    stopTimes, plan, discoveredVenues, savedVenueSelectedIds, adHocDietaryFilters,
+    qaName, qaAddress, qaType, qaTags, qaCollection,
+  ]);
 
   const qaAddTag = () => {
     const tag = qaTagInput.trim().toLowerCase();
@@ -556,7 +625,11 @@ export function HomePage({
         title: eventName || 'Night Out',
         date: eventDate,
         host_name: displayName || 'You',
-        location: location || 'Melbourne',
+        // No silent default: a plan with no typed location gets the GPS
+        // origin if there is one, else null. 'Melbourne' used to be hardcoded
+        // here, which is why every plan without a location said Melbourne.
+        location: location.trim()
+          || (originCoord ? `${originCoord.lat.toFixed(4)}, ${originCoord.lon.toFixed(4)}` : null),
         type: selectedVibes.join(','),
         status: 'active',
       });
@@ -1746,7 +1819,7 @@ export function HomePage({
 
           {plan && (
             <button
-              onClick={() => onNavigateToDashboard(editPlanId ?? plan.id)}
+              onClick={() => { clearPlanDraft(); onNavigateToDashboard(editPlanId ?? plan.id); }}
               className="mt-8 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
             >
               <LayoutDashboard size={18} /> View Dashboard
