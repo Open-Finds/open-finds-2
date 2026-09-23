@@ -6,12 +6,13 @@ type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
 async function callAI(
   messages: ChatMessage[],
-  opts?: { temperature?: number; responseFormat?: 'json_object' }
+  opts?: { temperature?: number; responseFormat?: 'json_object'; purpose?: 'extract' | 'discover' }
 ): Promise<string> {
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-proxy`;
   const body: Record<string, unknown> = {
     messages,
     temperature: opts?.temperature ?? 0,
+    purpose: opts?.purpose ?? 'discover',
   };
   if (opts?.responseFormat) body.response_format = { type: opts.responseFormat };
 
@@ -23,6 +24,9 @@ async function callAI(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    if (res.status === 429) {
+      throw new Error('Free includes 3 of these a day. It resets tomorrow.');
+    }
     throw new Error(`AI request failed (${res.status}). ${text.slice(0, 200)}`);
   }
 
@@ -232,7 +236,7 @@ export async function extractVenuesFromLink(
       },
       { role: 'user', content: context },
     ],
-    { temperature: 0, responseFormat: 'json_object' }
+    { temperature: 0, responseFormat: 'json_object', purpose: 'extract' }
   );
 
   let parsed: { venues?: unknown };
@@ -298,7 +302,7 @@ export async function discoverVenueCandidates(
       },
       { role: 'user', content: `Find ${vibeLabel} near ${location}` },
     ],
-    { temperature: 0.7, responseFormat: 'json_object' }
+    { temperature: 0.7, responseFormat: 'json_object', purpose: 'discover' }
   );
 
   let parsed: { venues?: unknown };
@@ -389,7 +393,7 @@ export async function discoverSmartVenueCandidates(
       },
       { role: 'user', content: `Find ${vibeLabels} near ${locationStr} that match my taste${dietaryPreferences && dietaryPreferences.length > 0 ? ` and accommodate my dietary needs (${dietaryPreferences.join(', ')})` : ''}` },
     ],
-    { temperature: 0.7, responseFormat: 'json_object' }
+    { temperature: 0.7, responseFormat: 'json_object', purpose: 'discover' }
   );
 
   let parsed: { venues?: unknown };

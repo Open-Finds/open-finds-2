@@ -51,6 +51,7 @@ import {
   type Plan,
   type Stop,
 } from '../lib/supabase';
+import { VenueTypeSelect } from '../components/ui/select';
 import {
   discoverSmartVenueCandidates,
   extractVenuesFromLink,
@@ -1085,16 +1086,7 @@ export function HomePage({
               </div>
               <div className="mb-3">
                 <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Type</label>
-                <select
-                  value={qaType}
-                  onChange={(e) => setQaType(e.target.value as VenueType)}
-                  className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white focus:border-gold focus:outline-none [color-scheme:dark]"
-                >
-                  <option value="food">Food</option>
-                  <option value="activity">Activity</option>
-                  <option value="dessert">Dessert</option>
-                  <option value="bar">Bar</option>
-                </select>
+                <VenueTypeSelect value={qaType} onChange={setQaType} />
               </div>
               <div className="mb-3">
                 <label className="mb-1.5 block text-sm font-medium text-ink-secondary">

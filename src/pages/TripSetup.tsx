@@ -8,6 +8,7 @@ import {
   fetchSavedVenues,
   fetchCollections,
   fetchCollectionVenueIds,
+  remainingActivePlanSlots,
   type VenueType,
   type SavedVenue,
   type Collection,
@@ -295,6 +296,16 @@ export function TripSetupPage() {
     setGeneratingDay(0);
 
     try {
+      const slots = await remainingActivePlanSlots();
+      if (numDays > slots) {
+        setStep('details');
+        setError(
+          slots < 1
+            ? 'Free includes 1 active plan. Cancel it before starting another.'
+            : 'A multi-day trip needs Premium. Free includes 1 active plan.',
+        );
+        return;
+      }
       const trip = await createTrip({
         name: tripName.trim(),
         destination: destination.trim(),

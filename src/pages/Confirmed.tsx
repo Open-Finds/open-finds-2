@@ -13,6 +13,7 @@ import { AddToCalendar } from '../components/AddToCalendar';
 import { useCountdown, formatCountdown } from '../lib/countdown';
 import { MapPin, PartyPopper, Clock, Smartphone, Check } from 'lucide-react';
 import { buildInviteMessage, shareOrCopy } from '../lib/invite';
+import { mapsDirectionsUrl } from '../lib/maps';
 
 function getRsvpIdFromHash() {
   const hash = window.location.hash;
@@ -77,24 +78,7 @@ export function ConfirmedPage({ id }: { id: string }) {
   }
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
   const shareUrl = `${window.location.origin}${window.location.pathname}#/plan/${id}/rsvp`;
-
-  const multiStopMapsUrl = (() => {
-    if (stops.length === 0) {
-      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(plan.location ?? '')}`;
-    }
-    const addresses = stops.map((s) => s.address);
-    if (addresses.length === 1) {
-      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addresses[0])}`;
-    }
-    const destination = encodeURIComponent(addresses[addresses.length - 1]);
-    const waypoints = addresses
-      .slice(0, -1)
-      .map((a) => encodeURIComponent(a))
-      .join('|');
-    let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
-    if (waypoints) url += `&waypoints=${waypoints}`;
-    return url;
-  })();
+  const multiStopMapsUrl = mapsDirectionsUrl(stops.map((s) => s.address), plan.location) ?? '#';
 
   const handleInviteFriend = async () => {
     const message = buildInviteMessage(plan);

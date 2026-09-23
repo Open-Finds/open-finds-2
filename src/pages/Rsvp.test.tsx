@@ -79,6 +79,18 @@ beforeEach(() => {
 });
 
 describe('guest RSVP', () => {
+  it('opens every stop in Maps, not only the suburb on the invitation', async () => {
+    fetchStops.mockResolvedValue([
+      stop,
+      { ...stop, id: 'stop-2', name: 'Gelato Messina', address: '241 Gertrude St', time: '21:00', sort_order: 1 },
+    ]);
+    render(<RsvpPage id="plan-1" />);
+    const link = await screen.findByRole('link', { name: /open in maps/i });
+    const params = new URL(link.getAttribute('href')!).searchParams;
+    expect(params.get('destination')).toBe('241 Gertrude St');
+    expect(params.get('waypoints')).toBe('55 Gertrude St');
+  });
+
   it('shows the plan a share link points at', async () => {
     render(<RsvpPage id="plan-1" />);
     expect(await screen.findByText('Birthday Night')).toBeInTheDocument();

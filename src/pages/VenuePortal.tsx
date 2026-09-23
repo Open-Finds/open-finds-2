@@ -32,6 +32,7 @@ import {
   type VenueMilestone,
 } from '../lib/supabase';
 import { geocodeAddress } from '../lib/apiKeys';
+import { VenueTypeSelect } from '../components/ui/select';
 
 const MILESTONE_THRESHOLDS = [10, 50, 100, 500];
 
@@ -132,7 +133,6 @@ function VenueSignupForm({
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState(email);
   const [monthlyBudget, setMonthlyBudget] = useState('');
-  const [visitRate, setVisitRate] = useState('0.50');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -154,7 +154,6 @@ function VenueSignupForm({
         contact_name: contactName.trim(),
         contact_email: contactEmail.trim(),
         monthly_budget_cents: monthlyBudget.trim() ? Math.round(parseFloat(monthlyBudget) * 100) : null,
-        visit_rate_cents: Math.round(parseFloat(visitRate) * 100),
         lat: coords?.lat ?? null,
         lon: coords?.lon ?? null,
       });
@@ -170,7 +169,7 @@ function VenueSignupForm({
     <div className="rounded-card border border-gold/20 bg-[#0d0d0d] p-6">
       <h2 className="mb-1 text-lg font-bold text-gold">Register Your Venue</h2>
       <p className="mb-6 text-sm text-ink-secondary">
-        Get your venue featured in plans. You only pay $0.50 per confirmed visit — appearances and saves are free.
+        Get your venue into plans. An appearance is $0.10. The first 49 are free, then every 50 is a $5 invoice. You do not set the price.
       </p>
       {error && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
@@ -185,11 +184,7 @@ function VenueSignupForm({
           <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full street address" className={inputClass} />
         </FormField>
         <FormField label="Venue Type">
-          <select value={type} onChange={(e) => setType(e.target.value as VenueType)} className={`${inputClass} [color-scheme:dark]`}>
-            <option value="food">Food</option>
-            <option value="activity">Activity</option>
-            <option value="dessert">Dessert</option>
-          </select>
+          <VenueTypeSelect value={type} onChange={setType} className={inputClass} />
         </FormField>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField icon={<Instagram size={16} />} label="Instagram (optional)">
@@ -208,11 +203,8 @@ function VenueSignupForm({
           </FormField>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField icon={<DollarSign size={16} />} label="Monthly Budget (optional)">
-            <input value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} type="number" min="0" step="0.01" placeholder="e.g. 100 (blank = unlimited)" className={inputClass} />
-          </FormField>
-          <FormField icon={<DollarSign size={16} />} label="Per-Visit Rate">
-            <input value={visitRate} onChange={(e) => setVisitRate(e.target.value)} type="number" min="0.01" step="0.01" className={inputClass} />
+          <FormField icon={<DollarSign size={16} />} label="Monthly budget (optional)">
+            <input value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} type="number" min="0" step="0.01" placeholder="e.g. 100 (blank = no cap)" className={inputClass} />
           </FormField>
         </div>
         <button
@@ -223,7 +215,7 @@ function VenueSignupForm({
           {saving ? <><Loader2 size={18} className="animate-spin" /> Creating...</> : <><Save size={18} /> Submit for Approval</>}
         </button>
         <p className="text-center text-xs text-ink-secondary">
-          Your venue will be reviewed before going live. You'll only be charged for confirmed visits.
+          Your venue is reviewed before it goes live. The appearance price is fixed.
         </p>
       </div>
     </div>
@@ -338,8 +330,11 @@ function VenueDashboard({
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <StatCard icon={<Eye size={18} />} label="Impressions" value={stats.impressions} sub="Free" color="text-blue-400" />
             <StatCard icon={<Bookmark size={18} />} label="Saves" value={stats.saves} sub="Free" color="text-emerald-400" />
-            <StatCard icon={<Footprints size={18} />} label="Visits" value={stats.visits} sub={`$${(partner.visit_rate_cents / 100).toFixed(2)} each`} color="text-gold" />
+            <StatCard icon={<Footprints size={18} />} label="Visits" value={stats.visits} sub="Confirmed" color="text-gold" />
           </div>
+          <p className="text-sm text-ink-secondary">
+            An appearance in a plan is $0.10. The first 49 are free, then every 50 is a $5 invoice. This screen still counts confirmed visits until appearances are recorded separately.
+          </p>
 
           {/* Billing summary */}
           <div className="rounded-card border border-gold/20 bg-[#0d0d0d] p-5">
@@ -440,7 +435,6 @@ function VenueEditForm({
   const [contactName, setContactName] = useState(partner.contact_name);
   const [contactEmail, setContactEmail] = useState(partner.contact_email);
   const [monthlyBudget, setMonthlyBudget] = useState(partner.monthly_budget_cents ? (partner.monthly_budget_cents / 100).toString() : '');
-  const [visitRate, setVisitRate] = useState((partner.visit_rate_cents / 100).toString());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -462,7 +456,6 @@ function VenueEditForm({
         contact_name: contactName.trim(),
         contact_email: contactEmail.trim(),
         monthly_budget_cents: monthlyBudget.trim() ? Math.round(parseFloat(monthlyBudget) * 100) : null,
-        visit_rate_cents: Math.round(parseFloat(visitRate) * 100),
         lat: coords?.lat ?? undefined as unknown as number,
         lon: coords?.lon ?? undefined as unknown as number,
       });
@@ -490,11 +483,7 @@ function VenueEditForm({
           <input value={address} onChange={(e) => setAddress(e.target.value)} className={inputClass} />
         </FormField>
         <FormField label="Venue Type">
-          <select value={type} onChange={(e) => setType(e.target.value as VenueType)} className={`${inputClass} [color-scheme:dark]`}>
-            <option value="food">Food</option>
-            <option value="activity">Activity</option>
-            <option value="dessert">Dessert</option>
-          </select>
+          <VenueTypeSelect value={type} onChange={setType} className={inputClass} />
         </FormField>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField icon={<Instagram size={16} />} label="Instagram (optional)">
@@ -513,11 +502,8 @@ function VenueEditForm({
           </FormField>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField icon={<DollarSign size={16} />} label="Monthly Budget (optional)">
-            <input value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} type="number" min="0" step="0.01" placeholder="blank = unlimited" className={inputClass} />
-          </FormField>
-          <FormField icon={<DollarSign size={16} />} label="Per-Visit Rate">
-            <input value={visitRate} onChange={(e) => setVisitRate(e.target.value)} type="number" min="0.01" step="0.01" className={inputClass} />
+          <FormField icon={<DollarSign size={16} />} label="Monthly budget (optional)">
+            <input value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} type="number" min="0" step="0.01" placeholder="blank = no cap" className={inputClass} />
           </FormField>
         </div>
         <div className="flex gap-3">

@@ -18,6 +18,7 @@ import {
   type FriendGroupWithMembers,
 } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { mapsDirectionsUrl } from '../lib/maps';
 import { useCountdown } from '../lib/countdown';
 import { ChevronLeft, CalendarPlus, Clock, Check, X, Clock3, Navigation, Send, Copy, Share2, Users } from 'lucide-react';
 import { StopCard } from '../components/StopCard';
@@ -115,18 +116,7 @@ export function DashboardPage({
     }
   };
 
-  // Multi-stop Google Maps directions — all stops in chronological order
-  const navUrl = (() => {
-    if (stops.length === 0) return '#';
-    const params = new URLSearchParams({ api: '1', origin: 'Current Location' });
-    if (stops.length === 1) {
-      params.set('destination', stops[0].address);
-    } else {
-      params.set('destination', stops[stops.length - 1].address);
-      params.set('waypoints', stops.slice(0, -1).map((s) => s.address).join('|'));
-    }
-    return `https://www.google.com/maps/dir/?${params.toString()}`;
-  })();
+  const navUrl = mapsDirectionsUrl(stops.map((s) => s.address), plan.location) ?? '#';
 
   /**
    * A time edit changes the chronological order, so persist the new sequence

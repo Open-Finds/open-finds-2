@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
-import { requireUser } from "../_shared/auth.ts";
+import { requireUser, serviceClient } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
 
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
@@ -68,25 +68,46 @@ Deno.serve(async (req: Request) => {
       return json(req, { error: "OpenRouter API key not configured" }, 503);
     }
 
-    // 2. Bound spend per user.
-    const limit = await consumeRateLimit("ai-proxy", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS);
-    if (!limit.allowed) {
-      return json(
-        req,
-        { error: "Rate limit reached. Try again shortly." },
-        429,
-        { "Retry-After": String(limit.retryAfter) },
-      );
-    }
-
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return json(req, { error: "A JSON body is required" }, 400);
     }
-    const { messages, model, temperature, response_format } = body as Record<string, unknown>;
+    const { messages, model, temperature, response_format, purpose } = body as Record<string, unknown>;
 
     const validated = validateMessages(messages);
     if (!validated.ok) return json(req, { error: validated.error }, 400);
+
+    // Free accounts: 3 link extractions and 3 "Something New" discoveries a day.
+    // Paid accounts keep a high hourly ceiling so a loop cannot run the bill up.
+    const purposeName = purpose === "extract" || purpose === "discover" ? purpose : null;
+    let tier = "free";
+    if (purposeName) {
+      const { data: profile } = await serviceClient()
+        .from("profiles")
+        .select("subscription_tier")
+        .eq("id", auth.user.id)
+        .maybeSingle();
+      tier = (profile?.subscription_tier as string | undefined) ?? "free";
+    }
+    const dailyFree = tier === "free" && purposeName;
+    const limit = await consumeRateLimit(
+      dailyFree ? `ai-${purposeName}` : "ai-proxy",
+      auth.user.id,
+      dailyFree ? 3 : RATE_LIMIT,
+      dailyFree ? 60 * 60 * 24 : RATE_WINDOW_SECONDS,
+    );
+    if (!limit.allowed) {
+      return json(
+        req,
+        {
+          error: dailyFree
+            ? "Free includes 3 of these a day. It resets tomorrow."
+            : "Rate limit reached. Try again shortly.",
+        },
+        429,
+        { "Retry-After": String(limit.retryAfter) },
+      );
+    }
 
     // 3. Only models we have chosen to pay for.
     const requestedModel = typeof model === "string" && model.trim() ? model.trim() : DEFAULT_MODEL;

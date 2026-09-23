@@ -9,6 +9,7 @@ import {
   type Collection,
 } from '../lib/supabase';
 import { geocodeAddress } from '../lib/apiKeys';
+import { VenueTypeSelect } from './ui/select';
 
 const TYPE_LABELS: Record<VenueType, string> = {
   food: 'Food',
@@ -193,16 +194,11 @@ export function SavedVenueCard({
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-secondary">Type</label>
-            <select
+            <VenueTypeSelect
               value={editType}
-              onChange={(e) => setEditType(e.target.value as VenueType)}
-              className="w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none [color-scheme:dark]"
-            >
-              <option value="food">Food</option>
-              <option value="activity">Activity</option>
-              <option value="dessert">Dessert</option>
-              <option value="bar">Bar</option>
-            </select>
+              onChange={setEditType}
+              className="rounded-lg border-gold/30 bg-black/50 px-3 py-2 text-sm"
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-secondary">Tags</label>

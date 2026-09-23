@@ -365,6 +365,9 @@ export async function createPlan(
 ) {
   const userId = getUserId();
   const ownerId = await getAuthUserId();
+  if (ownerId && await remainingActivePlanSlots() < 1) {
+    throw new Error('Free includes 1 active plan. Cancel it, or upgrade, before starting another.');
+  }
   const { data, error } = await supabase
     .from('plans')
     // user_id is still written so an anonymous session keeps working; owner_id
@@ -381,6 +384,27 @@ export async function createStops(
   stops: Omit<Stop, 'id' | 'plan_id' | 'user_id'>[]
 ) {
   const userId = getUserId();
+  const ownerId = await getAuthUserId();
+  if (ownerId) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('subscription_tier')
+      .eq('id', ownerId)
+      .maybeSingle();
+    const max = getPlanLimits((profile?.subscription_tier ?? 'free') as SubscriptionTier).maxStopsPerPlan;
+    const { count, error: countError } = await supabase
+      .from('stops')
+      .select('id', { count: 'exact', head: true })
+      .eq('plan_id', planId);
+    if (countError) throw countError;
+    if ((count ?? 0) + stops.length > max) {
+      throw new Error(
+        max === 2
+          ? 'Free includes 2 stops on a plan. Upgrade for up to 5.'
+          : `A plan can have up to ${max} stops.`,
+      );
+    }
+  }
   const rows = stops.map((s, i) => ({
     ...s,
     plan_id: planId,
@@ -1883,14 +1907,37 @@ export async function upsertVenueRating(venueId: string, rating: number): Promis
 /* ── Subscription helpers ── */
 
 export const SUBSCRIPTION_PLANS = {
-  free: { label: 'Free', priceCents: 0, maxPlans: 3, maxStopsPerPlan: 2, ads: true },
-  premium_monthly: { label: 'Premium Monthly', priceCents: 499, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
-  premium_yearly: { label: 'Premium Yearly', priceCents: 2999, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
-  lifetime: { label: 'Lifetime', priceCents: 4999, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
+  free: { label: 'Free', priceCents: 0, maxPlans: 1, maxStopsPerPlan: 2, ads: true },
+  premium_monthly: { label: 'Premium', priceCents: 299, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
+  premium_yearly: { label: 'Premium Yearly', priceCents: 2499, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
+  lifetime: { label: 'Lifetime', priceCents: 3999, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
 } as const;
 
 export function getPlanLimits(tier: SubscriptionTier) {
   return SUBSCRIPTION_PLANS[tier] ?? SUBSCRIPTION_PLANS.free;
+}
+
+/** How many more active (today or later, not canceled) plans this account can start. */
+export async function remainingActivePlanSlots(): Promise<number> {
+  const ownerId = await getAuthUserId();
+  if (!ownerId) return Infinity;
+  const { data } = await supabase
+    .from('profiles')
+    .select('subscription_tier')
+    .eq('id', ownerId)
+    .maybeSingle();
+  const tier = (data?.subscription_tier ?? 'free') as SubscriptionTier;
+  const max = getPlanLimits(tier).maxPlans;
+  if (!Number.isFinite(max)) return Infinity;
+  const today = new Date().toLocaleDateString('en-CA');
+  const { count, error } = await supabase
+    .from('plans')
+    .select('id', { count: 'exact', head: true })
+    .eq('owner_id', ownerId)
+    .eq('canceled', false)
+    .gte('date', today);
+  if (error) throw error;
+  return Math.max(0, max - (count ?? 0));
 }
 
 export async function updateSubscriptionTier(tier: SubscriptionTier): Promise<void> {

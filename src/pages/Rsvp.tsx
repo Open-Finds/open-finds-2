@@ -17,7 +17,8 @@ import { useAuth } from '../context/AuthContext';
 import { Timeline, RsvpList } from '../components/Shared';
 import { Confetti } from '../components/Confetti';
 import { AddToCalendar } from '../components/AddToCalendar';
-import { CalendarDays, MapPin, Check, X } from 'lucide-react';
+import { CalendarDays, MapPin, Check, X, Navigation } from 'lucide-react';
+import { mapsDirectionsUrl } from '../lib/maps';
 
 export function RsvpPage({ id }: { id: string }) {
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -86,6 +87,7 @@ export function RsvpPage({ id }: { id: string }) {
   }
 
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
+  const mapsUrl = mapsDirectionsUrl(stops.map((s) => s.address), plan.location);
 
 
   const submitRsvp = async (status: 'in' | 'declined') => {
@@ -154,7 +156,17 @@ export function RsvpPage({ id }: { id: string }) {
       </section>
 
       {!plan.canceled && (
-        <div className="mt-6">
+        <div className="mt-6 grid grid-cols-1 gap-3">
+          {mapsUrl && (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary flex items-center justify-center gap-2"
+            >
+              <Navigation size={18} /> Open in Maps
+            </a>
+          )}
           <AddToCalendar plan={plan} stops={stops} />
         </div>
       )}

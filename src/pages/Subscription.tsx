@@ -1,61 +1,36 @@
-import { useState } from 'react';
-import { ChevronLeft, Check, Crown, Zap, Infinity as InfinityIcon, Loader2, Sparkles, Ban } from 'lucide-react';
+import { ChevronLeft, Check, Crown, Zap, Infinity as InfinityIcon, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { updateSubscriptionTier, SUBSCRIPTION_PLANS, type SubscriptionTier } from '../lib/supabase';
+import { SUBSCRIPTION_PLANS, type SubscriptionTier } from '../lib/supabase';
 
 const PLAN_ORDER: SubscriptionTier[] = ['free', 'premium_monthly', 'premium_yearly', 'lifetime'];
 
 const PLAN_META: Record<SubscriptionTier, { icon: React.ReactNode; tagline: string; period: string }> = {
   free: { icon: <Zap size={20} />, tagline: 'Get started for free', period: '' },
-  premium_monthly: { icon: <Crown size={20} />, tagline: 'Best for trying Premium', period: '/mo' },
-  premium_yearly: { icon: <Crown size={20} />, tagline: 'Save 50% vs monthly', period: '/yr' },
-  lifetime: { icon: <InfinityIcon size={20} />, tagline: 'Pay once, keep forever', period: '' },
+  premium_monthly: { icon: <Crown size={20} />, tagline: 'Unlimited plans and AI', period: '/mo' },
+  premium_yearly: { icon: <Crown size={20} />, tagline: 'Two months free', period: '/yr' },
+  lifetime: { icon: <InfinityIcon size={20} />, tagline: 'Pay once', period: '' },
 };
 
 const FREE_FEATURES = [
-  '3 active plans',
+  '1 active plan',
   '2 stops per plan',
-  'Manual venue add (limited)',
-  '3 discovery suggestions per week',
-  'Share plan: copy link + social',
-  'Full RSVP dashboard with decline reasons',
-  'Google Maps + countdown',
+  '3 AI extractions a day',
+  '3 Something New suggestions a day',
+  'Share plan and RSVP',
+  'Google Maps and countdown',
   'Calendar export',
-  'AI venue extraction',
-  'Watch ad for credits',
 ];
 
 const PREMIUM_FEATURES = [
   'Unlimited active plans',
   'Up to 5 stops per plan',
-  'Unlimited venue adds',
   'Unlimited AI extraction',
-  'Unlimited discovery suggestions',
-  'Calendar export: Google + Apple + Outlook',
-  'Travel mode: multi-day trips',
+  'Unlimited Something New',
   'No ads',
 ];
 
 export function SubscriptionPage({ onBack }: { onBack: () => void }) {
   const { subscriptionTier } = useAuth();
-  const [selecting, setSelecting] = useState<SubscriptionTier | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<SubscriptionTier | null>(null);
-
-  const handleSelect = async (tier: SubscriptionTier) => {
-    if (tier === subscriptionTier) return;
-    setError(null);
-    setSelecting(tier);
-    try {
-      await updateSubscriptionTier(tier);
-      setSuccess(tier);
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update subscription.');
-    } finally {
-      setSelecting(null);
-    }
-  };
 
   return (
     <div className="min-h-screen overflow-y-auto bg-black px-6 pt-20 pb-24">
@@ -73,23 +48,16 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
           <h1 className="text-2xl font-bold text-white">Choose Your Plan</h1>
         </div>
         <p className="mb-8 text-sm text-ink-secondary">
-          You're currently on <span className="font-semibold text-gold">{SUBSCRIPTION_PLANS[subscriptionTier].label}</span>
+          You're currently on <span className="font-semibold text-gold">{SUBSCRIPTION_PLANS[subscriptionTier].label}</span>.
+          Checkout is not open yet, so a plan cannot be switched from this screen.
         </p>
-
-        {error && (
-          <div className="mb-4 rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {error}
-          </div>
-        )}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 xl:items-start">
           {PLAN_ORDER.map((tier) => {
             const plan = SUBSCRIPTION_PLANS[tier];
             const meta = PLAN_META[tier];
             const isCurrent = tier === subscriptionTier;
-            const isSelecting = selecting === tier;
             const isFree = tier === 'free';
-            const isLifetime = tier === 'lifetime';
             const isPremium = tier === 'premium_monthly' || tier === 'premium_yearly' || tier === 'lifetime';
             const features = isFree ? FREE_FEATURES : PREMIUM_FEATURES;
             const price = plan.priceCents === 0 ? 'Free' : `$${(plan.priceCents / 100).toFixed(2)}`;
@@ -129,45 +97,24 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
                       <Check size={14} className="shrink-0 text-gold" /> {f}
                     </li>
                   ))}
-                  {isFree && (
-                    <li className="flex items-center gap-2 text-sm text-ink-secondary/60">
-                      <Ban size={14} className="shrink-0 text-danger/60" /> No multi-day trips
-                    </li>
-                  )}
                 </ul>
 
-                <button
-                  onClick={() => handleSelect(tier)}
-                  disabled={isCurrent || isSelecting}
-                  className={`mt-5 flex w-full items-center justify-center gap-2 rounded-card py-3 text-sm font-bold transition-all active:scale-[0.98] disabled:cursor-default ${
-                    isCurrent
-                      ? 'border border-gold/30 bg-gold/10 text-gold'
-                      : isPremium
-                      ? 'bg-gold text-black shadow-gold-glow hover:brightness-110'
-                      : 'border border-gold/30 bg-black/40 text-gold hover:bg-gold/10'
-                  }`}
-                >
-                  {isCurrent ? (
-                    <><Check size={16} /> Current Plan</>
-                  ) : isSelecting ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : success === tier ? (
-                    <><Check size={16} /> Activated!</>
-                  ) : isFree ? (
-                    'Switch to Free'
-                  ) : isLifetime ? (
-                    'Buy Lifetime'
-                  ) : (
-                    `Upgrade to ${plan.label}`
-                  )}
-                </button>
+                <p className={`mt-5 rounded-card py-3 text-center text-sm font-bold ${
+                  isCurrent
+                    ? 'border border-gold/30 bg-gold/10 text-gold'
+                    : 'border border-gold/20 text-ink-secondary'
+                }`}>
+                  {isCurrent ? 'Current plan' : 'Opens with checkout'}
+                </p>
               </div>
             );
           })}
         </div>
 
-        <p className="mt-6 text-center text-xs text-ink-secondary">
-          Payments are processed securely via Stripe. You can cancel anytime.
+        <p className="mt-6 text-center text-sm text-ink-secondary">
+          Family is $7.99 a month for 4 people, plus $1 a month for each extra person.
+          The yearly family price was quoted two ways, so it is not listed until that is settled.
+          Ads for extra credits belong in the phone app, not here.
         </p>
       </div>
     </div>

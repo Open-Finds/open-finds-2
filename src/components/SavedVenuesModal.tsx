@@ -10,6 +10,7 @@ import { geocodeAddress } from '../lib/apiKeys';
 import { extractVenueFromLink } from '../lib/openai';
 import { useAuth } from '../context/AuthContext';
 import { SavedVenueCard } from './SavedVenueCard';
+import { VenueTypeSelect } from './ui/select';
 import { DuplicateVenueDialog, type PendingDuplicate } from './DuplicateVenueDialog';
 import { findSimilarVenues } from '../lib/venueMatch';
 import {
@@ -345,15 +346,7 @@ export function SavedVenuesModal({
                     <label className="mb-2 block text-sm font-medium text-ink-secondary">
                       Type
                     </label>
-                    <select
-                      value={type}
-                      onChange={(e) => setType(e.target.value as VenueType)}
-                      className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white focus:border-gold focus:outline-none [color-scheme:dark]"
-                    >
-                      <option value="food">Food</option>
-                      <option value="activity">Activity</option>
-                      <option value="dessert">Dessert</option>
-                    </select>
+                    <VenueTypeSelect value={type} onChange={setType} />
                   </div>
                   <button
                     onClick={handleSave}
