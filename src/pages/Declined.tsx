@@ -8,6 +8,7 @@ import {
   setRsvpDeclineReason,
 } from '../lib/supabase';
 import { RsvpList } from '../components/Shared';
+import { AppSelect } from '../components/ui/select';
 import { Frown, Send } from 'lucide-react';
 
 const REASONS = [
@@ -126,20 +127,14 @@ export function DeclinedPage({ id }: { id: string }) {
             <label className="mb-2 block text-sm font-medium text-ink-secondary">
               Reason
             </label>
-            <select
+            <AppSelect
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="w-full touch-target rounded-card border border-gold/20 bg-surface px-4 text-white outline-none transition-all focus:border-gold focus:shadow-gold-glow"
-            >
-              <option value="" disabled>
-                Pick a reason
-              </option>
-              {REASONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
+              onChange={setReason}
+              placeholder="Pick a reason"
+              ariaLabel="Reason"
+              className="touch-target bg-surface focus:shadow-gold-glow data-[state=open]:shadow-gold-glow"
+              options={REASONS.map((r) => ({ value: r, label: r }))}
+            />
             {reason === 'Other' && (
               <input
                 type="text"

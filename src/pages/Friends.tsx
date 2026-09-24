@@ -12,6 +12,7 @@ import {
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
 import { useAuth } from '../context/AuthContext';
+import { AppSelect } from '../components/ui/select';
 
 type Tab = 'friends' | 'groups' | 'collections';
 
@@ -425,18 +426,19 @@ export function FriendsPage() {
 
                         {/* Add friend to group */}
                         <div className="flex gap-2 pt-2">
-                          <select
+                          <AppSelect
                             value={groupAddFriendId}
-                            onChange={(e) => setGroupAddFriendId(e.target.value)}
-                            className="flex-1 rounded-card border border-gold/20 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-gold"
-                          >
-                            <option value="">Add a friend...</option>
-                            {acceptedFriends.map((f) => (
-                              <option key={f.user_id} value={f.user_id} disabled={g.members.some((m) => m.user_id === f.user_id)}>
-                                {f.display_name} (@{f.username})
-                              </option>
-                            ))}
-                          </select>
+                            onChange={setGroupAddFriendId}
+                            placeholder="Add a friend..."
+                            ariaLabel="Add a friend to group"
+                            className="flex-1 px-3 py-2 text-sm"
+                            options={acceptedFriends
+                              .filter((f) => !g.members.some((m) => m.user_id === f.user_id))
+                              .map((f) => ({
+                                value: f.user_id,
+                                label: `${f.display_name} (@${f.username})`,
+                              }))}
+                          />
                           <button
                             onClick={() => handleAddGroupMember(g.id)}
                             disabled={!groupAddFriendId}

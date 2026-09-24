@@ -51,7 +51,7 @@ import {
   type Plan,
   type Stop,
 } from '../lib/supabase';
-import { VenueTypeSelect } from '../components/ui/select';
+import { VenueTypeSelect, TimeSelect } from '../components/ui/select';
 import {
   discoverSmartVenueCandidates,
   extractVenuesFromLink,
@@ -1694,11 +1694,9 @@ export function HomePage({
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-gold bg-black text-sm font-bold text-gold">
                       {i + 1}
                     </span>
-                    <input
-                      type="time"
+                    <TimeSelect
                       value={stopTimes[timeKey] ?? stop.time}
-                      onChange={async (e) => {
-                        const newTime = e.target.value;
+                      onChange={async (newTime) => {
                         setStopTimes((prev) => ({
                           ...prev,
                           [timeKey]: newTime,
@@ -1711,7 +1709,7 @@ export function HomePage({
                           }
                         }
                       }}
-                      className="rounded-lg border border-gold/40 bg-black/60 px-2 py-1 text-sm text-gold focus:border-gold focus:outline-none [color-scheme:dark]"
+                      className="min-w-0 flex-1"
                     />
                   </div>
                   <h3 className="mt-3 text-lg font-bold text-white">{stop.name}</h3>

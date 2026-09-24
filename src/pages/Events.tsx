@@ -15,6 +15,7 @@ import {
   fetchTripDays,
   type Plan,
   type Trip,
+  supabase,
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
 import { CalendarDays, MapPin, Users, ChevronRight, Trash2, X, Compass } from 'lucide-react';
@@ -72,7 +73,10 @@ export function EventsPage({
       ]);
 
       const guestName = getGuestName();
-      const confirmedIds = await fetchConfirmedPlanIds(guestName);
+      // Signed-in users already get hosted + invited plans; guest-name RSVP
+      // matching is only for anonymous RSVP discovery.
+      const { data: { session } } = await supabase.auth.getSession();
+      const confirmedIds = session ? [] : await fetchConfirmedPlanIds(guestName);
       const hostedIds = new Set([...hostedActive, ...hostedCanceled].map((p) => p.id));
       const guestOnlyIds = confirmedIds.filter((id) => !hostedIds.has(id));
       const guestPlans = await fetchPlansByIds(guestOnlyIds);
@@ -118,18 +122,20 @@ export function EventsPage({
 
       setUpcoming(upcomingPlans);
       setCanceled(enrichedCanceled);
+      // Show the list immediately — trip enrichment must not block this screen.
+      setLoading(false);
 
-      // Fetch trips
+      // Fetch trips in the background
       try {
         const allTrips = await fetchAllTrips();
         const tripsWithMeta = await Promise.all(
           allTrips.map(async (t) => {
             const days = await fetchTripDays(t.id);
-            const totalStops = await days.reduce(async (sum, d) => {
-              const s = await sum;
+            let totalStops = 0;
+            for (const d of days) {
               const stops = await fetchStops(d.id);
-              return s + stops.length;
-            }, Promise.resolve(0));
+              totalStops += stops.length;
+            }
             return { ...t, dayCount: days.length, totalStops };
           })
         );
@@ -138,8 +144,8 @@ export function EventsPage({
         // ignore trip fetch errors
       }
     } catch {
-      /* ignore */
-    } finally {
+      setUpcoming([]);
+      setCanceled([]);
       setLoading(false);
     }
   };

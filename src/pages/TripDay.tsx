@@ -26,6 +26,7 @@ import {
 } from '../lib/supabase';
 import { discoverSmartVenueCandidates, type VenueCandidate } from '../lib/openai';
 import { StopCard } from '../components/StopCard';
+import { TimeSelect } from '../components/ui/select';
 import {
   ChevronLeft,
   ChevronRight,
@@ -551,11 +552,10 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
               className="mb-2 w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
             />
             <div className="mb-3 flex items-center gap-2">
-              <input
-                type="time"
+              <TimeSelect
                 value={addStopTime}
-                onChange={(e) => setAddStopTime(e.target.value)}
-                className="rounded-lg border border-gold/30 bg-black/50 px-2 py-2 text-sm text-gold focus:border-gold focus:outline-none [color-scheme:dark]"
+                onChange={setAddStopTime}
+                className="min-w-0 flex-1"
               />
               <div className="flex gap-1">
                 {(['food', 'activity', 'dessert', 'bar'] as VenueType[]).map((v) => (

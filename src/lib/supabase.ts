@@ -318,6 +318,15 @@ export async function fetchStops(planId: string) {
   if (error) throw error;
   if (data && data.length > 0) return data as Stop[];
 
+  // Empty can mean "no stops" or "RLS hid the rows". If we can see the plan
+  // directly, empty is real — do not call the share RPC (that hung Events load).
+  const { data: plan } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('id', planId)
+    .maybeSingle();
+  if (plan) return [];
+
   const shared = await fetchSharedPlanPayload(planId);
   return (shared?.stops ?? []) as Stop[];
 }
@@ -330,6 +339,13 @@ export async function fetchRsvps(planId: string) {
     .order('created_at', { ascending: true });
   if (error) throw error;
   if (data && data.length > 0) return data as Rsvp[];
+
+  const { data: plan } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('id', planId)
+    .maybeSingle();
+  if (plan) return [];
 
   const shared = await fetchSharedPlanPayload(planId);
   return (shared?.rsvps ?? []) as Rsvp[];
@@ -694,6 +710,14 @@ export async function fetchTripDays(tripId: string): Promise<Plan[]> {
     .order('day_number', { ascending: true });
   if (error) throw error;
   if (data && data.length > 0) return data as Plan[];
+
+  // Visible trip with no day rows yet — empty is real.
+  const { data: trip } = await supabase
+    .from('trips')
+    .select('id')
+    .eq('id', tripId)
+    .maybeSingle();
+  if (trip) return [];
 
   const shared = await fetchSharedTripPayload(tripId);
   return (shared?.days ?? []) as Plan[];
@@ -1423,15 +1447,21 @@ export async function fetchInvitedPlanIds(): Promise<string[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
   const uid = session.user.id;
+  const { data: memberships } = await supabase
+    .from('friend_group_members')
+    .select('group_id')
+    .eq('user_id', uid);
+  // PostgREST `in.()` with an empty list can hang or error — always pass a sentinel.
+  const groupIds = (memberships ?? []).map((m) => m.group_id as string);
+  const groupFilter = groupIds.length > 0 ? groupIds : ['00000000-0000-0000-0000-000000000000'];
+
   const [userInvites, groupInvites] = await Promise.all([
     supabase.from('plan_invites').select('plan_id').eq('invited_user_id', uid),
     supabase
       .from('plan_invites')
       .select('plan_id, group_id')
       .not('group_id', 'is', null)
-      .in('group_id',
-        (await supabase.from('friend_group_members').select('group_id').eq('user_id', uid)).data?.map((m) => m.group_id) ?? ['00000000-0000-0000-0000-000000000000']
-      ),
+      .in('group_id', groupFilter),
   ]);
 
   const ids = new Set<string>();

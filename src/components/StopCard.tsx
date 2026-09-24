@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { MapPin, Pencil, Save, X } from 'lucide-react';
 import { updateStop, type Stop } from '../lib/supabase';
 import { formatTime } from '../lib/time';
+import { TimeSelect } from './ui/select';
 
 export function StopCard({
   stop,
@@ -84,12 +85,7 @@ export function StopCard({
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-gold bg-black text-sm font-bold text-gold">
           {index + 1}
         </span>
-        <input
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-          className="rounded-lg border border-gold/40 bg-black/60 px-2 py-1.5 text-sm text-gold focus:border-gold focus:outline-none [color-scheme:dark]"
-        />
+        <TimeSelect value={time} onChange={setTime} className="min-w-0 flex-1" />
       </div>
       <input
         type="text"

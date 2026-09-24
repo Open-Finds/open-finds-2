@@ -14,6 +14,7 @@ import {
   type Collection,
 } from '../lib/supabase';
 import { discoverSmartVenueCandidates, type VenueCandidate } from '../lib/openai';
+import { TimeSelect } from '../components/ui/select';
 import {
   ChevronLeft,
   ChevronRight,
@@ -677,11 +678,10 @@ export function TripSetupPage() {
                             className="w-full rounded-lg border border-gold/20 bg-black/50 px-2 py-1.5 text-sm font-medium text-white focus:border-gold focus:outline-none"
                           />
                           <div className="mt-2 flex items-center gap-2">
-                            <input
-                              type="time"
+                            <TimeSelect
                               value={stop.time}
-                              onChange={(e) => updateStopTime(dayIdx, stop.id, e.target.value)}
-                              className="rounded-lg border border-gold/20 bg-black/50 px-2 py-1 text-xs text-gold focus:border-gold focus:outline-none [color-scheme:dark]"
+                              onChange={(t) => updateStopTime(dayIdx, stop.id, t)}
+                              className="min-w-0 flex-1 [&_button]:px-2 [&_button]:py-1 [&_button]:text-xs"
                             />
                             <div className="flex gap-1">
                               {VIBE_OPTIONS.map((v) => (

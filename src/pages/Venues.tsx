@@ -815,14 +815,14 @@ export function VenuesPage() {
                               <>
                                 <button
                                   onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }}
-                                  className="ml-0.5 text-gold/40 opacity-0 transition-opacity hover:text-gold group-hover:opacity-100"
+                                  className="ml-0.5 text-gold/40 transition-opacity hover:text-gold sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                   aria-label="Rename collection"
                                 >
                                   <Pencil size={10} />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteCollection(c.id)}
-                                  className="text-gold/40 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+                                  className="text-gold/40 transition-opacity hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                   aria-label="Delete collection"
                                 >
                                   <Trash2 size={10} />
