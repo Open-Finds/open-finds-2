@@ -1,6 +1,13 @@
-import { ChevronLeft, Check, Crown, Zap, Infinity as InfinityIcon, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, Check, Crown, Zap, Infinity as InfinityIcon, Sparkles, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { SUBSCRIPTION_PLANS, type SubscriptionTier } from '../lib/supabase';
+import {
+  SUBSCRIPTION_PLANS,
+  fetchProfile,
+  openBillingPortal,
+  startCheckout,
+  type SubscriptionTier,
+} from '../lib/supabase';
 
 const PLAN_ORDER: SubscriptionTier[] = ['free', 'premium_monthly', 'premium_yearly', 'lifetime'];
 
@@ -29,8 +36,79 @@ const PREMIUM_FEATURES = [
   'No ads',
 ];
 
+type PaidTier = Exclude<SubscriptionTier, 'free'>;
+
+function checkoutResult(): 'success' | 'cancelled' | null {
+  const query = window.location.hash.split('?')[1] ?? '';
+  const value = new URLSearchParams(query).get('checkout');
+  return value === 'success' || value === 'cancelled' ? value : null;
+}
+
+function formatDate(iso: string | null) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 export function SubscriptionPage({ onBack }: { onBack: () => void }) {
-  const { subscriptionTier } = useAuth();
+  const { session, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, refreshProfile } = useAuth();
+  const [busy, setBusy] = useState<PaidTier | 'portal' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [returned] = useState(checkoutResult);
+  const [confirming, setConfirming] = useState(returned === 'success');
+  const startTier = useRef(subscriptionTier);
+  const refresh = useRef(refreshProfile);
+  refresh.current = refreshProfile;
+  const userId = session?.user.id;
+
+  const isSubscriber = subscriptionTier === 'premium_monthly' || subscriptionTier === 'premium_yearly';
+  const renewsOn = formatDate(subscriptionRenewsAt);
+
+  // Back from Stripe. The webhook usually lands within a second or two, so
+  // poll the profile briefly rather than trusting the redirect.
+  useEffect(() => {
+    if (returned) {
+      window.history.replaceState(null, '', window.location.pathname + '#/subscription');
+    }
+    if (returned !== 'success' || !userId) return;
+    let tries = 0;
+    const timer = window.setInterval(async () => {
+      tries += 1;
+      const profile = await fetchProfile(userId).catch(() => null);
+      if (profile && profile.subscription_tier !== startTier.current) {
+        window.clearInterval(timer);
+        await refresh.current();
+        setConfirming(false);
+      } else if (tries >= 20) {
+        window.clearInterval(timer);
+        setConfirming(false);
+        setError('Payment received, but your plan has not updated yet. Refresh in a minute.');
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [returned, userId]);
+
+  const go = async (action: PaidTier | 'portal') => {
+    setBusy(action);
+    setError(null);
+    try {
+      const url = action === 'portal' ? await openBillingPortal() : await startCheckout(action);
+      window.location.assign(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Billing is unavailable');
+      setBusy(null);
+    }
+  };
+
+  // What the button on each card does, given the plan the account is on now.
+  const cardAction = (tier: SubscriptionTier): { label: string; onClick?: () => void } => {
+    if (tier === subscriptionTier) return { label: 'Current plan' };
+    if (tier === 'free') {
+      return isSubscriber ? { label: 'Cancel in billing', onClick: () => go('portal') } : { label: 'Included' };
+    }
+    if (subscriptionTier === 'lifetime') return { label: 'Included in Lifetime' };
+    if (isSubscriber && tier !== 'lifetime') return { label: 'Switch in billing', onClick: () => go('portal') };
+    return { label: tier === 'lifetime' ? 'Buy Lifetime' : 'Upgrade', onClick: () => go(tier) };
+  };
 
   return (
     <div className="min-h-screen overflow-y-auto bg-black px-6 pt-20 pb-24">
@@ -49,8 +127,46 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
         </div>
         <p className="mb-8 text-sm text-ink-secondary">
           You're currently on <span className="font-semibold text-gold">{SUBSCRIPTION_PLANS[subscriptionTier].label}</span>.
-          Checkout is not open yet, so a plan cannot be switched from this screen.
+          {isSubscriber && renewsOn && (subscriptionStatus === 'canceling'
+            ? ` It ends on ${renewsOn} and won't renew.`
+            : ` It renews on ${renewsOn}.`)}
         </p>
+
+        {subscriptionStatus === 'past_due' && (
+          <p className="mb-4 rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+            Your last payment didn't go through. Update your card in billing to keep Premium.
+          </p>
+        )}
+        {confirming && (
+          <p className="mb-4 flex items-center gap-2 rounded-card border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+            <Loader2 size={16} className="animate-spin" /> Confirming your payment…
+          </p>
+        )}
+        {returned === 'success' && !confirming && !error && subscriptionTier !== 'free' && (
+          <p className="mb-4 rounded-card border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+            You're on {SUBSCRIPTION_PLANS[subscriptionTier].label}. Thanks for upgrading.
+          </p>
+        )}
+        {returned === 'cancelled' && (
+          <p className="mb-4 rounded-card border border-gold/15 px-4 py-3 text-sm text-ink-secondary">
+            Checkout was cancelled. You haven't been charged.
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="mb-4 rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </p>
+        )}
+        {(isSubscriber || subscriptionTier === 'lifetime') && (
+          <button
+            onClick={() => go('portal')}
+            disabled={busy !== null}
+            className="mb-6 flex items-center gap-2 rounded-card border border-gold/40 px-4 py-2 text-sm font-bold text-gold transition-all hover:bg-gold/10 active:scale-95 disabled:opacity-50"
+          >
+            {busy === 'portal' && <Loader2 size={14} className="animate-spin" />}
+            Manage billing
+          </button>
+        )}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 xl:items-start">
           {PLAN_ORDER.map((tier) => {
@@ -61,6 +177,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
             const isPremium = tier === 'premium_monthly' || tier === 'premium_yearly' || tier === 'lifetime';
             const features = isFree ? FREE_FEATURES : PREMIUM_FEATURES;
             const price = plan.priceCents === 0 ? 'Free' : `$${(plan.priceCents / 100).toFixed(2)}`;
+            const action = cardAction(tier);
 
             return (
               <div
@@ -99,13 +216,24 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
                   ))}
                 </ul>
 
-                <p className={`mt-5 rounded-card py-3 text-center text-sm font-bold ${
-                  isCurrent
-                    ? 'border border-gold/30 bg-gold/10 text-gold'
-                    : 'border border-gold/20 text-ink-secondary'
-                }`}>
-                  {isCurrent ? 'Current plan' : 'Opens with checkout'}
-                </p>
+                {action.onClick ? (
+                  <button
+                    onClick={action.onClick}
+                    disabled={busy !== null || confirming}
+                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
+                  >
+                    {busy === tier && <Loader2 size={14} className="animate-spin" />}
+                    {action.label}
+                  </button>
+                ) : (
+                  <p className={`mt-5 rounded-card py-3 text-center text-sm font-bold ${
+                    isCurrent
+                      ? 'border border-gold/30 bg-gold/10 text-gold'
+                      : 'border border-gold/20 text-ink-secondary'
+                  }`}>
+                    {action.label}
+                  </p>
+                )}
               </div>
             );
           })}

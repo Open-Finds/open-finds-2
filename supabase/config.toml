@@ -32,3 +32,15 @@ verify_jwt = true
 # rather than taken from the request.
 [functions.send-push-notification]
 verify_jwt = true
+
+# Both start billing for the signed-in user, and call requireUser() themselves.
+[functions.stripe-checkout]
+verify_jwt = true
+
+[functions.stripe-portal]
+verify_jwt = true
+
+# Stripe calls this, with no Supabase session. The Stripe-Signature header,
+# checked against STRIPE_WEBHOOK_SECRET, is the gate instead.
+[functions.stripe-webhook]
+verify_jwt = false

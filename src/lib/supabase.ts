@@ -1970,12 +1970,31 @@ export async function remainingActivePlanSlots(): Promise<number> {
   return Math.max(0, max - (count ?? 0));
 }
 
-export async function updateSubscriptionTier(tier: SubscriptionTier): Promise<void> {
+/**
+ * Billing runs through Stripe. These return a Stripe-hosted URL to send the
+ * browser to; the tier itself only changes when stripe-webhook hears back.
+ */
+async function billingRedirect(fn: 'stripe-checkout' | 'stripe-portal', body: unknown): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-  const { error } = await supabase
-    .from('profiles')
-    .update({ subscription_tier: tier, subscription_status: 'active' })
-    .eq('id', session.user.id);
-  if (error) throw error;
+  if (!session?.access_token) throw new Error('Please sign in first.');
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({})) as { url?: string; error?: string };
+  if (!res.ok || !data.url) throw new Error(data.error ?? `Billing is unavailable (${res.status})`);
+  return data.url;
+}
+
+export function startCheckout(tier: Exclude<SubscriptionTier, 'free'>): Promise<string> {
+  return billingRedirect('stripe-checkout', { tier });
+}
+
+export function openBillingPortal(): Promise<string> {
+  return billingRedirect('stripe-portal', {});
 }

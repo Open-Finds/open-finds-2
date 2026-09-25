@@ -12,6 +12,9 @@ type AuthContextType = {
   onboardingCompleted: boolean;
   dietaryPreferences: string[];
   subscriptionTier: SubscriptionTier;
+  /** Stripe's view: active, trialing, past_due, or canceling (ends at renewsAt). */
+  subscriptionStatus: string;
+  subscriptionRenewsAt: string | null;
   isVenuePartner: boolean;
   refreshProfile: () => Promise<void>;
   setOnboardingCompleted: (v: boolean) => void;
@@ -26,6 +29,8 @@ const AuthContext = createContext<AuthContextType>({
   onboardingCompleted: false,
   dietaryPreferences: [],
   subscriptionTier: 'free',
+  subscriptionStatus: 'active',
+  subscriptionRenewsAt: null,
   isVenuePartner: false,
   refreshProfile: async () => {},
   setOnboardingCompleted: () => {},
@@ -40,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [onboardingCompleted, setOnboardingCompletedState] = useState(false);
   const [dietaryPreferences, setDietaryPreferences] = useState<string[]>([]);
   const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>('free');
+  const [subscriptionStatus, setSubscriptionStatus] = useState('active');
+  const [subscriptionRenewsAt, setSubscriptionRenewsAt] = useState<string | null>(null);
   const [isVenuePartner, setIsVenuePartner] = useState(false);
 
   const loadProfile = async (userId: string) => {
@@ -50,6 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOnboardingCompletedState(profile?.onboarding_completed ?? false);
       setDietaryPreferences(profile?.dietary_preferences ?? []);
       setSubscriptionTier(profile?.subscription_tier ?? 'free');
+      setSubscriptionStatus(profile?.subscription_status ?? 'active');
+      setSubscriptionRenewsAt(profile?.subscription_renews_at ?? null);
       setIsVenuePartner(profile?.is_venue_partner ?? false);
     } catch {
       setOnboardingCompletedState(false);
@@ -117,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, isVenuePartner, refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
+    <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, isVenuePartner, refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
       {children}
     </AuthContext.Provider>
   );
