@@ -518,7 +518,7 @@ export function VenuesPage() {
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 pr-14">
               <div>
                 <h1 className="text-3xl font-bold text-gold">Venues</h1>
                 <p className="mt-1 text-sm text-ink-secondary">
@@ -530,7 +530,7 @@ export function VenuesPage() {
                   setShowAddForm(!showAddForm);
                   if (!showAddForm) resetForm();
                 }}
-                className="flex items-center gap-2 rounded-card bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-95"
+                className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-card bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-95"
               >
                 {showAddForm ? <X size={18} /> : <Plus size={18} />}
                 {showAddForm ? 'Close' : 'Add Venue'}

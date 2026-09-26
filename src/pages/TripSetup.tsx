@@ -554,7 +554,7 @@ export function TripSetupPage() {
             <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
           )}
 
-          <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8 lg:left-auto lg:right-8 lg:translate-x-0">
+          <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8">
             <button
               onClick={() => {
                 if (canProceedDetails) {
@@ -564,7 +564,7 @@ export function TripSetupPage() {
               }}
               disabled={!canProceedDetails}
               className={`flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card px-6 py-3.5 text-base font-bold shadow-gold-glow transition-all duration-200 active:scale-[0.98] ${
-                canProceedDetails ? 'bg-gold text-black' : 'cursor-not-allowed bg-gray-800 text-gray-500 shadow-none'
+                canProceedDetails ? 'bg-gold text-black' : 'cursor-not-allowed border border-gold/20 bg-gold/10 text-gold/40 shadow-none'
               }`}
             >
               Customize Days <ChevronRight size={20} />
@@ -756,7 +756,7 @@ export function TripSetupPage() {
             <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
           )}
 
-          <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8 lg:left-auto lg:right-8 lg:translate-x-0">
+          <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8">
             <button
               onClick={handleGenerate}
               className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3.5 text-base font-bold text-black shadow-gold-glow transition-all duration-200 active:scale-[0.98]"

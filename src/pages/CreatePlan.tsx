@@ -56,11 +56,11 @@ export function CreatePlanPage() {
         </div>
       </div>
 
-      <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8 lg:left-auto lg:right-8 lg:translate-x-0">
+      <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8 lg:left-64 lg:right-0 lg:mx-auto lg:translate-x-0">
         <button
           onClick={handleNext}
           disabled={!canContinue}
-          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card px-6 py-3.5 text-base font-bold shadow-gold-glow transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-500 disabled:shadow-none bg-gold text-black"
+          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card px-6 py-3.5 text-base font-bold shadow-gold-glow transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:border disabled:border-gold/20 disabled:bg-gold/10 disabled:text-gold/40 disabled:shadow-none bg-gold text-black"
         >
           Curate a Date {!canContinue ? null : <ChevronRight size={20} />}
         </button>
