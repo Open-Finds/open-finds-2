@@ -37,7 +37,7 @@ verify_jwt = true
 [functions.stripe-checkout]
 verify_jwt = true
 
-[functions.stripe-portal]
+[functions.stripe-billing]
 verify_jwt = true
 
 # Stripe calls this, with no Supabase session. The Stripe-Signature header,

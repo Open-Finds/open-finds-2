@@ -1971,10 +1971,11 @@ export async function remainingActivePlanSlots(): Promise<number> {
 }
 
 /**
- * Billing runs through Stripe. These return a Stripe-hosted URL to send the
- * browser to; the tier itself only changes when stripe-webhook hears back.
+ * Billing runs through Stripe, rendered inside the app: checkout is Stripe's
+ * embedded form, and plan changes go through the stripe-billing function.
+ * The tier itself only changes when stripe-webhook hears back from Stripe.
  */
-async function billingRedirect(fn: 'stripe-checkout' | 'stripe-portal', body: unknown): Promise<string> {
+async function callBilling<T>(fn: 'stripe-checkout' | 'stripe-billing', body: unknown): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Please sign in first.');
   const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`, {
@@ -1986,15 +1987,57 @@ async function billingRedirect(fn: 'stripe-checkout' | 'stripe-portal', body: un
     },
     body: JSON.stringify(body),
   });
-  const data = await res.json().catch(() => ({})) as { url?: string; error?: string };
-  if (!res.ok || !data.url) throw new Error(data.error ?? `Billing is unavailable (${res.status})`);
-  return data.url;
+  const data = await res.json().catch(() => ({})) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Billing is unavailable (${res.status})`);
+  return data;
 }
 
-export function startCheckout(tier: Exclude<SubscriptionTier, 'free'>): Promise<string> {
-  return billingRedirect('stripe-checkout', { tier });
+/** Client secret for the embedded checkout form. */
+export async function startCheckout(tier: Exclude<SubscriptionTier, 'free'>): Promise<string> {
+  const { clientSecret } = await callBilling<{ clientSecret: string }>('stripe-checkout', { tier, embedded: true });
+  return clientSecret;
 }
 
-export function openBillingPortal(): Promise<string> {
-  return billingRedirect('stripe-portal', {});
+export type BillingSummary = {
+  subscription: {
+    tier: SubscriptionTier | null;
+    status: string;
+    cancelAtPeriodEnd: boolean;
+    currentPeriodEnd: string;
+    amount: number | null;
+    currency: string;
+    interval: string | null;
+  } | null;
+  card: { brand: string; last4: string; expMonth: number; expYear: number } | null;
+  invoices: {
+    id: string;
+    date: string;
+    amount: number;
+    currency: string;
+    status: string | null;
+    description: string;
+    pdf: string | null;
+  }[];
+};
+
+export function fetchBilling(): Promise<BillingSummary> {
+  return callBilling('stripe-billing', { action: 'summary' });
+}
+
+export function setCancelAtPeriodEnd(cancel: boolean): Promise<BillingSummary> {
+  return callBilling('stripe-billing', { action: cancel ? 'cancel' : 'resume' });
+}
+
+export function switchSubscriptionPlan(tier: 'premium_monthly' | 'premium_yearly'): Promise<BillingSummary> {
+  return callBilling('stripe-billing', { action: 'switch', tier });
+}
+
+/** Client secret for the in-app card form (a Stripe SetupIntent). */
+export async function startCardUpdate(): Promise<string> {
+  const { clientSecret } = await callBilling<{ clientSecret: string }>('stripe-billing', { action: 'card-setup' });
+  return clientSecret;
+}
+
+export function saveCard(setupIntentId: string): Promise<BillingSummary> {
+  return callBilling('stripe-billing', { action: 'card-save', setupIntentId });
 }

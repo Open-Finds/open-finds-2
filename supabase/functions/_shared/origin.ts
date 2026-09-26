@@ -1,5 +1,6 @@
 /**
- * Where Stripe should send the user back to after checkout or the portal.
+ * Where Stripe should send the user back to when a payment method has to
+ * leave the embedded checkout to authenticate.
  *
  * APP_URL wins when set. Otherwise the request's Origin is used, but only if
  * it is one of ALLOWED_ORIGINS (or that list is unset, as in local dev), so a

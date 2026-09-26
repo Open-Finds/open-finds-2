@@ -98,7 +98,6 @@ const existing = await stripe('GET', 'prices', {
   lookup_keys: PRICES.map((p) => p.lookup_key),
   limit: 10,
 });
-const priceIds = {};
 for (const p of PRICES) {
   const found = existing.data.find((e) => e.lookup_key === p.lookup_key);
   if (found) {
@@ -107,7 +106,6 @@ for (const p of PRICES) {
     } else {
       log(`= price ${p.lookup_key} ${found.id}`);
     }
-    priceIds[p.lookup_key] = found.id;
     continue;
   }
   const created = await stripe('POST', 'prices', {
@@ -118,41 +116,7 @@ for (const p of PRICES) {
     lookup_key: p.lookup_key,
     recurring: p.recurring,
   });
-  priceIds[p.lookup_key] = created.id;
   log(`+ price ${p.lookup_key} ${created.id}`);
-}
-
-// Billing portal: cancel at period end, swap monthly <-> yearly, card, invoices.
-const portals = await stripe('GET', 'billing_portal/configurations', { active: true, limit: 10 });
-if (portals.data.some((c) => c.metadata?.app === 'open_finds_premium')) {
-  log('= billing portal configuration');
-} else {
-  const portal = await stripe('POST', 'billing_portal/configurations', {
-    business_profile: { headline: 'Open Finds billing' },
-    features: {
-      customer_update: { enabled: true, allowed_updates: { 0: 'email' } },
-      invoice_history: { enabled: true },
-      payment_method_update: { enabled: true },
-      subscription_cancel: { enabled: true, mode: 'at_period_end' },
-      subscription_update: {
-        enabled: true,
-        default_allowed_updates: { 0: 'price' },
-        proration_behavior: 'create_prorations',
-        products: {
-          0: {
-            product: product.id,
-            prices: {
-              0: priceIds.open_finds_premium_monthly,
-              1: priceIds.open_finds_premium_yearly,
-            },
-          },
-        },
-      },
-    },
-    metadata: { app: 'open_finds_premium' },
-  });
-  // stripe-portal finds this by its metadata, so the account default is untouched.
-  log(`+ billing portal configuration ${portal.id}`);
 }
 
 // Webhook
