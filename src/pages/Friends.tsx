@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   UserPlus, Check, X, Users, Trash2, UserMinus,
   Plus, ChevronRight, Loader2, FolderOpen, AtSign,
 } from 'lucide-react';
 import {
   fetchFriends, sendFriendRequest, acceptFriendRequest, declineFriendRequest, removeFriend,
-  searchUserByUsername,
+  searchUsers,
   createFriendGroup, fetchFriendGroups, addGroupMember, removeGroupMember, deleteFriendGroup,
   fetchCollections, removeCollectionMember,
-  type FriendWithProfile, type FriendGroupWithMembers, type Collection,
+  type FriendWithProfile, type FriendGroupWithMembers, type Collection, type PublicProfile,
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
 import { useAuth } from '../context/AuthContext';
@@ -25,7 +25,9 @@ export function FriendsPage() {
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResult, setSearchResult] = useState<{ id: string; display_name: string; username: string | null } | null>(null);
+  const [searchResults, setSearchResults] = useState<PublicProfile[]>([]);
+  // Each keystroke starts a search; only the latest one may update the list.
+  const searchSeq = useRef(0);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -78,25 +80,27 @@ export function FriendsPage() {
   useEffect(() => { if (tab === 'groups') loadGroups(); }, [tab, loadGroups]);
   useEffect(() => { if (tab === 'collections') loadCollections(); }, [tab, loadCollections]);
 
-  // Search
+  // Search as you type: anyone whose username or name contains the text.
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResult(null);
+    const seq = ++searchSeq.current;
+    if (!searchQuery.trim().replace(/^@/, '')) {
+      setSearchResults([]);
       setSearchError(null);
+      setSearching(false);
       return;
     }
+    setSearching(true);
     const timer = setTimeout(async () => {
-      setSearching(true);
       setSearchError(null);
       try {
-        const result = await searchUserByUsername(searchQuery);
-        setSearchResult(result);
+        const results = await searchUsers(searchQuery);
+        if (seq === searchSeq.current) setSearchResults(results);
       } catch {
-        setSearchError('Search failed. Try again.');
+        if (seq === searchSeq.current) setSearchError('Search failed. Try again.');
       } finally {
-        setSearching(false);
+        if (seq === searchSeq.current) setSearching(false);
       }
-    }, 400);
+    }, 250);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -105,7 +109,7 @@ export function FriendsPage() {
     try {
       await sendFriendRequest(targetId);
       await loadFriends();
-      setSearchResult(null);
+      setSearchResults([]);
       setSearchQuery('');
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : 'Failed to send request.');
@@ -193,8 +197,8 @@ export function FriendsPage() {
   const pendingIncoming = friends.filter((f) => f.status === 'pending' && f.direction === 'incoming');
   const pendingOutgoing = friends.filter((f) => f.status === 'pending' && f.direction === 'outgoing');
 
-  const isAlreadyFriend = (userId: string) =>
-    friends.some((f) => f.user_id === userId && (f.status === 'accepted' || f.status === 'pending'));
+  const friendshipWith = (userId: string) =>
+    friends.find((f) => f.user_id === userId && (f.status === 'accepted' || f.status === 'pending'));
 
   return (
     <div className="min-h-screen overflow-y-auto bg-black px-6 pt-8 pb-24">
@@ -227,7 +231,7 @@ export function FriendsPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by username..."
+                  placeholder="Search by name or username..."
                   className="w-full rounded-card border border-gold/20 bg-black/40 py-3.5 pl-11 pr-4 text-white placeholder:text-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow"
                 />
                 {searching && (
@@ -239,32 +243,41 @@ export function FriendsPage() {
                 <p className="mt-2 text-sm text-danger">{searchError}</p>
               )}
 
-              {searchResult && (
-                <div className="mt-3 rounded-card border border-gold/30 bg-[#1a1a1a] p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-white">{searchResult.display_name}</p>
-                      <p className="text-sm text-ink-secondary">@{searchResult.username}</p>
-                    </div>
-                    {searchResult.id === currentUserId ? (
-                      <span className="text-sm text-ink-secondary">That's you!</span>
-                    ) : isAlreadyFriend(searchResult.id) ? (
-                      <span className="text-sm text-success">Already friends</span>
-                    ) : (
-                      <button
-                        onClick={() => handleSendRequest(searchResult.id)}
-                        disabled={actionLoading === searchResult.id}
-                        className="flex items-center gap-1.5 rounded-card bg-gold px-4 py-2 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
-                      >
-                        <UserPlus size={15} /> Add
-                      </button>
-                    )}
-                  </div>
-                </div>
+              {searchResults.length > 0 && (
+                <ul className="mt-3 divide-y divide-gold/10 overflow-hidden rounded-card border border-gold/30 bg-[#1a1a1a]">
+                  {searchResults.map((person) => {
+                    const friendship = friendshipWith(person.id);
+                    return (
+                      <li key={person.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-white">{person.display_name}</p>
+                          {person.username && (
+                            <p className="truncate text-sm text-ink-secondary">@{person.username}</p>
+                          )}
+                        </div>
+                        {person.id === currentUserId ? (
+                          <span className="shrink-0 text-sm text-ink-secondary">That's you!</span>
+                        ) : friendship?.status === 'accepted' ? (
+                          <span className="shrink-0 text-sm text-success">Friends</span>
+                        ) : friendship ? (
+                          <span className="shrink-0 text-sm text-ink-secondary">Pending</span>
+                        ) : (
+                          <button
+                            onClick={() => handleSendRequest(person.id)}
+                            disabled={actionLoading === person.id}
+                            className="flex shrink-0 items-center gap-1.5 rounded-card bg-gold px-4 py-2 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
+                          >
+                            <UserPlus size={15} /> Add
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
 
-              {!searchResult && !searching && searchQuery.trim() && (
-                <p className="mt-3 text-sm text-ink-secondary">No user found.</p>
+              {searchResults.length === 0 && !searching && !searchError && searchQuery.trim().replace(/^@/, '') && (
+                <p className="mt-3 text-sm text-ink-secondary">No users match "{searchQuery.trim()}".</p>
               )}
             </div>
 

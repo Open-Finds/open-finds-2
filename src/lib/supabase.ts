@@ -1139,6 +1139,15 @@ export async function searchUserByUsername(query: string): Promise<PublicProfile
   return ((data ?? []) as PublicProfile[])[0] ?? null;
 }
 
+/** Up to 10 people whose username or display name contains the text, best match first. */
+export async function searchUsers(query: string): Promise<PublicProfile[]> {
+  const clean = query.trim().replace(/^@/, '');
+  if (!clean) return [];
+  const { data, error } = await supabase.rpc('search_profiles', { p_query: clean });
+  if (error) throw error;
+  return (data ?? []) as PublicProfile[];
+}
+
 /** Names for friends, pending requests and group members; others are omitted. */
 async function fetchPublicProfiles(ids: string[]): Promise<Map<string, PublicProfile>> {
   if (ids.length === 0) return new Map();
