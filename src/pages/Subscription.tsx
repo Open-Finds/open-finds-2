@@ -38,10 +38,16 @@ const PREMIUM_FEATURES = [
 
 type PaidTier = Exclude<SubscriptionTier, 'free'>;
 
-function checkoutResult(): 'success' | 'cancelled' | null {
-  const query = window.location.hash.split('?')[1] ?? '';
-  const value = new URLSearchParams(query).get('checkout');
-  return value === 'success' || value === 'cancelled' ? value : null;
+const PAID_TIERS: PaidTier[] = ['premium_monthly', 'premium_yearly', 'lifetime'];
+
+function checkoutReturn(): { result: 'success' | 'cancelled' | null; tier: PaidTier | null } {
+  const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '');
+  const result = params.get('checkout');
+  const tier = params.get('tier') as PaidTier | null;
+  return {
+    result: result === 'success' || result === 'cancelled' ? result : null,
+    tier: tier && PAID_TIERS.includes(tier) ? tier : null,
+  };
 }
 
 function formatDate(iso: string | null) {
@@ -53,9 +59,8 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
   const { session, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, refreshProfile } = useAuth();
   const [busy, setBusy] = useState<PaidTier | 'portal' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [returned] = useState(checkoutResult);
+  const [{ result: returned, tier: boughtTier }] = useState(checkoutReturn);
   const [confirming, setConfirming] = useState(returned === 'success');
-  const startTier = useRef(subscriptionTier);
   const refresh = useRef(refreshProfile);
   refresh.current = refreshProfile;
   const userId = session?.user.id;
@@ -63,8 +68,9 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
   const isSubscriber = subscriptionTier === 'premium_monthly' || subscriptionTier === 'premium_yearly';
   const renewsOn = formatDate(subscriptionRenewsAt);
 
-  // Back from Stripe. The webhook usually lands within a second or two, so
-  // poll the profile briefly rather than trusting the redirect.
+  // Back from Stripe. The webhook usually lands within a second or two, and
+  // often before this page loads, so wait for the tier that was bought rather
+  // than for any change: the profile may already show it.
   useEffect(() => {
     if (returned) {
       window.history.replaceState(null, '', window.location.pathname + '#/subscription');
@@ -74,7 +80,10 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
     const timer = window.setInterval(async () => {
       tries += 1;
       const profile = await fetchProfile(userId).catch(() => null);
-      if (profile && profile.subscription_tier !== startTier.current) {
+      const done = boughtTier
+        ? profile?.subscription_tier === boughtTier
+        : profile != null && profile.subscription_tier !== 'free';
+      if (done) {
         window.clearInterval(timer);
         await refresh.current();
         setConfirming(false);
@@ -85,7 +94,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
       }
     }, 1500);
     return () => window.clearInterval(timer);
-  }, [returned, userId]);
+  }, [returned, boughtTier, userId]);
 
   const go = async (action: PaidTier | 'portal') => {
     setBusy(action);
@@ -120,7 +129,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
 
-      <div className="mx-auto w-full max-w-2xl">
+      <div className="mx-auto w-full max-w-6xl">
         <div className="mb-2 flex items-center gap-3">
           <Sparkles size={28} className="text-gold" />
           <h1 className="text-2xl font-bold text-white">Choose Your Plan</h1>
@@ -190,7 +199,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
                     : 'border-gold/15 bg-[#0d0d0d]'
                 }`}
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${
                       isCurrent ? 'bg-gold text-black' : 'bg-gold/10 text-gold'
@@ -202,7 +211,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
                       <p className="text-xs text-ink-secondary">{meta.tagline}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     <p className="text-2xl font-bold text-gold">{price}</p>
                     {meta.period && <p className="text-xs text-ink-secondary">{meta.period}</p>}
                   </div>

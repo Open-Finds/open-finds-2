@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
       ...(paidTier === "lifetime"
         ? { payment_intent_data: { metadata } }
         : { subscription_data: { metadata } }),
-      success_url: `${returnTo}?checkout=success`,
+      success_url: `${returnTo}?checkout=success&tier=${paidTier}`,
       cancel_url: `${returnTo}?checkout=cancelled`,
     });
 
