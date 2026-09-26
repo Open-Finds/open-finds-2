@@ -1119,25 +1119,32 @@ export async function updateDietaryPreferences(preferences: string[]): Promise<v
 
 export async function checkUsernameAvailable(username: string): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('username', username)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return true;
-  return session?.user.id === data.id;
+  const taken = await searchUserByUsername(username);
+  if (!taken) return true;
+  return session?.user.id === taken.id;
 }
 
-export async function searchUserByUsername(query: string): Promise<Profile | null> {
-  const clean = query.trim().replace(/^@/, '').toLowerCase();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, display_name, username, created_at')
-    .ilike('username', clean)
-    .maybeSingle();
+export type PublicProfile = { id: string; display_name: string; username: string | null };
+
+/**
+ * profiles is readable only by its owner (it also holds billing and dietary
+ * data), so other people are looked up through two functions that return
+ * just id, display name and username. See 20260927090000_public_profile_lookup.
+ */
+export async function searchUserByUsername(query: string): Promise<PublicProfile | null> {
+  const clean = query.trim().replace(/^@/, '');
+  if (!clean) return null;
+  const { data, error } = await supabase.rpc('find_profile_by_username', { p_username: clean });
   if (error) throw error;
-  return data as Profile | null;
+  return ((data ?? []) as PublicProfile[])[0] ?? null;
+}
+
+/** Names for friends, pending requests and group members; others are omitted. */
+async function fetchPublicProfiles(ids: string[]): Promise<Map<string, PublicProfile>> {
+  if (ids.length === 0) return new Map();
+  const { data, error } = await supabase.rpc('get_public_profiles', { p_ids: [...new Set(ids)] });
+  if (error) throw error;
+  return new Map(((data ?? []) as PublicProfile[]).map((p) => [p.id, p]));
 }
 
 // ── Friends ──
@@ -1248,12 +1255,7 @@ export async function fetchFriends(): Promise<FriendWithProfile[]> {
   );
   if (otherIds.length === 0) return [];
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, display_name, username')
-    .in('id', otherIds);
-
-  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const profileMap = await fetchPublicProfiles(otherIds);
 
   return (data as Friendship[]).map((f) => {
     const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
@@ -1325,12 +1327,7 @@ export async function fetchFriendGroups(): Promise<FriendGroupWithMembers[]> {
     .in('group_id', groupIds);
 
   const memberUserIds = [...new Set((members ?? []).map((m) => m.user_id))];
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, display_name, username')
-    .in('id', memberUserIds.length > 0 ? memberUserIds : ['00000000-0000-0000-0000-000000000000']);
-
-  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const profileMap = await fetchPublicProfiles(memberUserIds);
   const membersByGroup = new Map<string, { user_id: string; display_name: string; username: string | null }[]>();
   for (const m of members ?? []) {
     const arr = membersByGroup.get(m.group_id) ?? [];
