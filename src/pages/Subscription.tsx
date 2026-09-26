@@ -70,6 +70,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
   const [upgradedTo, setUpgradedTo] = useState<PaidTier | null>(null);
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [billingVersion, setBillingVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +104,9 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
         await refresh.current();
         setUpgradedTo(awaitingTier);
         setAwaitingTier(null);
+        // Buying Lifetime cancels the old subscription in the same webhook
+        // run; give that a moment before re-reading receipts and plan.
+        window.setTimeout(() => setBillingVersion((v) => v + 1), 3000);
       } else if (tries >= 20) {
         window.clearInterval(timer);
         setAwaitingTier(null);
@@ -124,7 +128,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
       .catch((err) => live && setError(err instanceof Error ? err.message : 'Billing is unavailable'))
       .finally(() => live && setBillingLoading(false));
     return () => { live = false; };
-  }, [userId, subscriptionTier]);
+  }, [userId, subscriptionTier, billingVersion]);
 
   const openCheckout = (tier: PaidTier) => {
     setError(null);

@@ -277,7 +277,7 @@ export function BillingPanel({
                     ? `${card.brand.charAt(0).toUpperCase()}${card.brand.slice(1)} •••• ${card.last4} · ${String(card.expMonth).padStart(2, '0')}/${String(card.expYear).slice(-2)}`
                     : 'No card on file'}
                 </span>
-                {sub && (
+                {sub && tier !== 'lifetime' && (
                   <Button size="sm" variant="ghost" onClick={() => setEditingCard(true)} disabled={busy}>
                     {card ? 'Change card' : 'Add card'}
                   </Button>
