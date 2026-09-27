@@ -402,12 +402,7 @@ export async function createStops(
   const userId = getUserId();
   const ownerId = await getAuthUserId();
   if (ownerId) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('subscription_tier')
-      .eq('id', ownerId)
-      .maybeSingle();
-    const max = getPlanLimits((profile?.subscription_tier ?? 'free') as SubscriptionTier).maxStopsPerPlan;
+    const max = getPlanLimits(await limitsTier(ownerId)).maxStopsPerPlan;
     const { count, error: countError } = await supabase
       .from('stops')
       .select('id', { count: 'exact', head: true })
@@ -1953,17 +1948,35 @@ export function getPlanLimits(tier: SubscriptionTier) {
   return SUBSCRIPTION_PLANS[tier] ?? SUBSCRIPTION_PLANS.free;
 }
 
+/**
+ * Open testing: while app_settings.premium_unlocked is on, everyone gets
+ * Premium limits without paying. The database enforces the same switch;
+ * this only keeps the app's own checks and prompts in step with it.
+ */
+export async function fetchPremiumUnlocked(): Promise<boolean> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'premium_unlocked')
+    .maybeSingle();
+  return data?.value === true;
+}
+
+/** The tier whose limits apply to this account right now. */
+async function limitsTier(ownerId: string): Promise<SubscriptionTier> {
+  const [unlocked, { data }] = await Promise.all([
+    fetchPremiumUnlocked(),
+    supabase.from('profiles').select('subscription_tier').eq('id', ownerId).maybeSingle(),
+  ]);
+  if (unlocked) return 'premium_monthly';
+  return (data?.subscription_tier ?? 'free') as SubscriptionTier;
+}
+
 /** How many more active (today or later, not canceled) plans this account can start. */
 export async function remainingActivePlanSlots(): Promise<number> {
   const ownerId = await getAuthUserId();
   if (!ownerId) return Infinity;
-  const { data } = await supabase
-    .from('profiles')
-    .select('subscription_tier')
-    .eq('id', ownerId)
-    .maybeSingle();
-  const tier = (data?.subscription_tier ?? 'free') as SubscriptionTier;
-  const max = getPlanLimits(tier).maxPlans;
+  const max = getPlanLimits(await limitsTier(ownerId)).maxPlans;
   if (!Number.isFinite(max)) return Infinity;
   const today = new Date().toLocaleDateString('en-CA');
   const { count, error } = await supabase

@@ -60,7 +60,7 @@ type Confirm = { kind: 'cancel' } | { kind: 'switch'; to: 'premium_monthly' | 'p
 const price = (tier: PaidTier) => `$${(SUBSCRIPTION_PLANS[tier].priceCents / 100).toFixed(2)}`;
 
 export function SubscriptionPage({ onBack }: { onBack: () => void }) {
-  const { session, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, refreshProfile } = useAuth();
+  const { session, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, premiumUnlocked, refreshProfile } = useAuth();
   const [initialReturn] = useState(checkoutReturn);
   const [checkoutTier, setCheckoutTier] = useState<PaidTier | null>(null);
   // Set once a payment completes; cleared when the webhook has updated the tier.
@@ -220,6 +220,12 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
             : ` It renews on ${renewsOn}.`)}
         </p>
 
+        {premiumUnlocked && subscriptionTier === 'free' && (
+          <p className="mb-4 flex items-center gap-2 rounded-card border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+            <Sparkles size={16} className="shrink-0" />
+            Everything is unlocked while we test: you have full Premium access for free. Nothing to pay.
+          </p>
+        )}
         {subscriptionStatus === 'past_due' && (
           <p className="mb-4 rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
             Your last payment didn't go through. Update your card under Billing to keep Premium.

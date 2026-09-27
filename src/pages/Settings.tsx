@@ -17,7 +17,7 @@ const DIETARY_OPTIONS = [
 ];
 
 export function SettingsPage({ onBack }: { onBack: () => void }) {
-  const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, isVenuePartner } = useAuth();
+  const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, premiumUnlocked, isVenuePartner } = useAuth();
   const currentEmail = session?.user.email ?? '';
 
   const [dietarySelections, setDietarySelections] = useState<Set<string>>(new Set(dietaryPreferences));
@@ -332,7 +332,11 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           </h2>
           <div className="mb-4 flex items-center justify-between">
             <span className="text-sm text-ink-secondary">Current plan</span>
-            <span className="text-sm font-bold text-gold">{SUBSCRIPTION_PLANS[subscriptionTier].label}</span>
+            <span className="text-sm font-bold text-gold">
+              {premiumUnlocked && subscriptionTier === 'free'
+                ? 'Premium (free while testing)'
+                : SUBSCRIPTION_PLANS[subscriptionTier].label}
+            </span>
           </div>
           <button
             onClick={() => navigate('/subscription')}

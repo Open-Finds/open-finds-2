@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, fetchProfile, claimDeviceRows, type SubscriptionTier } from '../lib/supabase';
+import { supabase, fetchProfile, fetchPremiumUnlocked, claimDeviceRows, type SubscriptionTier } from '../lib/supabase';
 import { setMonitoringUser } from '../lib/monitoring';
 
 type AuthContextType = {
@@ -15,6 +15,8 @@ type AuthContextType = {
   /** Stripe's view: active, trialing, past_due, or canceling (ends at renewsAt). */
   subscriptionStatus: string;
   subscriptionRenewsAt: string | null;
+  /** Open testing: everyone has Premium limits, whatever their tier. */
+  premiumUnlocked: boolean;
   isVenuePartner: boolean;
   refreshProfile: () => Promise<void>;
   setOnboardingCompleted: (v: boolean) => void;
@@ -31,6 +33,7 @@ const AuthContext = createContext<AuthContextType>({
   subscriptionTier: 'free',
   subscriptionStatus: 'active',
   subscriptionRenewsAt: null,
+  premiumUnlocked: false,
   isVenuePartner: false,
   refreshProfile: async () => {},
   setOnboardingCompleted: () => {},
@@ -47,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>('free');
   const [subscriptionStatus, setSubscriptionStatus] = useState('active');
   const [subscriptionRenewsAt, setSubscriptionRenewsAt] = useState<string | null>(null);
+  const [premiumUnlocked, setPremiumUnlocked] = useState(false);
   const [isVenuePartner, setIsVenuePartner] = useState(false);
 
   const loadProfile = async (userId: string) => {
@@ -59,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSubscriptionTier(profile?.subscription_tier ?? 'free');
       setSubscriptionStatus(profile?.subscription_status ?? 'active');
       setSubscriptionRenewsAt(profile?.subscription_renews_at ?? null);
+      setPremiumUnlocked(await fetchPremiumUnlocked().catch(() => false));
       setIsVenuePartner(profile?.is_venue_partner ?? false);
     } catch {
       setOnboardingCompletedState(false);
@@ -126,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, isVenuePartner, refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
+    <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, premiumUnlocked, isVenuePartner, refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
       {children}
     </AuthContext.Provider>
   );

@@ -82,12 +82,16 @@ Deno.serve(async (req: Request) => {
     const purposeName = purpose === "extract" || purpose === "discover" ? purpose : null;
     let tier = "free";
     if (purposeName) {
-      const { data: profile } = await serviceClient()
-        .from("profiles")
-        .select("subscription_tier")
-        .eq("id", auth.user.id)
-        .maybeSingle();
-      tier = (profile?.subscription_tier as string | undefined) ?? "free";
+      const db = serviceClient();
+      const [{ data: profile }, { data: unlock }] = await Promise.all([
+        db.from("profiles").select("subscription_tier").eq("id", auth.user.id).maybeSingle(),
+        // Open testing: app_settings.premium_unlocked gives everyone the
+        // paid limits (see 20260927140000_premium_unlock_switch).
+        db.from("app_settings").select("value").eq("key", "premium_unlocked").maybeSingle(),
+      ]);
+      tier = unlock?.value === true
+        ? "premium_monthly"
+        : (profile?.subscription_tier as string | undefined) ?? "free";
     }
     const dailyFree = tier === "free" && purposeName;
     const limit = await consumeRateLimit(

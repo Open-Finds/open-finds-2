@@ -1,6 +1,9 @@
 \set QUIET on
 SET client_min_messages TO notice;
 
+-- These assert the Free caps, so run with the open-testing switch off.
+UPDATE app_settings SET value = 'false' WHERE key = 'premium_unlocked';
+
 INSERT INTO auth.users (id, email) VALUES
   ('12121212-1212-1212-1212-121212121212', 'cap@x.com')
 ON CONFLICT DO NOTHING;
