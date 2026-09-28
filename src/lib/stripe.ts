@@ -15,7 +15,12 @@ export function getStripe(): Promise<Stripe | null> {
   if (!publishableKey) return Promise.resolve(null);
   // A failed load (flaky network, blocked script) must not be cached, or every
   // later attempt fails too without trying again.
-  stripePromise ??= loadStripe(publishableKey).catch((err) => {
+  // developerTools: Stripe shows a floating "stripe" test-mode assistant badge
+  // on every page once Stripe.js has loaded. It never appears with live keys,
+  // but testers took it for part of the app.
+  stripePromise ??= loadStripe(publishableKey, {
+    developerTools: { assistant: { enabled: false } },
+  }).catch((err) => {
     stripePromise = null;
     throw err;
   });
