@@ -1988,9 +1988,9 @@ async function callBilling<T>(fn: 'stripe-checkout' | 'stripe-billing', body: un
   return data;
 }
 
-/** Client secret for the embedded checkout form. */
+/** Client secret for the in-app (custom UI) checkout form. */
 export async function startCheckout(tier: Exclude<SubscriptionTier, 'free'>): Promise<string> {
-  const { clientSecret } = await callBilling<{ clientSecret: string }>('stripe-checkout', { tier, embedded: true });
+  const { clientSecret } = await callBilling<{ clientSecret: string }>('stripe-checkout', { tier, ui: 'custom' });
   return clientSecret;
 }
 

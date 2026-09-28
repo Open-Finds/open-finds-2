@@ -30,7 +30,16 @@ export const stripeAppearance: Appearance = {
     colorBackground: '#1A1A1A',
     colorText: '#FFFFFF',
     colorDanger: '#EF4444',
+    colorTextSecondary: '#A3A3A3',
+    colorTextPlaceholder: '#6B6B6B',
     borderRadius: '12px',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  rules: {
+    '.Input': { backgroundColor: '#0D0D0D', border: '1px solid rgba(212, 175, 53, 0.25)', boxShadow: 'none' },
+    '.Input:focus': { borderColor: '#D4AF35', boxShadow: '0 0 0 1px #D4AF35' },
+    '.Tab': { backgroundColor: '#0D0D0D', border: '1px solid rgba(212, 175, 53, 0.25)' },
+    '.Tab--selected': { borderColor: '#D4AF35', backgroundColor: 'rgba(212, 175, 53, 0.1)' },
+    '.Label': { color: '#A3A3A3' },
   },
 };

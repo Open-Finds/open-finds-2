@@ -2,12 +2,14 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
-import { LOOKUP_KEYS, type PaidTier, stripeClient } from "../_shared/stripe.ts";
+import { LOOKUP_KEYS, type PaidTier, Stripe, stripeClient } from "../_shared/stripe.ts";
 import { appOrigin } from "../_shared/origin.ts";
 
 /**
- * Starts a Stripe Checkout for Premium. With { embedded: true } it returns
- * the client secret of an embedded session, which the app mounts in place;
+ * Starts a Stripe Checkout for Premium. With { ui: "custom" } it returns the
+ * client secret of a custom-UI session: the app renders Stripe's Payment
+ * Element in its own themed layout. { embedded: true } returns an embedded
+ * session (Stripe's white form, kept for older app builds);
  * otherwise the URL of Stripe's hosted page.
  *
  * Nothing here grants Premium. The tier changes only when stripe-webhook
@@ -30,7 +32,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const body = await req.json().catch(() => null) as { tier?: unknown; embedded?: unknown } | null;
+    const body = await req.json().catch(() => null) as { tier?: unknown; embedded?: unknown; ui?: unknown } | null;
     const tier = body?.tier;
     if (typeof tier !== "string" || !(tier in LOOKUP_KEYS)) {
       return json(req, { error: "Choose premium_monthly, premium_yearly or lifetime" }, 400);
@@ -101,6 +103,26 @@ Deno.serve(async (req) => {
         ? { payment_intent_data: { metadata } }
         : { subscription_data: { metadata } }),
     };
+
+    if (body?.ui === "custom") {
+      // Custom UI is the only mode that takes the app's own theme. It needs
+      // API version 2025-03-31.basil; the rest of the billing code stays on
+      // the pinned version (basil moves current_period_end and charge
+      // invoices), so the newer version is used for this one call only.
+      const session = await stripe.checkout.sessions.create(
+        {
+          ...common,
+          ui_mode: "custom",
+          // Cards only (Apple Pay and Google Pay count as cards). Otherwise
+          // Stripe Link adds its own sign-up block with email, phone and name
+          // fields, which doubles the form's height on a phone.
+          payment_method_types: ["card"],
+          return_url: `${returnTo}?checkout=success&tier=${paidTier}`,
+        } as unknown as Stripe.Checkout.SessionCreateParams,
+        { apiVersion: "2025-03-31.basil" },
+      );
+      return json(req, { clientSecret: session.client_secret });
+    }
 
     if (body?.embedded === true) {
       // Embedded Checkout: the payment form renders inside the app, so there

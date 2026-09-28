@@ -1,13 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   Elements,
-  EmbeddedCheckout,
-  EmbeddedCheckoutProvider,
   PaymentElement,
   useElements,
   useStripe,
 } from '@stripe/react-stripe-js';
-import { CreditCard, Download, Loader2, Receipt } from 'lucide-react';
+import {
+  CheckoutElementsProvider,
+  PaymentElement as CheckoutPaymentElement,
+  useCheckoutElements,
+} from '@stripe/react-stripe-js/checkout';
+import { Check, CreditCard, Download, Loader2, Lock, Receipt, Tag } from 'lucide-react';
 import type { Stripe } from '@stripe/stripe-js';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
@@ -31,8 +34,9 @@ function formatMoney(cents: number, currency: string) {
 }
 
 /**
- * Stripe's checkout form, mounted inside the app. Payment happens in Stripe's
- * iframe, so card details never touch our code; the tier changes when the
+ * Checkout inside the app, in the app's own theme. Stripe's Payment Element
+ * (a custom-UI Checkout Session) holds the card fields, so card details never
+ * touch our code; everything around it is ours. The tier changes when the
  * webhook confirms, which the page waits for after onComplete.
  */
 export function CheckoutDialog({
@@ -47,6 +51,7 @@ export function CheckoutDialog({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [stripe, setStripe] = useState<Stripe | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -67,13 +72,14 @@ export function CheckoutDialog({
   }, [tier]);
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+    <Dialog open onOpenChange={(open) => !open && !paying && onClose()}>
+      {/* Scrolls as a whole on short screens; nothing inside may shrink and clip. */}
+      <DialogContent className="sm:max-h-[90dvh] sm:max-w-lg [&>*]:shrink-0">
         <DialogHeader>
           <DialogTitle className="text-white">
             {tier === 'lifetime' ? 'Buy Lifetime' : `Upgrade to ${SUBSCRIPTION_PLANS[tier].label}`}
           </DialogTitle>
-          <DialogDescription>Secure payment by Stripe. You stay in Open Finds the whole time.</DialogDescription>
+          <DialogDescription>Pay securely without leaving Open Finds.</DialogDescription>
         </DialogHeader>
         {error ? (
           <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
@@ -84,18 +90,172 @@ export function CheckoutDialog({
             <Loader2 size={16} className="animate-spin" /> Loading secure checkout…
           </div>
         ) : (
-          // Stripe's form is light; the rounded panel keeps it from floating on black.
-          <div className="overflow-hidden rounded-card bg-white">
-            <EmbeddedCheckoutProvider
-              stripe={stripe}
-              options={{ clientSecret, onComplete: () => onComplete(tier) }}
-            >
-              <EmbeddedCheckout />
-            </EmbeddedCheckoutProvider>
-          </div>
+          <CheckoutElementsProvider
+            stripe={stripe}
+            options={{ clientSecret, elementsOptions: { appearance: stripeAppearance } }}
+          >
+            <CheckoutForm tier={tier} onPaying={setPaying} onPaid={() => onComplete(tier)} />
+          </CheckoutElementsProvider>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+const PLAN_BLURB: Record<PaidTier, string> = {
+  premium_monthly: 'Unlimited plans and AI, up to 5 stops, no ads',
+  premium_yearly: 'Everything in Premium, two months free',
+  lifetime: 'Everything in Premium, paid once',
+};
+
+function CheckoutForm({
+  tier,
+  onPaying,
+  onPaid,
+}: {
+  tier: PaidTier;
+  onPaying: (paying: boolean) => void;
+  onPaid: () => void;
+}) {
+  const state = useCheckoutElements();
+  const [paying, setPaying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [promo, setPromo] = useState('');
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
+  if (state.type === 'loading') {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-sm text-ink-secondary">
+        <Loader2 size={16} className="animate-spin" /> Loading secure checkout…
+      </div>
+    );
+  }
+  if (state.type === 'error') {
+    return (
+      <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+        {state.error.message}
+      </p>
+    );
+  }
+
+  const { checkout } = state;
+  const total = checkout.total.total.amount;
+  const interval = checkout.recurring?.interval;
+  const discount = checkout.discountAmounts?.[0] ?? null;
+
+  const setBusy = (busy: boolean) => {
+    setPaying(busy);
+    onPaying(busy);
+  };
+
+  const pay = async () => {
+    setBusy(true);
+    setError(null);
+    const result = await checkout.confirm({ redirect: 'if_required' });
+    if (result.type === 'error') {
+      setError(result.error.message);
+      setBusy(false);
+      return;
+    }
+    onPaid();
+  };
+
+  const applyPromo = async () => {
+    if (!promo.trim()) return;
+    setPromoBusy(true);
+    setPromoError(null);
+    const result = await checkout.applyPromotionCode(promo.trim());
+    if (result.type === 'error') setPromoError(result.error.message);
+    else setPromo('');
+    setPromoBusy(false);
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-card border border-gold/25 bg-black/40 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-semibold text-white">{SUBSCRIPTION_PLANS[tier].label}</p>
+            <p className="mt-0.5 text-xs text-ink-secondary">{PLAN_BLURB[tier]}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-2xl font-bold text-gold">{total}</p>
+            <p className="text-xs text-ink-secondary">{interval ? `per ${interval}` : 'one payment'}</p>
+          </div>
+        </div>
+        {discount && (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-gold/15 pt-3 text-sm">
+            <span className="flex items-center gap-1.5 text-success">
+              <Tag size={14} /> {discount.displayName}
+            </span>
+            <span className="flex items-center gap-3">
+              <span className="text-success">−{discount.amount}</span>
+              <button
+                type="button"
+                onClick={() => { void checkout.removePromotionCode(); }}
+                className="text-xs text-ink-secondary underline-offset-2 hover:text-gold hover:underline"
+              >
+                Remove
+              </button>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {checkout.email && (
+        <p className="text-sm text-ink-secondary">
+          Receipt goes to <span className="text-white">{checkout.email}</span>
+        </p>
+      )}
+
+      {/* Link's optional sign-up block adds email, phone and name fields; keep the form short. */}
+      <CheckoutPaymentElement options={{ layout: 'tabs', wallets: { link: 'never' } }} />
+
+      {!discount && (
+        promoOpen ? (
+          <div>
+            <div className="flex gap-2">
+              <input
+                value={promo}
+                onChange={(e) => setPromo(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void applyPromo(); } }}
+                placeholder="Promo code"
+                aria-label="Promo code"
+                className="min-w-0 flex-1 rounded-card border border-gold/25 bg-black/40 px-4 py-2.5 text-sm text-white outline-none placeholder:text-ink-secondary/60 focus:border-gold"
+              />
+              <Button type="button" size="sm" variant="outline" onClick={applyPromo} disabled={promoBusy || !promo.trim()}>
+                {promoBusy ? <Loader2 className="animate-spin" /> : <Check />} Apply
+              </Button>
+            </div>
+            {promoError && <p className="mt-1.5 text-xs text-red-300">{promoError}</p>}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPromoOpen(true)}
+            className="flex w-fit items-center gap-1.5 text-sm text-gold underline-offset-2 hover:underline"
+          >
+            <Tag size={14} /> Add a promo code
+          </button>
+        )
+      )}
+
+      {error && (
+        <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+          {error}
+        </p>
+      )}
+
+      <Button size="lg" full onClick={pay} disabled={paying || !checkout.canConfirm} className="shadow-gold-glow">
+        {paying ? <Loader2 className="animate-spin" /> : <Lock />}
+        {paying ? 'Processing…' : interval ? `Subscribe · ${total}/${interval}` : `Pay ${total}`}
+      </Button>
+      <p className="-mt-2 text-center text-xs text-ink-secondary">
+        {interval ? 'Cancel anytime from Billing. ' : ''}Payments are processed securely by Stripe.
+      </p>
+    </div>
   );
 }
 
