@@ -117,12 +117,14 @@ Deno.serve(async (req: Request) => {
       // compose the notification ourselves; previously title/body came
       // straight from the request, which made this an open channel for
       // pushing arbitrary text to any host whose plan id was known.
+      // plans.user_id is the host's device id, not an account; notifications
+      // and push subscriptions are keyed by the account in owner_id.
       const { data: plan } = await supabase
         .from("plans")
-        .select("user_id")
+        .select("owner_id")
         .eq("id", body.plan_id)
         .maybeSingle();
-      if (!plan?.user_id) {
+      if (!plan) {
         return new Response(JSON.stringify({ error: "Plan not found" }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -163,7 +165,13 @@ Deno.serve(async (req: Request) => {
       resolvedType = "rsvp";
       resolvedData = { type: "rsvp", url: `/plan/${body.plan_id}` };
 
-      userIds = [plan.user_id];
+      if (!plan.owner_id) {
+        // A plan made before the host signed in has no account to notify.
+        return new Response(JSON.stringify({ sent: 0, failed: 0, total: 0, notified: false }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userIds = [plan.owner_id];
     } else {
       userIds = body.user_ids ?? (body.user_id ? [body.user_id] : []);
       resolvedTitle = (body.title ?? "").slice(0, 200);
