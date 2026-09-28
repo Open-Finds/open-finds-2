@@ -456,25 +456,30 @@ export type PlanHistoryEntry = {
 export async function fetchRecentPlanHistory(limit = 12): Promise<PlanHistoryEntry[]> {
   const { data: plans, error } = await supabase
     .from('plans')
-    .select('id, title, date, location')
+    .select('id, title, date, location, type')
     .eq('canceled', false)
     .is('trip_id', null)
     .order('date', { ascending: false })
     .limit(limit);
   if (error) throw error;
-  const rows = (plans ?? []) as { id: string; title: string; date: string; location: string | null }[];
+  const rows = (plans ?? []) as { id: string; title: string; date: string; location: string | null; type: string | null }[];
   if (rows.length === 0) return [];
 
-  const { data: stops } = await supabase
+  // stops has no type column. A curated plan records its vibes in plans.type
+  // ("food,bar,dessert") in stop order, so the nth stop takes the nth vibe.
+  const { data: stops, error: stopsError } = await supabase
     .from('stops')
-    .select('plan_id, name, address, type')
+    .select('plan_id, name, address')
     .in('plan_id', rows.map((p) => p.id))
     .order('sort_order', { ascending: true });
+  if (stopsError) throw stopsError;
 
+  const vibesByPlan = new Map(rows.map((p) => [p.id, (p.type ?? '').split(',').map((t) => t.trim()).filter(Boolean)]));
   const byPlan = new Map<string, PlanHistoryEntry['stops']>();
-  for (const st of (stops ?? []) as { plan_id: string; name: string; address: string; type?: string }[]) {
+  for (const st of (stops ?? []) as { plan_id: string; name: string; address: string }[]) {
     const list = byPlan.get(st.plan_id) ?? [];
-    list.push({ name: st.name, address: st.address, type: st.type ?? 'food' });
+    const vibes = vibesByPlan.get(st.plan_id) ?? [];
+    list.push({ name: st.name, address: st.address, type: vibes[list.length] ?? vibes[vibes.length - 1] ?? 'food' });
     byPlan.set(st.plan_id, list);
   }
   return rows.map((p) => ({
@@ -1180,13 +1185,6 @@ export async function sendFriendRequest(targetUserId: string): Promise<void> {
     .insert({ requester_id: session.user.id, addressee_id: targetUserId, status: 'pending' });
   if (error) throw error;
 
-  await supabase.from('notifications').insert({
-    user_id: targetUserId,
-    type: 'friend_request',
-    title: 'New friend request',
-    body: 'Someone wants to be your friend',
-    data: { from_user_id: session.user.id },
-  });
 
   await sendPushNotification({
     userId: targetUserId,
@@ -1209,13 +1207,6 @@ export async function acceptFriendRequest(friendshipId: string): Promise<void> {
   if (error) throw error;
 
   const requesterId = (data as { requester_id: string }).requester_id;
-  await supabase.from('notifications').insert({
-    user_id: requesterId,
-    type: 'friend_accepted',
-    title: 'Friend request accepted',
-    body: 'You are now friends',
-    data: { from_user_id: session.user.id },
-  });
 
   await sendPushNotification({
     userId: requesterId,
@@ -1389,13 +1380,6 @@ export async function inviteUserToPlan(planId: string, userId: string): Promise<
     .insert({ plan_id: planId, invited_user_id: userId, invited_by: session.user.id });
   if (error) throw error;
 
-  await supabase.from('notifications').insert({
-    user_id: userId,
-    type: 'plan_invite',
-    title: 'New event invite',
-    body: 'You have been invited to an event',
-    data: { plan_id: planId, from_user_id: session.user.id },
-  });
 
   await sendPushNotification({
     userId,
@@ -1420,18 +1404,6 @@ export async function inviteGroupToPlan(planId: string, groupId: string): Promis
     .eq('group_id', groupId);
 
   const memberIds = (members ?? []).map((m) => m.user_id);
-
-  const notifications = memberIds.map((uid) => ({
-    user_id: uid,
-    type: 'plan_invite',
-    title: 'New event invite',
-    body: 'Your group has been invited to an event',
-    data: { plan_id: planId, from_user_id: session.user.id },
-  }));
-
-  if (notifications.length > 0) {
-    await supabase.from('notifications').insert(notifications);
-  }
 
   if (memberIds.length > 0) {
     await sendPushNotificationToMany({
@@ -1619,6 +1591,11 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 // ── Send Push Notification (edge function) ──
 
+/**
+ * Writes the in-app notification (server-side, since a user may not insert
+ * rows for someone else) and then tries a web push. Callers should not also
+ * insert into notifications themselves: RLS refuses it with a 403.
+ */
 export async function sendPushNotification(params: {
   userId: string;
   title: string;

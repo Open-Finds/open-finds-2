@@ -341,14 +341,18 @@ export async function discoverSmartVenueCandidates(
     typeof location === 'string'
       ? location
       : `latitude ${location.lat.toFixed(4)}, longitude ${location.lon.toFixed(4)}`;
-  const vibeLabels = vibes
-    .map((v) =>
-      v === 'food' ? 'restaurants or cafes' :
-      v === 'bar' ? 'bars, pubs, cocktail bars, wine bars, or breweries' :
-      v === 'activity' ? 'activities like escape rooms, bowling, arcade, mini-golf, or experiences' :
-      'dessert spots like gelato shops, cake shops, ice creameries, or dessert bars'
-    )
-    .join(', ');
+  const describe = (v: VenueType) =>
+    v === 'food' ? 'restaurants or cafes' :
+    v === 'bar' ? 'bars, pubs, cocktail bars, wine bars, or breweries' :
+    v === 'activity' ? 'activities like escape rooms, bowling, arcade, mini-golf, or experiences' :
+    'dessert spots like gelato shops, cake shops, ice creameries, or dessert bars';
+  const vibeLabels = vibes.map(describe).join(', ');
+  // The night gets one stop per vibe, so every vibe needs candidates. Asked
+  // for a single mixed list of 8, the model returned all-food for a
+  // food + bar + dessert night.
+  const perVibe = 3;
+  const total = Math.max(8, perVibe * vibes.length);
+  const quota = vibes.map((v) => `at least ${perVibe} with type '${v}' (${describe(v)})`).join('; ');
 
   const savedSummary = savedVenues.length > 0
     ? savedVenues.map((v) => `- ${v.name} (${v.type}, ${v.address})`).join('\n')
@@ -389,7 +393,7 @@ export async function discoverSmartVenueCandidates(
       {
         role: 'system',
         content:
-          `You are a local venue discovery assistant for Australia. Use web search to find 8 real, well-known venues near "${locationStr}". ${travelHint} The user is looking for: ${vibeLabels}. ${tasteGuidance}${historyGuidance}${dietaryGuidance} ${savedNames || historyNames.length ? `Do NOT include any of these venues the user has already saved or visited: ${[savedNames, ...historyNames].filter(Boolean).join(', ')}.` : ''} For each venue return: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'), (3) the type which must be exactly one of: 'food', 'activity', 'dessert', 'bar', and (4) a link to the venue's Instagram or website if findable, or null. Return a JSON object: {"venues": [{"name": "...", "address": "...", "type": "food|activity|dessert|bar", "vibe_link": "..." or null}]}. Only include real venues that actually exist. Do not invent or hallucinate venues.`,
+          `You are a local venue discovery assistant for Australia. Use web search to find ${total} real, well-known venues near "${locationStr}". ${travelHint} The user is looking for: ${vibeLabels}. You MUST cover every one of these types: ${quota}. Label each venue by what people mainly go there for: a place that is chiefly a bar is 'bar' even if it serves food, and a gelato or dessert shop is 'dessert', not 'food'. ${tasteGuidance}${historyGuidance}${dietaryGuidance} ${savedNames || historyNames.length ? `Do NOT include any of these venues the user has already saved or visited: ${[savedNames, ...historyNames].filter(Boolean).join(', ')}.` : ''} For each venue return: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'), (3) the type which must be exactly one of: 'food', 'activity', 'dessert', 'bar', and (4) a link to the venue's Instagram or website if findable, or null. Return a JSON object: {"venues": [{"name": "...", "address": "...", "type": "food|activity|dessert|bar", "vibe_link": "..." or null}]}. Only include real venues that actually exist. Do not invent or hallucinate venues.`,
       },
       { role: 'user', content: `Find ${vibeLabels} near ${locationStr} that match my taste${dietaryPreferences && dietaryPreferences.length > 0 ? ` and accommodate my dietary needs (${dietaryPreferences.join(', ')})` : ''}` },
     ],

@@ -20,18 +20,30 @@ interface PushRequestBody {
   type?: string;
 }
 
-async function buildVapidKeyPair(privateKeyB64Url: string) {
-  const tempKey = await crypto.subtle.importKey(
-    "jwk",
-    { kty: "EC", crv: "P-256", d: privateKeyB64Url, ext: true },
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["sign"]
-  );
-  const fullJwk = await crypto.subtle.exportKey("jwk", tempKey);
+function b64urlToBytes(value: string): Uint8Array {
+  const b64 = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
 
-  const privateKeyJwk = { kty: "EC", crv: "P-256", x: fullJwk.x, y: fullJwk.y, d: fullJwk.d, ext: true };
-  const publicKeyJwk = { kty: "EC", crv: "P-256", x: fullJwk.x, y: fullJwk.y, ext: true };
+function bytesToB64url(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * The VAPID pair as JWKs. The runtime will not import a P-256 private key
+ * from `d` alone ("'x' property of JsonWebKey is required"), so the public
+ * key (the same value as the app's VITE_VAPID_PUBLIC_KEY: a base64url,
+ * uncompressed 65-byte point) supplies x and y.
+ */
+async function buildVapidKeyPair(privateKeyB64Url: string, publicKeyB64Url: string) {
+  const point = b64urlToBytes(publicKeyB64Url);
+  if (point.length !== 65 || point[0] !== 4) {
+    throw new Error("VAPID_PUBLIC_KEY must be an uncompressed P-256 public key");
+  }
+  const x = bytesToB64url(point.slice(1, 33));
+  const y = bytesToB64url(point.slice(33, 65));
+  const privateKeyJwk = { kty: "EC", crv: "P-256", x, y, d: privateKeyB64Url, ext: true };
+  const publicKeyJwk = { kty: "EC", crv: "P-256", x, y, ext: true };
 
   return webpush.importVapidKeys(
     { privateKey: privateKeyJwk, publicKey: publicKeyJwk },
@@ -184,7 +196,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
-    if (!vapidPrivateKey) {
+    const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
+    if (!vapidPrivateKey || !vapidPublicKey) {
       // Not an error from the caller's point of view — they asked for a
       // notification and got one. Push just isn't set up on this project.
       return new Response(JSON.stringify({ sent: 0, failed: 0, total: 0, push: "not_configured" }), {
@@ -192,7 +205,16 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const vapidKeys = await buildVapidKeyPair(vapidPrivateKey);
+    let vapidKeys: Awaited<ReturnType<typeof buildVapidKeyPair>>;
+    try {
+      vapidKeys = await buildVapidKeyPair(vapidPrivateKey, vapidPublicKey);
+    } catch (err) {
+      // Same as unconfigured: the in-app notification is already written.
+      console.error("[push] VAPID keys are invalid", (err as Error).message);
+      return new Response(JSON.stringify({ sent: 0, failed: 0, total: 0, push: "misconfigured" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const appServer = await webpush.ApplicationServer.new({
       contactInformation: "mailto:noreply@openfinds.app",
       vapidKeys,

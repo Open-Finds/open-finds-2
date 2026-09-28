@@ -8,6 +8,7 @@ import {
   useStripe,
 } from '@stripe/react-stripe-js';
 import { CreditCard, Download, Loader2, Receipt } from 'lucide-react';
+import type { Stripe } from '@stripe/stripe-js';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { getStripe, stripeAppearance } from '../lib/stripe';
@@ -22,6 +23,8 @@ import {
 } from '../lib/supabase';
 
 type PaidTier = Exclude<SubscriptionTier, 'free'>;
+
+const STRIPE_LOAD_ERROR = "Couldn't load secure checkout. Check your connection and try again.";
 
 function formatMoney(cents: number, currency: string) {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100);
@@ -42,12 +45,23 @@ export function CheckoutDialog({
   onComplete: (tier: PaidTier) => void;
 }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [stripe, setStripe] = useState<Stripe | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
-    startCheckout(tier)
-      .then((secret) => live && setClientSecret(secret))
+    // Load Stripe.js alongside the session so a failed script load is shown
+    // here instead of surfacing as an uncaught error inside the provider.
+    Promise.all([
+      startCheckout(tier),
+      getStripe().catch(() => { throw new Error(STRIPE_LOAD_ERROR); }),
+    ])
+      .then(([secret, loaded]) => {
+        if (!live) return;
+        if (!loaded) throw new Error(STRIPE_LOAD_ERROR);
+        setStripe(loaded);
+        setClientSecret(secret);
+      })
       .catch((err) => live && setError(err instanceof Error ? err.message : 'Checkout is unavailable'));
     return () => { live = false; };
   }, [tier]);
@@ -65,7 +79,7 @@ export function CheckoutDialog({
           <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
             {error}
           </p>
-        ) : !clientSecret ? (
+        ) : !clientSecret || !stripe ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-ink-secondary">
             <Loader2 size={16} className="animate-spin" /> Loading secure checkout…
           </div>
@@ -73,7 +87,7 @@ export function CheckoutDialog({
           // Stripe's form is light; the rounded panel keeps it from floating on black.
           <div className="overflow-hidden rounded-card bg-white">
             <EmbeddedCheckoutProvider
-              stripe={getStripe()}
+              stripe={stripe}
               options={{ clientSecret, onComplete: () => onComplete(tier) }}
             >
               <EmbeddedCheckout />
@@ -121,18 +135,27 @@ export function ConfirmDialog({
 /** The in-app card form: a SetupIntent confirmed in Stripe's Payment Element. */
 function CardForm({ onSaved, onCancel }: { onSaved: (s: BillingSummary) => void; onCancel: () => void }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [stripe, setStripe] = useState<Stripe | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
-    startCardUpdate()
-      .then((secret) => live && setClientSecret(secret))
+    Promise.all([
+      startCardUpdate(),
+      getStripe().catch(() => { throw new Error(STRIPE_LOAD_ERROR); }),
+    ])
+      .then(([secret, loaded]) => {
+        if (!live) return;
+        if (!loaded) throw new Error(STRIPE_LOAD_ERROR);
+        setStripe(loaded);
+        setClientSecret(secret);
+      })
       .catch((err) => live && setError(err instanceof Error ? err.message : 'Card update is unavailable'));
     return () => { live = false; };
   }, []);
 
   if (error) return <p role="alert" className="text-sm text-red-300">{error}</p>;
-  if (!clientSecret) {
+  if (!clientSecret || !stripe) {
     return (
       <div className="flex items-center gap-2 py-6 text-sm text-ink-secondary">
         <Loader2 size={14} className="animate-spin" /> Loading card form…
@@ -140,7 +163,7 @@ function CardForm({ onSaved, onCancel }: { onSaved: (s: BillingSummary) => void;
     );
   }
   return (
-    <Elements stripe={getStripe()} options={{ clientSecret, appearance: stripeAppearance }}>
+    <Elements stripe={stripe} options={{ clientSecret, appearance: stripeAppearance }}>
       <CardFormInner onSaved={onSaved} onCancel={onCancel} />
     </Elements>
   );

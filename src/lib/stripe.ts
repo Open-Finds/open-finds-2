@@ -13,7 +13,12 @@ export const stripeConfigured = Boolean(publishableKey);
 
 export function getStripe(): Promise<Stripe | null> {
   if (!publishableKey) return Promise.resolve(null);
-  stripePromise ??= loadStripe(publishableKey);
+  // A failed load (flaky network, blocked script) must not be cached, or every
+  // later attempt fails too without trying again.
+  stripePromise ??= loadStripe(publishableKey).catch((err) => {
+    stripePromise = null;
+    throw err;
+  });
   return stripePromise;
 }
 
