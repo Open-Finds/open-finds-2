@@ -73,8 +73,9 @@ export function CheckoutDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !paying && onClose()}>
-      {/* Scrolls as a whole on short screens; nothing inside may shrink and clip. */}
-      <DialogContent className="sm:max-h-[90dvh] sm:max-w-lg [&>*]:shrink-0">
+      {/* The dialog itself does not scroll: the form scrolls inside it and the
+          pay button stays pinned at the bottom, however short the screen. */}
+      <DialogContent className="overflow-hidden sm:max-h-[90dvh] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-white">
             {tier === 'lifetime' ? 'Buy Lifetime' : `Upgrade to ${SUBSCRIPTION_PLANS[tier].label}`}
@@ -173,8 +174,9 @@ function CheckoutForm({
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="rounded-card border border-gold/25 bg-black/40 p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1 pb-1">
+      <div className="shrink-0 rounded-card border border-gold/25 bg-black/40 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="font-semibold text-white">{SUBSCRIPTION_PLANS[tier].label}</p>
@@ -242,19 +244,22 @@ function CheckoutForm({
         )
       )}
 
-      {error && (
-        <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-          {error}
-        </p>
-      )}
+      </div>
 
-      <Button size="lg" full onClick={pay} disabled={paying || !checkout.canConfirm} className="shadow-gold-glow">
-        {paying ? <Loader2 className="animate-spin" /> : <Lock />}
-        {paying ? 'Processing…' : interval ? `Subscribe · ${total}/${interval}` : `Pay ${total}`}
-      </Button>
-      <p className="-mt-2 text-center text-xs text-ink-secondary">
-        {interval ? 'Cancel anytime from Billing. ' : ''}Payments are processed securely by Stripe.
-      </p>
+      <div className="flex shrink-0 flex-col gap-2 border-t border-gold/15 pt-4">
+        {error && (
+          <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </p>
+        )}
+        <Button size="lg" full onClick={pay} disabled={paying || !checkout.canConfirm} className="shadow-gold-glow">
+          {paying ? <Loader2 className="animate-spin" /> : <Lock />}
+          {paying ? 'Processing…' : interval ? `Subscribe · ${total}/${interval}` : `Pay ${total}`}
+        </Button>
+        <p className="text-center text-xs text-ink-secondary">
+          {interval ? 'Cancel anytime from Billing. ' : ''}Payments are processed securely by Stripe.
+        </p>
+      </div>
     </div>
   );
 }
