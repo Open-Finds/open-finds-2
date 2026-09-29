@@ -365,7 +365,8 @@ function CardFormInner({ onSaved, onCancel }: { onSaved: (s: BillingSummary) => 
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <PaymentElement options={{ layout: 'tabs' }} />
+      {/* Same as checkout: no Link sign-up block (email, phone) under the card fields. */}
+      <PaymentElement options={{ layout: 'tabs', wallets: { link: 'never' } }} />
       {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
       <div className="flex gap-3">
         <Button type="submit" disabled={!stripe || saving}>

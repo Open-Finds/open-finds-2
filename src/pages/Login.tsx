@@ -83,7 +83,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
           <div className="mb-3 flex items-baseline gap-2">
-            <span className="text-4xl font-black tracking-tight text-gold sm:text-5xl">Only</span>
+            <span className="text-4xl font-black tracking-tight text-gold sm:text-5xl">Open</span>
             <span className="text-4xl font-black tracking-tight text-white sm:text-5xl">Finds</span>
           </div>
           <p className="text-sm text-ink-secondary">Discover venues. Build unforgettable nights.</p>
