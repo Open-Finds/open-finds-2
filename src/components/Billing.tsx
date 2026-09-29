@@ -29,6 +29,10 @@ type PaidTier = Exclude<SubscriptionTier, 'free'>;
 
 const STRIPE_LOAD_ERROR = "Couldn't load secure checkout. Check your connection and try again.";
 
+// Stripe's form loads from several of its own servers. On a flaky connection
+// one of them can stall without ever failing, so offer a retry after this long.
+const SLOW_LOAD_MS = 20000;
+
 function formatMoney(cents: number, currency: string) {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100);
 }
@@ -52,14 +56,28 @@ export function CheckoutDialog({
   const [stripe, setStripe] = useState<Stripe | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  // "Try again" bumps attempt: a new session, Stripe instance and form.
+  const [attempt, setAttempt] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  const retry = () => {
+    setError(null);
+    setClientSecret(null);
+    setStripe(null);
+    setReady(false);
+    setSlow(false);
+    setAttempt((a) => a + 1);
+  };
 
   useEffect(() => {
     let live = true;
+    const slowTimer = window.setTimeout(() => live && setSlow(true), SLOW_LOAD_MS);
     // Load Stripe.js alongside the session so a failed script load is shown
     // here instead of surfacing as an uncaught error inside the provider.
     Promise.all([
       startCheckout(tier),
-      getStripe().catch(() => { throw new Error(STRIPE_LOAD_ERROR); }),
+      getStripe({ fresh: attempt > 0 }).catch(() => { throw new Error(STRIPE_LOAD_ERROR); }),
     ])
       .then(([secret, loaded]) => {
         if (!live) return;
@@ -68,8 +86,11 @@ export function CheckoutDialog({
         setClientSecret(secret);
       })
       .catch((err) => live && setError(err instanceof Error ? err.message : 'Checkout is unavailable'));
-    return () => { live = false; };
-  }, [tier]);
+    return () => {
+      live = false;
+      window.clearTimeout(slowTimer);
+    };
+  }, [tier, attempt]);
 
   return (
     <Dialog open onOpenChange={(open) => !open && !paying && onClose()}>
@@ -83,20 +104,31 @@ export function CheckoutDialog({
           <DialogDescription>Pay securely without leaving Open Finds.</DialogDescription>
         </DialogHeader>
         {error ? (
-          <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-            {error}
-          </p>
+          <LoadError message={error} onRetry={retry} />
         ) : !clientSecret || !stripe ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-ink-secondary">
             <Loader2 size={16} className="animate-spin" /> Loading secure checkout…
           </div>
         ) : (
           <CheckoutElementsProvider
+            key={attempt}
             stripe={stripe}
             options={{ clientSecret, elementsOptions: { appearance: stripeAppearance } }}
           >
-            <CheckoutForm tier={tier} onPaying={setPaying} onPaid={() => onComplete(tier)} />
+            <CheckoutForm
+              tier={tier}
+              onReady={setReady}
+              onRetry={retry}
+              onPaying={setPaying}
+              onPaid={() => onComplete(tier)}
+            />
           </CheckoutElementsProvider>
+        )}
+        {slow && !ready && !error && (
+          <div className="flex flex-col items-center gap-3 text-center text-sm text-ink-secondary">
+            <p>This is taking longer than usual. A slow connection or an ad blocker can stop Stripe, our payment provider, from loading.</p>
+            <Button size="sm" variant="outline" onClick={retry}>Try again</Button>
+          </div>
         )}
       </DialogContent>
     </Dialog>
@@ -109,12 +141,28 @@ const PLAN_BLURB: Record<PaidTier, string> = {
   lifetime: 'Everything in Premium, paid once',
 };
 
+/** A load failure, with a way out that doesn't mean closing the dialog. */
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <p role="alert" className="w-full rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+        {message}
+      </p>
+      <Button size="sm" variant="outline" onClick={onRetry}>Try again</Button>
+    </div>
+  );
+}
+
 function CheckoutForm({
   tier,
+  onReady,
+  onRetry,
   onPaying,
   onPaid,
 }: {
   tier: PaidTier;
+  onReady: (ready: boolean) => void;
+  onRetry: () => void;
   onPaying: (paying: boolean) => void;
   onPaid: () => void;
 }) {
@@ -126,6 +174,10 @@ function CheckoutForm({
   const [promoBusy, setPromoBusy] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (state.type !== 'loading') onReady(true);
+  }, [state.type, onReady]);
+
   if (state.type === 'loading') {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-sm text-ink-secondary">
@@ -134,11 +186,7 @@ function CheckoutForm({
     );
   }
   if (state.type === 'error') {
-    return (
-      <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-        {state.error.message}
-      </p>
-    );
+    return <LoadError message={state.error.message} onRetry={onRetry} />;
   }
 
   const { checkout } = state;

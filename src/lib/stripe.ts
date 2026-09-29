@@ -11,8 +11,11 @@ let stripePromise: Promise<Stripe | null> | null = null;
 
 export const stripeConfigured = Boolean(publishableKey);
 
-export function getStripe(): Promise<Stripe | null> {
+export function getStripe({ fresh = false } = {}): Promise<Stripe | null> {
   if (!publishableKey) return Promise.resolve(null);
+  // "Try again" asks for a new instance: one whose hidden Stripe frames timed
+  // out stays stuck. The script itself is still only downloaded once.
+  if (fresh) stripePromise = null;
   // A failed load (flaky network, blocked script) must not be cached, or every
   // later attempt fails too without trying again.
   // developerTools: Stripe shows a floating "stripe" test-mode assistant badge
