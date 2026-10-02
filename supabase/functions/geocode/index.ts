@@ -1,18 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
-import { requireUser, serviceClient } from "../_shared/auth.ts";
+import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
-
-
-async function getGoogleMapsApiKey(): Promise<string> {
-  const { data, error } = await serviceClient()
-    .from("app_secrets")
-    .select("value")
-    .eq("key", "GOOGLE_MAPS_API_KEY")
-    .maybeSingle();
-  if (error || !data) throw new Error("Google Maps API key not found");
-  return data.value as string;
-}
+import { geocodeAU, getGoogleMapsApiKey } from "../_shared/maps.ts";
 
 const RATE_LIMIT = 120;
 const RATE_WINDOW_SECONDS = 60 * 60;
@@ -47,21 +37,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const apiKey = await getGoogleMapsApiKey();
-    const url =
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address.trim())}&key=${apiKey}`;
-
-    const res = await fetch(url);
-    if (!res.ok) {
+    const result = await geocodeAU(address, apiKey);
+    if (result.status === "FETCH_FAILED") {
       return json(req, { error: "Geocoding request failed" }, 502);
     }
-
-    const data = await res.json();
-    const loc = data?.results?.[0]?.geometry?.location;
-
-    if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
-      return json(req, { lat: loc.lat, lon: loc.lng });
+    if (result.coord) {
+      return json(req, { lat: result.coord.lat, lon: result.coord.lng, address: result.formattedAddress });
     }
-
     return json(req, { lat: null, lon: null });
   } catch (err) {
     // Upstream/config detail is logged, not returned — error text from the

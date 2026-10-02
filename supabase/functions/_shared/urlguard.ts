@@ -86,6 +86,41 @@ export function assertPublicUrl(raw: string): { ok: true; url: URL } | { ok: fal
 }
 
 /**
+ * Where a link ends up, checking every hop the same way safeFetch does. Used
+ * for share links (vm.tiktok.com/…) that only reveal the real page once
+ * followed. Returns the last address it could reach; the body is never read.
+ */
+export async function followRedirects(raw: string, maxRedirects = 5): Promise<string> {
+  let current = raw;
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const check = assertPublicUrl(current);
+    if (!check.ok) return hop === 0 ? raw : current;
+    let res: Response;
+    try {
+      res = await fetch(check.url.toString(), {
+        redirect: "manual",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+        },
+      });
+    } catch {
+      return current;
+    }
+    const location = res.headers.get("location");
+    await res.body?.cancel();
+    if (res.status >= 300 && res.status < 400 && location) {
+      const next = new URL(location, check.url).toString();
+      if (!assertPublicUrl(next).ok) return current;
+      current = next;
+      continue;
+    }
+    return current;
+  }
+  return current;
+}
+
+/**
  * fetch() that re-validates every hop. A public URL is free to redirect to
  * 169.254.169.254, so following redirects automatically would reopen exactly
  * the hole assertPublicUrl closes.

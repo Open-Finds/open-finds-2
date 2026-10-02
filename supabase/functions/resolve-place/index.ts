@@ -1,177 +1,315 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
-import { requireUser, serviceClient } from "../_shared/auth.ts";
+import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
+import { type Coord, geocodeAU, getGoogleMapsApiKey, logGoogleError } from "../_shared/maps.ts";
 
-
-async function getGoogleMapsApiKey(): Promise<string> {
-  const { data, error } = await serviceClient()
-    .from("app_secrets")
-    .select("value")
-    .eq("key", "GOOGLE_MAPS_API_KEY")
-    .maybeSingle();
-  if (error || !data) throw new Error("Google Maps API key not found");
-  return data.value as string;
-}
+type VenueType = "food" | "bar" | "dessert" | "activity";
 
 type PlaceResult = {
   name: string | null;
   address: string | null;
   lat: number | null;
   lon: number | null;
+  /** Best guess from Google's place types; null when unknown. */
+  type?: VenueType | null;
+  /** 'review': the link is to a Google review, which names no place. */
+  hint?: "review";
 };
 
-// Extract coordinates from a Google Maps URL.
-// Handles patterns like:
-//   @-33.8688,151.2093
-//   !3d-33.8688!4d151.2093
-//   /place/-33.8688,151.2093
-//   ?q=-33.8688,151.2093
-//   ll=-33.8688,151.2093
-function extractCoords(url: string): { lat: number; lon: number } | null {
-  // @lat,lon pattern (most common in share links)
-  let m = url.match(/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+const EMPTY: PlaceResult = { name: null, address: null, lat: null, lon: null };
 
-  // !3dlat!4dlon pattern (directions/place URLs)
-  m = url.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+/** google.com, google.com.au, google.co.uk, google.de ... with or without www./maps. */
+function isGoogleDomain(host: string): boolean {
+  return /^(?:[a-z0-9-]+\.)*google\.(?:com|co)(?:\.[a-z]{2})?$/.test(host) ||
+    /^(?:[a-z0-9-]+\.)*google\.[a-z]{2,3}$/.test(host);
+}
 
-  // ll=lat,lon pattern
-  m = url.match(/[?&]ll=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+const SHORT_HOSTS = new Set(["maps.app.goo.gl", "goo.gl", "g.co"]);
 
-  // q=lat,lon or q="lat,lon" pattern
-  m = url.match(/[?&]q=(-?\d{1,3}\.\d+%2C|-?\d{1,3}\.\d+,)(-?\d{1,3}\.\d+)/);
-  if (m) {
-    const latMatch = url.match(/[?&]q=(-?\d{1,3}\.\d+)/);
-    const lonMatch = url.match(/[?&]q=-?\d{1,3}\.\d+%2C(-?\d{1,3}\.\d+)/);
-    if (latMatch && lonMatch) return { lat: parseFloat(latMatch[1]), lon: parseFloat(lonMatch[1]) };
+/** Every link shape the Maps app, the website and Google search share. */
+function isMapsUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.toLowerCase();
+    if (host === "maps.app.goo.gl") return true;
+    if (host === "goo.gl") return u.pathname.startsWith("/maps");
+    if (host === "g.co") return u.pathname.startsWith("/kgs");
+    if (!isGoogleDomain(host)) return false;
+    return host.startsWith("maps.") || u.pathname.startsWith("/maps");
+  } catch {
+    return false;
   }
+}
 
-  // q=lat,lon without encoding
-  m = url.match(/[?&]q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+/**
+ * Follows a short link (what the Maps app shares) to the full Maps URL,
+ * which is where the place name and coordinates are. Only Google addresses
+ * are followed, so this can't be used to reach anything else.
+ */
+async function expandShortLink(raw: string): Promise<string> {
+  let current = raw;
+  for (let hop = 0; hop < 6; hop++) {
+    let u: URL;
+    try {
+      u = new URL(current);
+    } catch {
+      return current;
+    }
+    const host = u.hostname.toLowerCase();
+    if (!SHORT_HOSTS.has(host) && !isGoogleDomain(host)) return current;
+    // Google's cookie-consent interstitial carries the real target.
+    if (host.startsWith("consent.")) {
+      const target = u.searchParams.get("continue");
+      if (!target) return current;
+      current = target;
+      continue;
+    }
+    if (!SHORT_HOSTS.has(host)) return current;
+    try {
+      const res = await fetch(current, {
+        redirect: "manual",
+        headers: { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1" },
+      });
+      const location = res.headers.get("location");
+      await res.body?.cancel();
+      if (res.status >= 300 && res.status < 400 && location) {
+        current = new URL(location, current).toString();
+        continue;
+      }
+    } catch (err) {
+      console.error("[resolve-place] could not follow short link", String(err));
+    }
+    return current;
+  }
+  return current;
+}
 
-  // center=lat,lon pattern
-  m = url.match(/[?&]center=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
-
+/**
+ * Coordinates in a Maps URL. The place pin (!3d…!4d…) comes first: the
+ * @lat,lng part is only where the map was centred, which can be streets away.
+ */
+function extractCoords(url: string): Coord | null {
+  const patterns = [
+    /!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/,
+    /@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/,
+    /[?&]ll=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/,
+    /[?&](?:q|query)=(-?\d{1,3}\.\d+)(?:,|%2C)\s*(-?\d{1,3}\.\d+)/i,
+    /[?&]center=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/,
+  ];
+  for (const re of patterns) {
+    const m = url.match(re);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  }
   return null;
 }
 
-// Extract a place query string from the URL (e.g. /place/Restaurant+Name or q=Restaurant Name)
-function extractPlaceQuery(url: string): string | null {
+/** The place name in a Maps URL: /place/<name>/, /search/<name>/, or q= / query=. */
+function extractPlaceName(url: string): string | null {
   try {
     const u = new URL(url);
     const parts = u.pathname.split("/").filter(Boolean);
-
-    // /place/Place+Name/ pattern
-    const placeIdx = parts.indexOf("place");
-    if (placeIdx >= 0 && placeIdx + 1 < parts.length) {
-      return decodeURIComponent(parts[placeIdx + 1].replace(/\+/g, " "));
+    for (const marker of ["place", "search"]) {
+      const idx = parts.indexOf(marker);
+      if (idx >= 0 && idx + 1 < parts.length && !parts[idx + 1].startsWith("@")) {
+        const name = decodeURIComponent(parts[idx + 1].replace(/\+/g, " ")).trim();
+        if (name && !/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(name)) return name;
+      }
     }
-
-    // q= parameter (could be a place name or coords)
-    const q = u.searchParams.get("q");
-    if (q && !/^-?\d+\.\d+/.test(q)) {
-      return q;
+    for (const key of ["q", "query"]) {
+      const q = u.searchParams.get(key)?.trim();
+      if (q && !/^-?\d+\.\d+\s*,\s*-?\d+\.\d+$/.test(q)) return q;
     }
-
     return null;
   } catch {
     return null;
   }
 }
 
-// Reverse geocode coordinates to get a human-readable address and place name
-async function reverseGeocode(
-  lat: number,
-  lon: number,
-  apiKey: string
-): Promise<PlaceResult> {
-  const url =
-    `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&result_type=street_address|premise|point_of_interest|establishment&key=${apiKey}`;
-
+/** Google's own id for the place, when the link carries one (query_place_id=ChIJ…). */
+function extractPlaceId(url: string): string | null {
   try {
-    const res = await fetch(url);
-    if (!res.ok) return { name: null, address: null, lat, lon };
-
-    const data = await res.json();
-    const results = data?.results;
-    if (!Array.isArray(results) || results.length === 0) {
-      return { name: null, address: null, lat, lon };
-    }
-
-    const top = results[0];
-    const address = top?.formatted_address ?? null;
-
-    // Try to extract a place name from address components
-    let name: string | null = null;
-    const components = top?.address_components ?? [];
-    for (const c of components) {
-      const types: string[] = c.types ?? [];
-      if (
-        types.includes("point_of_interest") ||
-        types.includes("establishment") ||
-        types.includes("premise")
-      ) {
-        name = c.long_name;
-        break;
-      }
-    }
-
-    return { name, address, lat, lon };
+    const id = new URL(url).searchParams.get("query_place_id");
+    return id && /^[A-Za-z0-9_-]{10,}$/.test(id) ? id : null;
   } catch {
-    return { name: null, address: null, lat, lon };
+    return null;
   }
 }
 
-// Forward geocode a place name + optional area to get coordinates and formatted address
-async function forwardGeocode(
-  query: string,
-  apiKey: string
-): Promise<PlaceResult> {
-  const url =
-    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`;
+/** Search links append the area: "Malibu Sydney, Surry Hills, NSW" is "Malibu Sydney". */
+function displayName(query: string): string {
+  return query.split(",")[0].trim() || query;
+}
 
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return { name: null, address: null, lat: null, lon: null };
+const BAR_TYPES = new Set(["bar", "pub", "wine_bar", "cocktail_bar", "night_club", "brewery", "brewpub", "beer_garden", "lounge_bar", "sports_bar", "irish_pub", "winery"]);
+const DESSERT_TYPES = new Set(["dessert_shop", "dessert_restaurant", "ice_cream_shop", "bakery", "confectionery", "chocolate_shop", "cake_shop", "donut_shop", "candy_store", "pastry_shop"]);
+const ACTIVITY_TYPES = new Set([
+  "amusement_center", "amusement_park", "bowling_alley", "escape_room", "video_arcade", "karaoke", "miniature_golf_course",
+  "golf_course", "tourist_attraction", "museum", "art_gallery", "movie_theater", "zoo", "aquarium", "park", "national_park",
+  "casino", "event_venue", "performing_arts_theater", "concert_hall", "sports_complex", "stadium", "spa", "water_park",
+  "botanical_garden", "hiking_area", "ice_skating_rink", "go_karting_venue", "paintball_center", "skateboard_park",
+]);
 
-    const data = await res.json();
-    const result = data?.results?.[0];
-    if (!result) return { name: null, address: null, lat: null, lon: null };
-
-    const loc = result.geometry?.location;
-    if (!loc || typeof loc.lat !== "number" || typeof loc.lng !== "number") {
-      return { name: null, address: null, lat: null, lon: null };
-    }
-
-    const address = result.formatted_address ?? null;
-
-    // Try to extract a place name from address components
-    let name: string | null = null;
-    const components = result.address_components ?? [];
-    for (const c of components) {
-      const types: string[] = c.types ?? [];
-      if (
-        types.includes("point_of_interest") ||
-        types.includes("establishment") ||
-        types.includes("premise")
-      ) {
-        name = c.long_name;
-        break;
-      }
-    }
-
-    // If no POI name found, use the query itself as the name
-    if (!name) name = query;
-
-    return { name, address, lat: loc.lat, lon: loc.lng };
-  } catch {
-    return { name: null, address: null, lat: null, lon: null };
+/** Maps Google place types onto the app's four venue types. */
+function venueTypeFrom(types: (string | undefined | null)[]): VenueType | null {
+  for (const t of types) {
+    if (!t) continue;
+    if (DESSERT_TYPES.has(t) || /gelato|ice_cream|dessert/.test(t)) return "dessert";
+    if (BAR_TYPES.has(t)) return "bar";
+    if (ACTIVITY_TYPES.has(t)) return "activity";
+    if (t === "restaurant" || t === "cafe" || t === "coffee_shop" || t === "bar_and_grill" || t.endsWith("_restaurant") ||
+        t === "meal_takeaway" || t === "meal_delivery" || t === "food" || t === "sandwich_shop" || t === "diner") return "food";
   }
+  return null;
+}
+
+/**
+ * Places API (New) Text Search: the real name, address, pin and kind of
+ * place. Returns null when the API isn't enabled for this key, so callers
+ * fall back to plain geocoding.
+ */
+async function placesTextSearch(query: string, near: Coord | null, apiKey: string): Promise<PlaceResult | null> {
+  const body: Record<string, unknown> = { textQuery: query, languageCode: "en", regionCode: "AU", pageSize: 1 };
+  if (near) {
+    body.locationBias = { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: 500 } };
+  }
+  try {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.types,places.primaryType",
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error(`[resolve-place] Places API ${res.status}: ${data?.error?.status ?? ""} ${data?.error?.message ?? ""}`);
+      return null;
+    }
+    const p = data?.places?.[0];
+    if (!p) return null;
+    return {
+      name: p.displayName?.text ?? null,
+      address: p.formattedAddress ?? null,
+      lat: typeof p.location?.latitude === "number" ? p.location.latitude : null,
+      lon: typeof p.location?.longitude === "number" ? p.location.longitude : null,
+      type: venueTypeFrom([p.primaryType, ...(Array.isArray(p.types) ? p.types : [])]),
+    };
+  } catch (err) {
+    console.error("[resolve-place] Places API failed", String(err));
+    return null;
+  }
+}
+
+/** Rough distance in km; enough to tell "same block" from "other suburb". */
+function kmBetween(a: Coord, b: Coord): number {
+  const dLat = (a.lat - b.lat) * 111;
+  const dLng = (a.lng - b.lng) * 111 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
+/**
+ * The named place near a pin, using Geocoding (which knows many venues by
+ * name) when the Places API isn't available. Results more than ~1.5 km from
+ * the pin are some other branch or a same-named street, and are ignored.
+ */
+async function geocodeNear(name: string, near: Coord, apiKey: string): Promise<PlaceResult | null> {
+  const d = 0.02;
+  const bounds = `${near.lat - d},${near.lng - d}|${near.lat + d},${near.lng + d}`;
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(name)}&bounds=${encodeURIComponent(bounds)}&region=au&key=${apiKey}`,
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status !== "OK") {
+      if (data.status !== "ZERO_RESULTS") logGoogleError("resolve-place", data);
+      return null;
+    }
+    const top = data.results?.[0];
+    const loc = top?.geometry?.location;
+    if (typeof loc?.lat !== "number" || typeof loc?.lng !== "number") return null;
+    const found = { lat: loc.lat, lng: loc.lng };
+    if (kmBetween(found, near) > 1.5) return null;
+    return { name, address: top.formatted_address ?? null, lat: found.lat, lon: found.lng, type: null };
+  } catch {
+    return null;
+  }
+}
+
+/** Exact address and pin for a Google place id; works without the Places API. */
+async function geocodePlaceId(placeId: string, apiKey: string): Promise<{ coord: Coord; address: string | null } | null> {
+  try {
+    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?place_id=${encodeURIComponent(placeId)}&key=${apiKey}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status !== "OK") {
+      if (data.status !== "ZERO_RESULTS" && data.status !== "NOT_FOUND") logGoogleError("resolve-place", data);
+      return null;
+    }
+    const top = data.results?.[0];
+    const loc = top?.geometry?.location;
+    if (typeof loc?.lat !== "number" || typeof loc?.lng !== "number") return null;
+    return { coord: { lat: loc.lat, lng: loc.lng }, address: top.formatted_address ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/** Street address for a pin, when there's no name to search for. */
+async function reverseGeocode(c: Coord, apiKey: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${c.lat},${c.lng}&result_type=street_address|premise|point_of_interest|establishment&key=${apiKey}`,
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status !== "OK" && data.status !== "ZERO_RESULTS") logGoogleError("resolve-place", data);
+    return data?.results?.[0]?.formatted_address ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolve(url: string, apiKey: string): Promise<PlaceResult> {
+  const fullUrl = await expandShortLink(url);
+  try {
+    // "Share" on a review gives a link that names no place at all.
+    if (new URL(fullUrl).pathname.startsWith("/maps/reviews")) return { ...EMPTY, hint: "review" };
+  } catch { /* not a URL; the checks below find nothing */ }
+
+  const coords = extractCoords(fullUrl);
+  const query = extractPlaceName(fullUrl);
+  const name = query ? displayName(query) : null;
+
+  if (query) {
+    const place = await placesTextSearch(query, coords, apiKey);
+    if (place?.address) return place;
+  }
+
+  // No Places result: keep the name from the link and find the address.
+  const placeId = extractPlaceId(fullUrl);
+  if (placeId) {
+    const exact = await geocodePlaceId(placeId, apiKey);
+    if (exact) return { name, address: exact.address, lat: exact.coord.lat, lon: exact.coord.lng, type: null };
+  }
+  if (coords) {
+    if (query) {
+      const near = await geocodeNear(query, coords, apiKey);
+      if (near?.address) return { ...near, name };
+    }
+    const address = await reverseGeocode(coords, apiKey);
+    return { name, address, lat: coords.lat, lon: coords.lng, type: null };
+  }
+  if (query) {
+    const found = await geocodeAU(query, apiKey);
+    if (found.coord) {
+      return { name, address: found.formattedAddress, lat: found.coord.lat, lon: found.coord.lng, type: null };
+    }
+  }
+  return EMPTY;
 }
 
 const RATE_LIMIT = 60;
@@ -205,36 +343,12 @@ Deno.serve(async (req: Request) => {
     if (typeof url !== "string" || !url.trim()) {
       return json(req, { error: "url is required" }, 400);
     }
-
-    const lower = url.toLowerCase();
-    if (!lower.includes("google.com/maps") && !lower.includes("maps.google.com") && !lower.includes("maps.app.goo.gl")) {
-      return json(req, { name: null, address: null, lat: null, lon: null });
+    if (!isMapsUrl(url.trim())) {
+      return json(req, EMPTY);
     }
 
     const apiKey = await getGoogleMapsApiKey();
-
-    // Strategy 1: Extract coordinates directly from the URL
-    const coords = extractCoords(url);
-    if (coords) {
-      const result = await reverseGeocode(coords.lat, coords.lon, apiKey);
-      if (result.address) {
-        return json(req, result);
-      }
-      // Coords found but reverse geocode failed — return coords only
-      return json(req, { name: null, address: null, lat: coords.lat, lon: coords.lon });
-    }
-
-    // Strategy 2: Extract a place name from the URL and forward geocode it
-    const placeQuery = extractPlaceQuery(url);
-    if (placeQuery) {
-      const result = await forwardGeocode(placeQuery, apiKey);
-      if (result.address) {
-        return json(req, result);
-      }
-    }
-
-    // Could not resolve
-    return json(req, { name: null, address: null, lat: null, lon: null });
+    return json(req, await resolve(url.trim(), apiKey));
   } catch (err) {
     // Upstream/config detail is logged, not returned — error text from the
     // Maps client can leak key state and internal identifiers.

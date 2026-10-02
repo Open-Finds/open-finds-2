@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
-import { assertPublicUrl, safeFetch } from "../_shared/urlguard.ts";
+import { assertPublicUrl, followRedirects, safeFetch } from "../_shared/urlguard.ts";
 
 const RATE_LIMIT = 60;
 const RATE_WINDOW_SECONDS = 60 * 60;
@@ -53,7 +53,8 @@ function detectContentType(url: string, platform: Platform): ContentType {
     return "profile";
   }
   if (platform === "tiktok") {
-    if (lower.includes("/video/")) return "video";
+    // Photo carousels are posts like videos, and get the same oEmbed lookup.
+    if (lower.includes("/video/") || lower.includes("/photo/")) return "video";
     return "profile";
   }
   if (platform === "youtube") return "video";
@@ -278,9 +279,53 @@ async function fetchMetaOEmbed(
   }
 }
 
+/**
+ * Share links that hide the real page until followed. A TikTok shared from
+ * the app is vm.tiktok.com/… or tiktok.com/t/…: no creator, no video id, so
+ * read as a "profile" it never reached the oEmbed lookup.
+ */
+function isShortLink(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "vm.tiktok.com" || host === "vt.tiktok.com") return true;
+    if (host === "tiktok.com" && u.pathname.startsWith("/t/")) return true;
+    return ["fb.watch", "instagr.am", "bit.ly", "t.co", "tinyurl.com"].includes(host);
+  } catch {
+    return false;
+  }
+}
+
+/** The plain video address, without tracking parameters (?lang=, ?_t=, ...). */
+function canonicalTikTokUrl(url: string): string {
+  try {
+    const m = new URL(url).pathname.match(/^\/@([^/]+)\/(video|photo)\/(\d+)/);
+    return m ? `https://www.tiktok.com/@${m[1]}/${m[2]}/${m[3]}` : url;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * TikTok turns away some requests from cloud servers (about one in three in
+ * testing, for any video), sometimes for a few seconds at a time, so a failed
+ * lookup is retried over ~6s. The AI step after this takes far longer.
+ */
 async function fetchTikTokOEmbed(
   videoUrl: string
-): Promise<{ title: string | null; author: string | null } | null> {
+): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
+  const url = canonicalTikTokUrl(videoUrl);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1000 * attempt));
+    const result = await fetchTikTokOEmbedOnce(url);
+    if (result?.title || result?.author) return result;
+  }
+  return null;
+}
+
+async function fetchTikTokOEmbedOnce(
+  videoUrl: string
+): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
   try {
     const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(videoUrl)}`;
     const res = await fetch(oembedUrl, {
@@ -295,7 +340,10 @@ async function fetchTikTokOEmbed(
     const title = typeof data.title === "string" ? data.title.trim() : null;
     const author =
       typeof data.author_name === "string" ? data.author_name.trim() : null;
-    return { title: title || null, author: author || null };
+    // author_name is the display name; author_unique_id is the @handle.
+    const handle =
+      typeof data.author_unique_id === "string" ? data.author_unique_id.trim() : null;
+    return { title: title || null, author: author || null, handle: handle || null };
   } catch {
     return null;
   }
@@ -335,9 +383,12 @@ Deno.serve(async (req: Request) => {
       return json(req, { error: guard.error }, 400);
     }
 
-    const platform = detectPlatform(url);
-    const contentType = detectContentType(url, platform);
-    const handle = extractHandle(url, platform);
+    // Everything below reads the page a share link points to, not the link.
+    const target = isShortLink(url) ? await followRedirects(url) : url;
+
+    const platform = detectPlatform(target);
+    const contentType = detectContentType(target, platform);
+    const handle = extractHandle(target, platform);
 
     // Kick off oEmbed and HTML scrape in parallel for maximum speed
     const oembedPromises: Promise<{ title: string | null; author: string | null; html: string | null } | null>[] = [];
@@ -347,40 +398,34 @@ Deno.serve(async (req: Request) => {
       (platform === "instagram" && (contentType === "post" || contentType === "reel")) ||
       (platform === "facebook" && (contentType === "post" || contentType === "video" || contentType === "reel"))
     ) {
-      oembedPromises.push(fetchMetaOEmbed(url, platform, contentType));
+      oembedPromises.push(fetchMetaOEmbed(target, platform, contentType));
     } else {
       oembedPromises.push(Promise.resolve(null));
     }
 
     // TikTok oEmbed for TikTok videos
-    if (platform === "tiktok" && contentType === "video") {
-      oembedPromises.push(
-        fetchTikTokOEmbed(url).then((r) =>
-          r ? { ...r, html: null } : null
-        )
-      );
-    } else {
-      oembedPromises.push(Promise.resolve(null));
-    }
+    const tiktokPromise = platform === "tiktok" && contentType === "video"
+      ? fetchTikTokOEmbed(target)
+      : Promise.resolve(null);
 
     // HTML scrape — try mobile UA first for Instagram reels, desktop for everything else
     const scrapePromise = (async () => {
       if (platform === "instagram" && contentType === "reel") {
-        let h = await fetchWithHeaders(url, true);
-        if (!h) h = await fetchWithHeaders(url, false);
+        let h = await fetchWithHeaders(target, true);
+        if (!h) h = await fetchWithHeaders(target, false);
         if (!h) {
-          const variant = url.includes("?") ? url + "&__d=1" : url + "?__d=1";
+          const variant = target.includes("?") ? target + "&__d=1" : target + "?__d=1";
           h = await fetchWithHeaders(variant, true);
         }
         return h;
       } else {
-        return await fetchWithHeaders(url, false);
+        return await fetchWithHeaders(target, false);
       }
     })();
 
     const [metaOembed, tiktokOembed, html] = await Promise.all([
       oembedPromises[0],
-      oembedPromises[1],
+      tiktokPromise,
       scrapePromise,
     ]);
 
@@ -398,20 +443,22 @@ Deno.serve(async (req: Request) => {
       oembedTitle = tiktokOembed.title || oembedTitle;
       oembedAuthor = tiktokOembed.author || oembedAuthor;
     }
+    // The @handle: from the link itself, else what TikTok says the creator is.
+    const creatorHandle = handle || tiktokOembed?.handle || null;
 
     // If HTML scrape failed, return whatever we have from oEmbed
     if (!html) {
       const result: MetaResult = {
         platform,
         contentType,
-        url,
+        url: target,
         ogTitle: null,
         ogDescription: null,
         ogSiteName: null,
         pageTitle: null,
         metaDescription: null,
         jsonLd: null,
-        handle,
+        handle: creatorHandle,
         rawText: null,
         oembedTitle,
         oembedAuthor,
@@ -453,14 +500,14 @@ Deno.serve(async (req: Request) => {
     const result: MetaResult = {
       platform,
       contentType,
-      url,
+      url: target,
       ogTitle: finalOgTitle,
       ogDescription: finalOgDescription,
       ogSiteName: meta.ogSiteName,
       pageTitle: meta.pageTitle,
       metaDescription: meta.metaDescription,
       jsonLd: meta.jsonLd,
-      handle: handle || oembedAuthor || ogTitleHandle,
+      handle: creatorHandle || oembedAuthor || ogTitleHandle,
       rawText: meta.rawText,
       oembedTitle,
       oembedAuthor,

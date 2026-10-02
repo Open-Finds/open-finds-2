@@ -1,12 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
-import { requireUser, serviceClient } from "../_shared/auth.ts";
+import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
+import { type Coord, geocodeAU, getGoogleMapsApiKey, logGoogleError, mapLimit } from "../_shared/maps.ts";
 
-
-type Coord = { lat: number; lng: number };
-
-type Destination = string | { address: string; lat?: number; lon?: number };
+type Destination = string | { address: string; lat?: number | null; lon?: number | null };
 
 type VenueDistance = {
   durationSeconds: number | null;
@@ -15,33 +13,6 @@ type VenueDistance = {
   lat?: number | null;
   lon?: number | null;
 };
-
-async function getGoogleMapsApiKey(): Promise<string> {
-  const { data, error } = await serviceClient()
-    .from("app_secrets")
-    .select("value")
-    .eq("key", "GOOGLE_MAPS_API_KEY")
-    .maybeSingle();
-  if (error || !data) throw new Error("Google Maps API key not found");
-  return data.value as string;
-}
-
-async function geocode(address: string, apiKey: string): Promise<Coord | null> {
-  const url =
-    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const loc = data?.results?.[0]?.geometry?.location;
-    if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
-      return { lat: loc.lat, lng: loc.lng };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 function formatDuration(seconds: number): string {
   const mins = Math.round(seconds / 60);
@@ -53,6 +24,10 @@ function formatDuration(seconds: number): string {
 
 const RATE_LIMIT = 60;
 const RATE_WINDOW_SECONDS = 60 * 60;
+/** Google's limit on destinations in one Distance Matrix request. */
+const MATRIX_BATCH = 25;
+/** Each destination can cost a geocode; cap what one request may spend. */
+const MAX_DESTINATIONS = 100;
 
 Deno.serve(async (req: Request) => {
   const pre = preflight(req);
@@ -86,102 +61,96 @@ Deno.serve(async (req: Request) => {
       return json(req, { error: "destinations must be a non-empty array" }, 400);
     }
 
-    const apiKey = await getGoogleMapsApiKey();
-
-    // Resolve origin coordinates
-    let originCoord: Coord | null = null;
-    if (typeof origin === "object" && origin.lat != null && origin.lon != null) {
-      originCoord = { lat: origin.lat, lng: origin.lon };
-    } else if (typeof origin === "string" && origin.trim()) {
-      originCoord = await geocode(origin.trim(), apiKey);
-    }
-
-    if (!originCoord) {
-      const results: VenueDistance[] = destinations.map(() => ({
-        durationSeconds: null,
-        durationText: null,
-        error: true,
-      }));
-      return json(req, { distances: results });
-    }
-
-    // Resolve each destination's coordinates
-    const destCoords: (Coord | null)[] = [];
-    for (let i = 0; i < destinations.length; i++) {
-      const dest = destinations[i] as Destination;
-      if (typeof dest === "object" && dest.lat != null && dest.lon != null) {
-        destCoords.push({ lat: dest.lat, lng: dest.lon });
-      } else {
-        const addr = typeof dest === "string" ? dest : dest.address;
-        const c = await geocode(addr.trim(), apiKey);
-        destCoords.push(c);
-      }
-    }
-
-    // Build results array
     const results: VenueDistance[] = destinations.map(() => ({
       durationSeconds: null,
       durationText: null,
       error: true,
     }));
 
-    // Attach coordinates to every result
-    for (let i = 0; i < destCoords.length; i++) {
-      if (destCoords[i]) {
-        results[i].lat = destCoords[i]!.lat;
-        results[i].lon = destCoords[i]!.lng;
+    const apiKey = await getGoogleMapsApiKey();
+
+    // Resolve the origin. A typed place that can't be found is reported as
+    // such, so the app can say so instead of "nothing within 30 min".
+    let originCoord: Coord | null = null;
+    let originAddress: string | null = null;
+    if (typeof origin === "object" && origin.lat != null && origin.lon != null) {
+      originCoord = { lat: origin.lat, lng: origin.lon };
+    } else if (typeof origin === "string" && origin.trim()) {
+      const found = await geocodeAU(origin, apiKey);
+      originCoord = found.coord;
+      originAddress = found.formattedAddress;
+      if (!originCoord) {
+        const originError = found.status === "ZERO_RESULTS" ? "not_found" : "unavailable";
+        return json(req, { distances: results, originError });
       }
     }
-
-    // Collect valid destinations for Distance Matrix batch query
-    const validIndices: number[] = [];
-    const destCoordStrings: string[] = [];
-    for (let i = 0; i < destCoords.length; i++) {
-      if (destCoords[i]) {
-        validIndices.push(i);
-        destCoordStrings.push(`${destCoords[i]!.lat},${destCoords[i]!.lng}`);
-      }
+    if (!originCoord) {
+      return json(req, { distances: results, originError: "not_found" });
     }
 
-    // Query Google Distance Matrix for driving times (batch all valid destinations)
-    if (validIndices.length > 0) {
+    // Venues saved with coordinates skip geocoding; the rest are looked up a
+    // few at a time rather than one after another.
+    const wanted = (destinations as Destination[]).slice(0, MAX_DESTINATIONS);
+    const destCoords: (Coord | null)[] = await mapLimit(wanted, 5, async (dest) => {
+      if (typeof dest === "object" && dest.lat != null && dest.lon != null) {
+        return { lat: dest.lat, lng: dest.lon };
+      }
+      const addr = typeof dest === "string" ? dest : dest?.address;
+      if (typeof addr !== "string" || !addr.trim()) return null;
+      return (await geocodeAU(addr, apiKey)).coord;
+    });
+    destCoords.forEach((c, i) => {
+      if (c) {
+        results[i].lat = c.lat;
+        results[i].lon = c.lng;
+      }
+    });
+
+    const valid = destCoords
+      .map((c, i) => (c ? { i, c } : null))
+      .filter((v): v is { i: number; c: Coord } => v !== null);
+
+    for (let start = 0; start < valid.length; start += MATRIX_BATCH) {
+      const batch = valid.slice(start, start + MATRIX_BATCH);
       const dmUrl =
         `https://maps.googleapis.com/maps/api/distancematrix/json` +
         `?origins=${originCoord.lat},${originCoord.lng}` +
-        `&destinations=${destCoordStrings.join("|")}` +
+        `&destinations=${batch.map(({ c }) => `${c.lat},${c.lng}`).join("|")}` +
         `&mode=driving&units=metric&key=${apiKey}`;
-
       try {
         const res = await fetch(dmUrl);
-        if (res.ok) {
-          const data = await res.json();
-          const rows = data?.rows;
-          if (Array.isArray(rows) && rows.length > 0) {
-            const elements = rows[0]?.elements;
-            if (Array.isArray(elements)) {
-              for (let vi = 0; vi < validIndices.length && vi < elements.length; vi++) {
-                const origIdx = validIndices[vi];
-                const el = elements[vi];
-                if (el?.status === "OK" && typeof el.duration?.value === "number") {
-                  const secs = el.duration.value;
-                  results[origIdx] = {
-                    durationSeconds: secs,
-                    durationText: formatDuration(secs),
-                    error: false,
-                    lat: destCoords[origIdx]?.lat,
-                    lon: destCoords[origIdx]?.lng,
-                  };
-                }
-              }
-            }
-          }
+        if (!res.ok) {
+          console.error("[travel-times] Distance Matrix HTTP", res.status);
+          continue;
         }
-      } catch {
-        // Distance Matrix failed — leave results as error
+        const data = await res.json();
+        if (data.status !== "OK") {
+          logGoogleError("travel-times", data);
+          continue;
+        }
+        const elements = data?.rows?.[0]?.elements;
+        if (!Array.isArray(elements)) continue;
+        batch.forEach(({ i, c }, k) => {
+          const el = elements[k];
+          if (el?.status === "OK" && typeof el.duration?.value === "number") {
+            results[i] = {
+              durationSeconds: el.duration.value,
+              durationText: formatDuration(el.duration.value),
+              error: false,
+              lat: c.lat,
+              lon: c.lng,
+            };
+          }
+        });
+      } catch (err) {
+        console.error("[travel-times] Distance Matrix failed", String(err));
       }
     }
 
-    return json(req, { distances: results });
+    return json(req, {
+      distances: results,
+      origin: { lat: originCoord.lat, lon: originCoord.lng, address: originAddress },
+    });
   } catch (err) {
     // Upstream/config detail is logged, not returned — error text from the
     // Maps client can leak key state and internal identifiers.
