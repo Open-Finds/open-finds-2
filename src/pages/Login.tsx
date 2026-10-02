@@ -87,7 +87,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
             <span className="text-4xl font-black tracking-tight text-gold sm:text-5xl">The</span>
             <span className="text-4xl font-black tracking-tight text-white sm:text-5xl">Unsaved</span>
           </div>
-          <p className="text-sm text-ink-secondary">Turn those reels into real life!</p>
+          <p className="text-sm text-ink-secondary">Turn reels into real life!</p>
         </div>
 
         <div className="mt-8 rounded-card border border-gold/20 bg-surface p-5 sm:p-7">

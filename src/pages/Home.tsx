@@ -937,7 +937,7 @@ export function HomePage({
             THE UNSAVED
           </h1>
           <p className="mt-3 text-base font-medium text-gold">
-            Turn those reels into real life!
+            Turn reels into real life!
           </p>
 
           {/* Primary actions — inline so they never cover the form below */}
