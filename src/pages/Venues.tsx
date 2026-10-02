@@ -19,7 +19,7 @@ import {
   type VenueType,
   type Collection,
 } from '../lib/supabase';
-import { extractVenuesFromLink, type ExtractedVenueItem } from '../lib/openai';
+import { UserFacingError, extractVenuesFromLink, type ExtractedVenueItem } from '../lib/openai';
 import { geocodeAddress } from '../lib/apiKeys';
 import { navigate } from '../lib/router';
 import { SavedVenueCard } from '../components/SavedVenueCard';
@@ -285,8 +285,8 @@ export function VenuesPage() {
         setExtractedItems(items);
         setSelectedItems(new Set(items.map((_, i) => i)));
       }
-    } catch {
-      setError("Couldn't extract venue. Please enter details manually below.");
+    } catch (e) {
+      setError(e instanceof UserFacingError ? e.message : "Couldn't extract venue. Please enter details manually below.");
     } finally {
       setExtracting(false);
     }
@@ -718,7 +718,6 @@ export function VenuesPage() {
                 <div className="flex items-center gap-2">
                   <Folder size={16} className="text-gold/70" />
                   <h2 className="text-sm font-semibold uppercase tracking-wide text-gold/80">Collections</h2>
-                  <span className="text-xs text-ink-secondary">Group venues for a trip</span>
                 </div>
                 <button
                   onClick={() => setShowNewCollection(!showNewCollection)}
@@ -761,7 +760,7 @@ export function VenuesPage() {
               )}
 
               {collections.length === 0 && !showNewCollection ? (
-                <p className="text-xs text-ink-secondary">No collections yet. Create one to group venues for a trip.</p>
+                <p className="text-xs text-ink-secondary">No collections yet. Tap New to start one.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {collections.map((c) => {

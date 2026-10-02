@@ -3,6 +3,7 @@ import { MapPin, Pencil, Save, X } from 'lucide-react';
 import { updateStop, type Stop } from '../lib/supabase';
 import { formatTime } from '../lib/time';
 import { TimeSelect } from './ui/select';
+import { CheckItOut } from './CheckItOut';
 
 export function StopCard({
   stop,
@@ -75,6 +76,7 @@ export function StopCard({
         <p className="mt-1 flex items-center gap-1 text-sm text-ink-secondary">
           <MapPin size={14} className="text-gold/70" /> {stop.address}
         </p>
+        <CheckItOut link={stop.vibe_link} className="mt-3" />
       </div>
     );
   }

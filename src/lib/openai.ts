@@ -1,8 +1,20 @@
 import type { VenueType, SavedVenue, PlanHistoryEntry } from './supabase';
 import { isGoogleMapsLink, resolveGoogleMapsLink } from './apiKeys';
+import { findSimilarVenues, type KnownVenue } from './venueMatch';
 import { edgeAuthHeaders } from './edgeAuth';
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+/** An error whose message is written for the user, so screens show it as-is. */
+export class UserFacingError extends Error {}
+
+/** A free account used today's AI allowance. */
+export class DailyLimitError extends UserFacingError {
+  constructor() {
+    super('Free includes 3 of these a day. It resets tomorrow.');
+    this.name = 'DailyLimitError';
+  }
+}
 
 async function callAI(
   messages: ChatMessage[],
@@ -25,7 +37,7 @@ async function callAI(
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     if (res.status === 429) {
-      throw new Error('Free includes 3 of these a day. It resets tomorrow.');
+      throw new DailyLimitError();
     }
     throw new Error(`AI request failed (${res.status}). ${text.slice(0, 200)}`);
   }
@@ -206,11 +218,14 @@ export async function extractVenuesFromLink(
   // instead of scraping the page (which mostly returns empty for Maps pages).
   if (isGoogleMapsLink(link)) {
     const place = await resolveGoogleMapsLink(link);
+    if (place?.hint === 'review') {
+      throw new UserFacingError("That's a link to a Google review, not a place. Open the place in Google Maps and tap Share there.");
+    }
     if (place && (place.name || place.address)) {
       return [{
         name: place.name ?? '',
         address: place.address ?? '',
-        type: 'food',
+        type: place.type ?? normalizeType(place.name) ?? 'food',
         order: 1,
         lat: place.lat,
         lon: place.lon,
@@ -223,8 +238,9 @@ export async function extractVenuesFromLink(
   // Step 1: Fetch real page metadata via edge function
   const meta = await fetchPageMeta(link);
 
-  // Step 2: Build context from metadata for the AI
-  const context = buildExtractionPrompt(meta, link);
+  // Step 2: Build context from metadata for the AI. Share links are followed
+  // server-side, so meta.url is the real page (e.g. the full TikTok video).
+  const context = buildExtractionPrompt(meta, meta?.url || link);
 
   // Step 3: Ask AI to extract venue details using the metadata + web search
   const content = await callAI(
@@ -350,8 +366,10 @@ export async function discoverSmartVenueCandidates(
   // The night gets one stop per vibe, so every vibe needs candidates. Asked
   // for a single mixed list of 8, the model returned all-food for a
   // food + bar + dessert night.
-  const perVibe = 3;
-  const total = Math.max(8, perVibe * vibes.length);
+  // Four each, because some are dropped afterwards: places already saved or
+  // visited, and (in the app) anything outside the travel time.
+  const perVibe = 4;
+  const total = Math.max(10, perVibe * vibes.length);
   const quota = vibes.map((v) => `at least ${perVibe} with type '${v}' (${describe(v)})`).join('; ');
 
   const savedSummary = savedVenues.length > 0
@@ -385,7 +403,7 @@ export async function discoverSmartVenueCandidates(
   const historyNames = recent.flatMap((h) => h.stops.map((st) => st.name.toLowerCase()));
 
   const dietaryGuidance = dietaryPreferences && dietaryPreferences.length > 0
-    ? `\n\nIMPORTANT — DIETARY REQUIREMENTS: The user has these dietary preferences/restrictions: ${dietaryPreferences.join(', ')}. You MUST only recommend venues that can genuinely accommodate these dietary needs. For food venues, ensure they have suitable menu options (e.g. vegetarian/vegan dishes, gluten-free options, halal certification, kosher options, dairy-free alternatives, or nut-free menus as applicable). Exclude any venue that cannot cater to these requirements. If recommending a dessert spot, it must also accommodate the dietary needs.`
+    ? `\n\nIMPORTANT — DIETARY REQUIREMENTS: The user has these dietary preferences/restrictions: ${dietaryPreferences.join(', ')}. You MUST only recommend venues that can genuinely accommodate these dietary needs. For food venues, ensure they have suitable menu options (e.g. vegetarian/vegan dishes, gluten-free options, halal certification, kosher options, dairy-free alternatives, nut-free, egg-free, soy-free or shellfish-free menus as applicable). Exclude any venue that cannot cater to these requirements. If recommending a dessert spot, it must also accommodate the dietary needs.`
     : '';
 
   const content = await callAI(
@@ -397,7 +415,9 @@ export async function discoverSmartVenueCandidates(
       },
       { role: 'user', content: `Find ${vibeLabels} near ${locationStr} that match my taste${dietaryPreferences && dietaryPreferences.length > 0 ? ` and accommodate my dietary needs (${dietaryPreferences.join(', ')})` : ''}` },
     ],
-    { temperature: 0.7, responseFormat: 'json_object', purpose: 'discover' }
+    // Lower than before: the same taste and limits should give similar
+    // answers, while still leaving room for variety.
+    { temperature: 0.5, responseFormat: 'json_object', purpose: 'discover' }
   );
 
   let parsed: { venues?: unknown };
@@ -421,5 +441,27 @@ export async function discoverSmartVenueCandidates(
     candidates.push({ name, address, type, vibe_link: link });
   }
 
-  return candidates;
+  return withoutKnownVenues(candidates, savedVenues, recent);
+}
+
+/**
+ * Drops suggestions the user already has: their saved venues and the places
+ * from their recent nights out. The prompt asks the model to leave these
+ * out, but it doesn't always; this makes sure "Something New" is new.
+ * Exported for tests.
+ */
+export function withoutKnownVenues(
+  candidates: VenueCandidate[],
+  saved: SavedVenue[],
+  history: PlanHistoryEntry[] = []
+): VenueCandidate[] {
+  const known: KnownVenue[] = [
+    ...saved,
+    ...history.flatMap((h) => h.stops.map((st) => ({ name: st.name, address: st.address }))),
+  ];
+  if (known.length === 0) return candidates;
+  return candidates.filter(
+    (c) => !findSimilarVenues({ name: c.name, address: c.address, link: c.vibe_link }, known)
+      .some((m) => m.confidence >= 0.75)
+  );
 }

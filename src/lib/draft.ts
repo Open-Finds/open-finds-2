@@ -2,7 +2,7 @@
  * Draft persistence for the plan wizard.
  *
  * The wizard is a single component holding its progress in React state. On a
- * phone, tapping "check the vibes" opens Instagram, the browser backgrounds,
+ * phone, tapping "Check it out" opens Instagram, the browser backgrounds,
  * and iOS routinely evicts the tab — so coming back reloaded the page and the
  * half-built plan was gone. Users read that as "switching apps cancels the
  * plan". This keeps a draft in localStorage so a reload resumes where they

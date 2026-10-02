@@ -16,8 +16,11 @@ import type { SavedVenue } from './supabase';
 
 export type MatchReason = 'link' | 'name' | 'address' | 'location' | 'similar-name';
 
-export type VenueMatch = {
-  venue: SavedVenue;
+/** What matching reads from a venue; saved venues and past stops both have it. */
+export type KnownVenue = Pick<SavedVenue, 'name' | 'address'> & Partial<Pick<SavedVenue, 'link' | 'lat' | 'lon'>>;
+
+export type VenueMatch<V extends KnownVenue = SavedVenue> = {
+  venue: V;
   reason: MatchReason;
   /** 1 = certainly the same place; lower = worth a look. */
   confidence: number;
@@ -128,7 +131,7 @@ function suburbToken(raw: string): string | null {
  * Finds saved venues that are probably the same place as `candidate`.
  * Sorted most-confident first; a venue appears at most once.
  */
-export function findSimilarVenues(candidate: VenueCandidate, existing: SavedVenue[]): VenueMatch[] {
+export function findSimilarVenues<V extends KnownVenue = SavedVenue>(candidate: VenueCandidate, existing: V[]): VenueMatch<V>[] {
   const cName = normalizeName(candidate.name);
   const cTokens = nameTokens(candidate.name);
   const cStreet = streetKey(candidate.address);
@@ -137,10 +140,10 @@ export function findSimilarVenues(candidate: VenueCandidate, existing: SavedVenu
   const cSuburb = suburbToken(candidate.address);
   const hasCoords = candidate.lat != null && candidate.lon != null;
 
-  const out: VenueMatch[] = [];
+  const out: VenueMatch<V>[] = [];
 
   for (const v of existing) {
-    let best: VenueMatch | null = null;
+    let best: VenueMatch<V> | null = null;
     const consider = (reason: MatchReason, confidence: number) => {
       if (!best || confidence > best.confidence) best = { venue: v, reason, confidence };
     };
@@ -178,7 +181,7 @@ export function findSimilarVenues(candidate: VenueCandidate, existing: SavedVenu
   return out.sort((a, b) => b.confidence - a.confidence);
 }
 
-export function describeMatch(m: VenueMatch): string {
+export function describeMatch(m: VenueMatch<KnownVenue>): string {
   switch (m.reason) {
     case 'link': return 'Same link';
     case 'name': return 'Same name';

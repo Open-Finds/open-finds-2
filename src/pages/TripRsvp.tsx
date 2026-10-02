@@ -14,6 +14,7 @@ import {
 } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Confetti } from '../components/Confetti';
+import { CheckItOut } from '../components/CheckItOut';
 import {
   ChevronLeft,
   CalendarDays,
@@ -260,6 +261,7 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
                         <p className="truncate text-xs text-ink-secondary">
                           {stop.address}
                         </p>
+                        <CheckItOut link={stop.vibe_link} variant="pill" className="mt-2" />
                       </div>
                       <div className="flex shrink-0 gap-1.5">
                         <button

@@ -7,7 +7,7 @@ import {
   type VenueType,
 } from '../lib/supabase';
 import { geocodeAddress } from '../lib/apiKeys';
-import { extractVenueFromLink } from '../lib/openai';
+import { UserFacingError, extractVenueFromLink } from '../lib/openai';
 import { useAuth } from '../context/AuthContext';
 import { SavedVenueCard } from './SavedVenueCard';
 import { VenueTypeSelect } from './ui/select';
@@ -111,8 +111,8 @@ export function SavedVenuesModal({
           setExtractedCoords({ lat: venue.lat, lon: venue.lon });
         }
       }
-    } catch {
-      setError("Couldn't extract — enter manually.");
+    } catch (e) {
+      setError(e instanceof UserFacingError ? e.message : "Couldn't extract — enter manually.");
     } finally {
       setExtracting(false);
     }

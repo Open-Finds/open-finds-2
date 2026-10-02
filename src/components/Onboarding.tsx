@@ -48,7 +48,7 @@ const STEPS = [
   {
     icon: MapPin,
     title: 'On the night',
-    desc: 'Open every stop in Maps as one route, add the whole plan to your calendar, and check the vibes from each venue’s page before you go.',
+    desc: 'Open every stop in Maps as one route, add the whole plan to your calendar, and tap “Check it out” to see each venue’s reel before you go.',
   },
   {
     icon: Compass,
@@ -65,6 +65,9 @@ const DIETARY_OPTIONS = [
   { key: 'kosher', label: 'Kosher' },
   { key: 'dairy-free', label: 'Dairy-Free' },
   { key: 'nut-allergy', label: 'Nut Allergy' },
+  { key: 'egg-free', label: 'Egg-Free' },
+  { key: 'soy-allergy', label: 'Soy Allergy' },
+  { key: 'shellfish-allergy', label: 'Shellfish Allergy' },
   { key: 'pescatarian', label: 'Pescatarian' },
 ];
 

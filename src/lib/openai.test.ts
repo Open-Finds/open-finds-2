@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeType } from './openai';
+import { normalizeType, withoutKnownVenues } from './openai';
+import type { SavedVenue } from './supabase';
 
 /**
  * The model returns free text; this is the gate that turns it into one of the
@@ -60,5 +61,37 @@ describe('normalizeType', () => {
     expect(normalizeType(undefined)).toBeNull();
     expect(normalizeType(42)).toBeNull();
     expect(normalizeType({ type: 'food' })).toBeNull();
+  });
+});
+
+/**
+ * "Something New" must be new: the model is asked to skip saved and visited
+ * places, but this is what actually guarantees it.
+ */
+describe('withoutKnownVenues', () => {
+  const saved = [
+    { id: '1', name: 'Bar Lune', address: '123 Collins St, Melbourne VIC 3000', link: 'https://instagram.com/barlune', lat: null, lon: null },
+  ] as unknown as SavedVenue[];
+  const history = [{ title: 'Friday', date: '2026-09-20', location: 'Fitzroy', stops: [{ name: 'Gelato Lab', address: '210 Brunswick St, Fitzroy VIC 3065', type: 'dessert' }] }];
+  const candidate = (name: string, address: string, vibe_link: string | null = null) => ({ name, address, type: 'food' as const, vibe_link });
+
+  it('drops a suggestion the user has already saved, however it is written', () => {
+    const out = withoutKnownVenues([candidate('bar lune', '123 Collins Street, Melbourne'), candidate('Pho Nom', '45 Swanston St, Melbourne')], saved);
+    expect(out.map((c) => c.name)).toEqual(['Pho Nom']);
+  });
+
+  it('drops a place from a recent night out', () => {
+    const out = withoutKnownVenues([candidate('Gelato Lab', '210 Brunswick St, Fitzroy'), candidate('Messina', '237 Smith St, Fitzroy')], [], history);
+    expect(out.map((c) => c.name)).toEqual(['Messina']);
+  });
+
+  it('drops a suggestion that links to a saved venue', () => {
+    const out = withoutKnownVenues([candidate('Lune Bar', 'Melbourne', 'instagram.com/barlune/')], saved);
+    expect(out).toEqual([]);
+  });
+
+  it('keeps everything when the user has nothing saved or visited', () => {
+    const list = [candidate('A', '1 A St'), candidate('B', '2 B St')];
+    expect(withoutKnownVenues(list, [], [])).toEqual(list);
   });
 });

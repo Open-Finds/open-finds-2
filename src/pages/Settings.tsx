@@ -13,6 +13,9 @@ const DIETARY_OPTIONS = [
   { key: 'kosher', label: 'Kosher' },
   { key: 'dairy-free', label: 'Dairy-Free' },
   { key: 'nut-allergy', label: 'Nut Allergy' },
+  { key: 'egg-free', label: 'Egg-Free' },
+  { key: 'soy-allergy', label: 'Soy Allergy' },
+  { key: 'shellfish-allergy', label: 'Shellfish Allergy' },
   { key: 'pescatarian', label: 'Pescatarian' },
 ];
 

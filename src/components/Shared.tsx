@@ -1,7 +1,8 @@
 import type { RsvpStatus, Stop } from '../lib/supabase';
-import { MapPin, Clock, ExternalLink, Check, X, Clock3, ChevronLeft } from 'lucide-react';
+import { MapPin, Clock, Check, X, Clock3, ChevronLeft } from 'lucide-react';
 import { navigate } from '../lib/router';
 import { formatTime } from '../lib/time';
+import { CheckItOut } from './CheckItOut';
 
 export function BackButton({ to }: { to: string }) {
   return (
@@ -65,16 +66,7 @@ export function Timeline({
             <p className="mt-1 flex items-center gap-1 text-sm text-ink-secondary">
               <MapPin size={14} className="text-gold/70" /> {stop.address}
             </p>
-            {stop.vibe_link && (
-              <a
-                href={stop.vibe_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-secondary mt-3 w-full text-sm"
-              >
-                <ExternalLink size={16} /> Check the vibes
-              </a>
-            )}
+            <CheckItOut link={stop.vibe_link} className="mt-3 w-full" />
           </div>
         </div>
       ))}

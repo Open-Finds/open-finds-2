@@ -10,6 +10,7 @@ import {
   fetchCollectionVenueIds,
   remainingActivePlanSlots,
   type VenueType,
+  fetchRecentPlanHistory,
   type SavedVenue,
   type Collection,
 } from '../lib/supabase';
@@ -80,7 +81,7 @@ type DayConfig = {
 };
 
 export function TripSetupPage() {
-  const { displayName } = useAuth();
+  const { displayName, dietaryPreferences } = useAuth();
   const [step, setStep] = useState<Step>('details');
   const [tripName, setTripName] = useState('');
   const [destination, setDestination] = useState('');
@@ -260,7 +261,9 @@ export function TripSetupPage() {
         vibesForDay,
         destination.trim(),
         venuePool,
-        60
+        60,
+        dietaryPreferences.length > 0 ? dietaryPreferences : undefined,
+        await fetchRecentPlanHistory().catch(() => [])
       );
       const vibeVenues = new Map<VenueType, VenueCandidate[]>();
       for (const v of venues) {
@@ -315,6 +318,9 @@ export function TripSetupPage() {
         host_name: displayName || 'You',
       });
 
+      // What they've done before steers suggestions; never blocks the trip.
+      const history = await fetchRecentPlanHistory().catch(() => []);
+
       for (let dayIdx = 0; dayIdx < numDays; dayIdx++) {
         setGeneratingDay(dayIdx + 1);
         const dayDate = addDays(startDate, dayIdx);
@@ -343,7 +349,9 @@ export function TripSetupPage() {
               vibesForDay,
               destination.trim(),
               venuePool,
-              60
+              60,
+              dietaryPreferences.length > 0 ? dietaryPreferences : undefined,
+              history
             );
           } catch {
             // If AI discovery fails, continue with placeholder stops

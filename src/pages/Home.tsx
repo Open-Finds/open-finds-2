@@ -4,11 +4,9 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
-  ExternalLink,
   Check,
   X,
   Clock3,
-  Send,
   Copy,
   LayoutDashboard,
   Sparkles,
@@ -30,6 +28,7 @@ import { buildInviteMessage, shareOrCopy } from '../lib/invite';
 import { locateUser } from '../lib/geolocation';
 import { navigate } from '../lib/router';
 import { HelpTooltip } from '../components/HelpTooltip';
+import { CheckItOut } from '../components/CheckItOut';
 import {
   fetchRsvps,
   fetchPlan,
@@ -53,6 +52,7 @@ import {
 } from '../lib/supabase';
 import { VenueTypeSelect, TimeSelect } from '../components/ui/select';
 import {
+  UserFacingError,
   discoverSmartVenueCandidates,
   extractVenuesFromLink,
   type VenueCandidate,
@@ -114,6 +114,11 @@ function describeVibes(vibes: Vibe[]): string {
   return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
 }
 
+/** Slider minutes as a limit in seconds. The top stop (240+) means any distance. */
+function maxTravelSeconds(minutes: number): number {
+  return minutes >= 240 ? Infinity : minutes * 60;
+}
+
 const VIBE_DEFAULT_TIMES: Record<Vibe, string> = {
   food: '18:30',
   bar: '21:00',
@@ -129,6 +134,9 @@ const DIETARY_OPTIONS: { key: string; label: string }[] = [
   { key: 'kosher', label: 'Kosher' },
   { key: 'dairy-free', label: 'Dairy-Free' },
   { key: 'nut-allergy', label: 'Nut-Free' },
+  { key: 'egg-free', label: 'Egg-Free' },
+  { key: 'soy-allergy', label: 'Soy-Free' },
+  { key: 'shellfish-allergy', label: 'No Shellfish' },
   { key: 'pescatarian', label: 'Pescatarian' },
 ];
 
@@ -219,7 +227,7 @@ function TravelSlider({
           </span>
         ))}
       </div>
-      <p className="mt-1 text-xs text-ink-secondary">Max travel time between stops</p>
+      <p className="mt-1 text-xs text-ink-secondary">Max drive from your starting point</p>
     </div>
   );
 }
@@ -288,7 +296,7 @@ export function HomePage({
   const [qaExtractedCoords, setQaExtractedCoords] = useState<{ lat: number; lon: number } | null>(null);
 
   /* ── Draft persistence ──────────────────────────────────────────
-     Backgrounding the browser (which "check the vibes" forces by opening
+     Backgrounding the browser (which "Check it out" forces by opening
      Instagram) can evict the tab on iOS, reloading the page and wiping every
      piece of wizard state above. Save the user-entered parts and resume. */
   const hydrated = useRef(false);
@@ -416,8 +424,8 @@ export function HomePage({
         setQaExtractedItems(items);
         setQaSelectedItems(new Set(items.map((_, i) => i)));
       }
-    } catch {
-      setQaError("Couldn't extract venue. Please enter details manually below.");
+    } catch (e) {
+      setQaError(e instanceof UserFacingError ? e.message : "Couldn't extract venue. Please enter details manually below.");
     } finally {
       setQaExtracting(false);
     }
@@ -750,15 +758,26 @@ export function HomePage({
         setRandomNightError(`No saved venues match your selected vibes. Try 'Something New' instead!`);
         return;
       }
-      const destinations = matching.map((v) => v.address);
+      // Saved coordinates skip a geocode per venue on every request.
+      const destinations = matching.map((v) =>
+        v.lat != null && v.lon != null ? { address: v.address, lat: v.lat, lon: v.lon } : v.address
+      );
       const distances = await fetchDistanceMatrix(effectiveOrigin, destinations);
-      if (!distances) {
+      if (!distances || distances.every((d) => d.error)) {
         setRandomNightError("Couldn't check travel times. Please try again.");
         return;
       }
+      // Keep the coordinates that were looked up, so next time they're free.
+      distances.forEach((d, i) => {
+        const v = matching[i];
+        if ((v.lat == null || v.lon == null) && d.lat != null && d.lon != null) {
+          updateSavedVenueCoords(v.id, d.lat, d.lon).catch(() => { /* best effort */ });
+        }
+      });
+      const limit = maxTravelSeconds(travelTime);
       const filtered = matching.filter((_, i) => {
         const d = distances[i];
-        return d && d.durationSeconds !== null && !d.error && d.durationSeconds <= travelTime * 60;
+        return d && d.durationSeconds !== null && !d.error && d.durationSeconds <= limit;
       });
       if (filtered.length === 0) {
         setRandomNightError(`No saved venues within ${travelTime} min. Try increasing your travel time or try 'Something New'.`);
@@ -810,8 +829,34 @@ export function HomePage({
         return;
       }
 
-      // Pick one random venue per selected vibe from the full AI-suggested set
-      const { picked, missing } = pickOnePerVibe(candidates, selectedVibes);
+      // The AI is only told the travel time; measure it, and keep the venues
+      // that are actually within it.
+      const near = typeof effectiveOrigin === 'string' ? effectiveOrigin : 'you';
+      setNewNightDistanceLoading(true);
+      const distances = await fetchDistanceMatrix(effectiveOrigin, candidates.map((c) => c.address))
+        .finally(() => setNewNightDistanceLoading(false));
+      let pool = candidates;
+      let note: string | null = null;
+      if (distances && !distances.every((d) => d.error)) {
+        const limit = maxTravelSeconds(travelTime);
+        const times: Record<string, string | null> = {};
+        candidates.forEach((c, i) => { times[c.name] = distances[i]?.durationText ?? null; });
+        setNewNightTravelTimes(times);
+        pool = candidates.filter((_, i) => {
+          const d = distances[i];
+          return d && !d.error && d.durationSeconds !== null && d.durationSeconds <= limit;
+        });
+        if (pool.length === 0) {
+          setNewNightError(`Nothing we found is within ${travelTime} min of ${near}. Try a longer travel time.`);
+          return;
+        }
+      } else {
+        // Without travel times, still show the night rather than nothing.
+        note = "Couldn't check travel times, so some of these may be further away.";
+      }
+
+      // Pick one random venue per selected vibe from what's left
+      const { picked, missing } = pickOnePerVibe(pool, selectedVibes);
       if (picked.length === 0) {
         setNewNightError('No venues found. Try different vibes or location.');
         return;
@@ -819,31 +864,10 @@ export function HomePage({
       if (missing.length > 0) {
         // Say which vibe could not be filled instead of quietly returning a
         // shorter night than was asked for.
-        setNewNightError(
-          `Couldn't find anything for ${describeVibes(missing)} near ${
-            typeof effectiveOrigin === 'string' ? effectiveOrigin : 'you'
-          }. Showing the rest — try a wider travel time or a different area.`
-        );
+        note = `Couldn't find anything for ${describeVibes(missing)} within ${travelTime} min of ${near}. Showing the rest — try a longer travel time or a different area.`;
       }
+      if (note) setNewNightError(note);
       setDiscoveredVenues(picked);
-
-      // Fetch travel times in the background — non-blocking, never rejects venues
-      setNewNightDistanceLoading(true);
-      const destinations = picked.map((c) => c.address);
-      fetchDistanceMatrix(effectiveOrigin, destinations)
-        .then((distances) => {
-          if (!distances) return;
-          const times: Record<string, string | null> = {};
-          for (let i = 0; i < picked.length; i++) {
-            const d = distances[i];
-            times[picked[i].name] = d && d.durationText ? d.durationText : null;
-          }
-          setNewNightTravelTimes(times);
-        })
-        .catch(() => {
-          // travel-time fetch failed — venues still show, just no badges
-        })
-        .finally(() => setNewNightDistanceLoading(false));
     } catch (e) {
       setNewNightError(e instanceof Error ? e.message : 'Something went wrong discovering venues.');
     } finally {
@@ -1699,15 +1723,8 @@ export function HomePage({
                   </p>
                   {stop.vibe_link && (
                     <div className="mt-3 flex items-center gap-2">
-                      <a
-                        href={stop.vibe_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-card border border-gold/40 px-4 py-2 text-sm font-medium text-gold transition-all active:scale-95"
-                      >
-                        <ExternalLink size={16} /> Check the vibes
-                      </a>
-                      <HelpTooltip text="Opens this venue's Instagram or social media page so you can see what the place looks like inside." />
+                      <CheckItOut link={stop.vibe_link} />
+                      <HelpTooltip text="Opens the reel, video or page this venue was saved from, so you can see what it's like." />
                     </div>
                   )}
                 </div>
@@ -1716,12 +1733,6 @@ export function HomePage({
           </div>
 
           <div className="mt-8 space-y-3">
-            <button
-              onClick={handleInviteFriend}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
-            >
-              <Send size={18} /> {inviteCopied ? 'Copied!' : 'Invite a Friend'}
-            </button>
             {editPlanId && onNavigateToDashboard && (
               <button
                 onClick={() => onNavigateToDashboard(editPlanId)}

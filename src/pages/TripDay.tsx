@@ -22,10 +22,12 @@ import {
   type StopRsvp,
   type SavedVenue,
   type VenueType,
+  fetchRecentPlanHistory,
   type Collection,
 } from '../lib/supabase';
 import { discoverSmartVenueCandidates, type VenueCandidate } from '../lib/openai';
 import { StopCard } from '../components/StopCard';
+import { useAuth } from '../context/AuthContext';
 import { TimeSelect } from '../components/ui/select';
 import {
   ChevronLeft,
@@ -45,6 +47,7 @@ import {
 } from 'lucide-react';
 
 export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }) {
+  const { dietaryPreferences } = useAuth();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
@@ -207,7 +210,9 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
         vibes,
         plan?.location ?? trip?.destination ?? '',
         savedVenues,
-        60
+        60,
+        dietaryPreferences.length > 0 ? dietaryPreferences : undefined,
+        await fetchRecentPlanHistory().catch(() => [])
       );
       setAiResults(results);
       setAiSelected(new Set(results.map((_, i) => i)));
