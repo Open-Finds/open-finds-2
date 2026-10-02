@@ -82,7 +82,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
     <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-black px-5 py-10 sm:px-6">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
-          <img src="/the-unsaved-mark.svg" alt="" width={88} height={88} className="mb-1" />
+          <img src="/the-unsaved-mark.png" alt="" width={88} height={88} className="mb-1" />
           <div className="mb-3 flex items-baseline gap-2">
             <span className="text-4xl font-black tracking-tight text-gold sm:text-5xl">The</span>
             <span className="text-4xl font-black tracking-tight text-white sm:text-5xl">Unsaved</span>

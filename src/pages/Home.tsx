@@ -132,11 +132,11 @@ const DIETARY_OPTIONS: { key: string; label: string }[] = [
   { key: 'pescatarian', label: 'Pescatarian' },
 ];
 
-/* Pin-and-orbit mark (public/the-unsaved-mark.svg) */
+/* Pin-and-orbit mark (public/the-unsaved-mark.png) */
 function Logo({ size = 96 }: { size?: number }) {
   return (
     <img
-      src="/the-unsaved-mark.svg"
+      src="/the-unsaved-mark.png"
       width={size}
       height={size}
       alt="The Unsaved logo"
