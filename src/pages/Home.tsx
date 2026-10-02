@@ -132,35 +132,16 @@ const DIETARY_OPTIONS: { key: string; label: string }[] = [
   { key: 'pescatarian', label: 'Pescatarian' },
 ];
 
-/* oF monogram logo in gold */
+/* Pin-and-orbit mark (public/the-unsaved-mark.svg) */
 function Logo({ size = 96 }: { size?: number }) {
   return (
-    <svg
+    <img
+      src="/the-unsaved-mark.svg"
       width={size}
       height={size}
-      viewBox="0 0 120 120"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="drop-shadow-[0_0_20px_rgba(212,175,55,0.5)]"
-      aria-label="Open Finds logo"
-    >
-      <path
-        d="M30 62 C30 48, 40 40, 50 40 C60 40, 66 48, 66 58 C66 68, 60 74, 52 74 C46 74, 42 70, 42 64 C42 58, 48 54, 56 54 L84 54"
-        stroke="#D4AF37"
-        strokeWidth="7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <path d="M84 30 L84 92" stroke="#D4AF37" strokeWidth="7" strokeLinecap="round" fill="none" />
-      <path d="M84 38 L100 38" stroke="#D4AF37" strokeWidth="7" strokeLinecap="round" fill="none" />
-      <path d="M84 56 L98 56" stroke="#D4AF37" strokeWidth="7" strokeLinecap="round" fill="none" />
-      <path
-        d="M104 22 C101 22, 99 24, 99 27 C99 30, 104 35, 104 35 C104 35, 109 30, 109 27 C109 24, 107 22, 104 22 Z"
-        fill="#D4AF37"
-      />
-      <circle cx="104" cy="27" r="2" fill="#000000" />
-    </svg>
+      alt="The Unsaved logo"
+      className="drop-shadow-[0_0_24px_rgba(255,140,60,0.35)]"
+    />
   );
 }
 
@@ -951,12 +932,12 @@ export function HomePage({
           }}
         />
         <div className="relative z-10 flex w-full max-w-md flex-col items-center">
-          <Logo size={80} />
+          <Logo size={104} />
           <h1 className="mt-5 text-3xl font-bold tracking-[0.3em] text-white">
-            OPEN FINDS
+            THE UNSAVED
           </h1>
           <p className="mt-3 text-base font-medium text-gold">
-            Plan less. Go out more.
+            Turn those reels into real life!
           </p>
 
           {/* Primary actions — inline so they never cover the form below */}

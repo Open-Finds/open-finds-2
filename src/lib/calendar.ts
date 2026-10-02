@@ -94,7 +94,7 @@ export function buildIcs(ev: CalendarEvent): string {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Open Finds//Plan//EN',
+    'PRODID:-//The Unsaved//Plan//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

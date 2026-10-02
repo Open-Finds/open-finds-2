@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>The Unsaved</title>
+  <defs>
+    <linearGradient id="pin" x1="160" y1="400" x2="352" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF6A2B"/>
+      <stop offset="0.55" stop-color="#FF9F3A"/>
+      <stop offset="1" stop-color="#FFD84F"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="34" y1="0" x2="478" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6D28D9"/>
+      <stop offset="0.32" stop-color="#9B30F0"/>
+      <stop offset="0.5" stop-color="#F0699A"/>
+      <stop offset="0.68" stop-color="#7B8CFA"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <!-- The two halves overlap a little so no seam shows where they meet. -->
+    <clipPath id="front"><rect x="0" y="262" width="512" height="250"/></clipPath>
+    <clipPath id="back"><rect x="256" y="0" width="256" height="268"/></clipPath>
+    <!-- Behind the pin: hidden by the whole pin, hole included. -->
+    <mask id="behind" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="#fff"/>
+      <path d="M263.05 401.56 Q256 410 248.95 401.56 L160.06 295.13 A125 125 0 1 1 351.94 295.13 Z" fill="#000"/>
+    </mask>
+    <!-- In front of the pin: a thin gap separates the ring from it. -->
+    <mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="#fff"/>
+      <g transform="rotate(-14 256 264)" clip-path="url(#front)">
+        <path d="M34 266 A222 70 0 1 0 478 266 A222 70 0 1 0 34 266 Z M42 256 A208 52 0 1 0 458 256 A208 52 0 1 0 42 256 Z" fill="#000" stroke="#000" stroke-width="22" fill-rule="evenodd"/>
+      </g>
+    </mask>
+  </defs>
+  
+  <g mask="url(#behind)"><g transform="rotate(-14 256 264)"><path d="M34 266 A222 70 0 1 0 478 266 A222 70 0 1 0 34 266 Z M42 256 A208 52 0 1 0 458 256 A208 52 0 1 0 42 256 Z" fill="url(#ring)" fill-rule="evenodd" clip-path="url(#back)"/></g></g>
+  <g mask="url(#gap)">
+    <path d="M263.05 401.56 Q256 410 248.95 401.56 L160.06 295.13 A125 125 0 1 1 351.94 295.13 Z M334 215 A78 78 0 1 0 178 215 A78 78 0 1 0 334 215 Z" fill="url(#pin)" fill-rule="evenodd"/>
+    <path d="M256 158 C261 201 270 210 313 215 C270 220 261 229 256 272 C251 229 242 220 199 215 C242 210 251 201 256 158 Z" fill="url(#pin)"/>
+  </g>
+  <g transform="rotate(-14 256 264)"><path d="M34 266 A222 70 0 1 0 478 266 A222 70 0 1 0 34 266 Z M42 256 A208 52 0 1 0 458 256 A208 52 0 1 0 42 256 Z" fill="url(#ring)" fill-rule="evenodd" clip-path="url(#front)"/></g>
+</svg>

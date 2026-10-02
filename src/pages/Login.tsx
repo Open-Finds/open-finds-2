@@ -82,11 +82,12 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
     <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-black px-5 py-10 sm:px-6">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
+          <img src="/the-unsaved-mark.svg" alt="" width={88} height={88} className="mb-1" />
           <div className="mb-3 flex items-baseline gap-2">
-            <span className="text-4xl font-black tracking-tight text-gold sm:text-5xl">Open</span>
-            <span className="text-4xl font-black tracking-tight text-white sm:text-5xl">Finds</span>
+            <span className="text-4xl font-black tracking-tight text-gold sm:text-5xl">The</span>
+            <span className="text-4xl font-black tracking-tight text-white sm:text-5xl">Unsaved</span>
           </div>
-          <p className="text-sm text-ink-secondary">Discover venues. Build unforgettable nights.</p>
+          <p className="text-sm text-ink-secondary">Turn those reels into real life!</p>
         </div>
 
         <div className="mt-8 rounded-card border border-gold/20 bg-surface p-5 sm:p-7">

@@ -92,7 +92,7 @@ export function DashboardPage({
     year: 'numeric',
   });
   const senderName = displayName || plan.host_name;
-  const shareMessage = `${senderName} has invited you to ${plan.title} on ${formattedDate} through Open Finds\n\nOpen here: ${shareUrl}`;
+  const shareMessage = `${senderName} has invited you to ${plan.title} on ${formattedDate} through The Unsaved\n\nOpen here: ${shareUrl}`;
 
   const handleCopy = async () => {
     try {

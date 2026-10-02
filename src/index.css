@@ -4,7 +4,7 @@
 
 /* ──────────────────────────────────────────────────────────────
    Design tokens — shadcn/ui variable contract, carrying the
-   Open Finds gold-on-black identity. The app commits to a single
+   The Unsaved gold-on-black identity. The app commits to a single
    dark world by design, so :root holds the dark palette outright.
    ────────────────────────────────────────────────────────────── */
 @layer base {

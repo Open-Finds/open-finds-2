@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Home, CalendarDays, Bookmark, Settings, Users, Sparkles } from 'lucide-react';
+import { Home, CalendarDays, Bookmark, Settings, Users } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -96,8 +96,8 @@ export function ViewToggle({
         className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-gold/20 bg-[#0d0d0d]/95 backdrop-blur-md lg:flex"
       >
         <div className="flex items-center gap-2.5 px-6 py-7">
-          <Sparkles size={22} className="shrink-0 text-gold" />
-          <span className="gold-gradient-text text-lg font-bold tracking-tight">Open Finds</span>
+          <img src="/the-unsaved-mark.svg" alt="" width={32} height={32} className="shrink-0" />
+          <span className="gold-gradient-text text-lg font-bold tracking-tight">The Unsaved</span>
         </div>
 
         <div className="flex flex-1 flex-col gap-1 px-3">

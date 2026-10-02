@@ -101,7 +101,7 @@ export function CheckoutDialog({
           <DialogTitle className="text-white">
             {tier === 'lifetime' ? 'Buy Lifetime' : `Upgrade to ${SUBSCRIPTION_PLANS[tier].label}`}
           </DialogTitle>
-          <DialogDescription>Pay securely without leaving Open Finds.</DialogDescription>
+          <DialogDescription>Pay securely without leaving The Unsaved.</DialogDescription>
         </DialogHeader>
         {error ? (
           <LoadError message={error} onRetry={retry} />

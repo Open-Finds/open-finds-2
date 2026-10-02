@@ -7,11 +7,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  let data = { title: "Open Finds", body: "You have a new notification" };
+  let data = { title: "The Unsaved", body: "You have a new notification" };
   try {
     if (event.data) data = event.data.json();
   } catch {
-    try { data = { title: "Open Finds", body: event.data?.text() ?? "" }; } catch {}
+    try { data = { title: "The Unsaved", body: event.data?.text() ?? "" }; } catch {}
   }
 
   event.waitUntil(
