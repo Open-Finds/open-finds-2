@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, navigate } from './lib/router';
+import { clearPlanDraft } from './lib/draft';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { HomePage } from './pages/Home';
 import { EventsPage } from './pages/Events';
 import { DashboardPage } from './pages/Dashboard';
 import { VenuesPage } from './pages/Venues';
 import { LoginPage } from './pages/Login';
+import { ResetPasswordPage } from './pages/ResetPassword';
+import { ChooseUsernamePage } from './pages/ChooseUsername';
 import { SettingsPage } from './pages/Settings';
 import { RsvpPage } from './pages/Rsvp';
 import { ConfirmedPage } from './pages/Confirmed';
@@ -79,9 +82,10 @@ function AppInner() {
   const [editPlanId, setEditPlanId] = useState<string | null>(null);
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('right');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [homeResetKey, setHomeResetKey] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const { onboardingCompleted, setOnboardingCompleted, profileLoaded } = useAuth();
+  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username } = useAuth();
 
   useEffect(() => {
     // Any navigation (including a notification tap) leaves the notifications list.
@@ -158,9 +162,20 @@ function AppInner() {
     return <LoginPage />;
   }
 
+  // Opened from a password-reset email: the new password comes first.
+  if (passwordRecovery) {
+    return <ResetPasswordPage />;
+  }
+
   // Wait for profile to load before deciding whether to show onboarding
   if (!profileLoaded) {
     return <div className="min-h-screen bg-black" />;
+  }
+
+  // Google/Facebook accounts arrive without a username; ask for one once.
+  const provider = session.user.app_metadata?.provider;
+  if (!username && provider && provider !== 'email') {
+    return <ChooseUsernamePage />;
   }
 
   // First-open onboarding walkthrough — keeps showing until user checks "Don't show again"
@@ -183,7 +198,13 @@ function AppInner() {
     setShowNotifications(false);
     setSlideDir(v === 'home' ? 'right' : 'left');
     setView(v);
-    if (v === 'home') navigate('/');
+    if (v === 'home') {
+      // Home always means the start screen, even mid-wizard or after sharing
+      // a plan: drop the saved draft and remount the page.
+      clearPlanDraft();
+      setHomeResetKey((k) => k + 1);
+      navigate('/');
+    }
   };
 
   const openDashboard = (planId: string) => setDashboardId(planId);
@@ -230,7 +251,10 @@ function AppInner() {
   if (showNotifications) {
     return (
       <Shell {...shellProps}>
-        <NotificationsPage onBack={() => { setShowNotifications(false); refreshUnread(); }} />
+        <NotificationsPage
+          onBack={() => { setShowNotifications(false); refreshUnread(); }}
+          onOpenFriends={() => { switchView('friends'); refreshUnread(); }}
+        />
       </Shell>
     );
   }
@@ -245,7 +269,7 @@ function AppInner() {
 
   return (
     <Shell {...shellProps}>
-      <div key={view} className={`animate-slide-${slideDir}`}>
+      <div key={view === 'home' ? `home-${homeResetKey}` : view} className={`animate-slide-${slideDir}`}>
         {view === 'home' ? (
           <HomePage onNavigateToDashboard={openDashboard} />
         ) : view === 'events' ? (

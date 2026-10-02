@@ -11,6 +11,7 @@ import {
   remainingActivePlanSlots,
   type VenueType,
   fetchRecentPlanHistory,
+  hasPremium,
   type SavedVenue,
   type Collection,
 } from '../lib/supabase';
@@ -31,6 +32,7 @@ import {
   X,
   Search,
   Folder,
+  Crown,
 } from 'lucide-react';
 
 type Step = 'details' | 'days' | 'generating';
@@ -81,7 +83,7 @@ type DayConfig = {
 };
 
 export function TripSetupPage() {
-  const { displayName, dietaryPreferences } = useAuth();
+  const { displayName, dietaryPreferences, subscriptionTier, premiumUnlocked, profileLoaded } = useAuth();
   const [step, setStep] = useState<Step>('details');
   const [tripName, setTripName] = useState('');
   const [destination, setDestination] = useState('');
@@ -403,6 +405,30 @@ export function TripSetupPage() {
       setStep('days');
     }
   };
+
+  // Trips are a Premium feature (open to everyone while testing is unlocked).
+  if (profileLoaded && !hasPremium(subscriptionTier, premiumUnlocked)) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold/30 bg-gold/10">
+          <Crown size={26} className="text-gold" />
+        </div>
+        <h2 className="mt-5 text-2xl font-bold text-white">Trips are a Premium feature</h2>
+        <p className="mt-2 text-sm text-ink-secondary">
+          Plan every day of a getaway in one go, with venues for each day. Upgrade to Premium to start a trip.
+        </p>
+        <button
+          onClick={() => navigate('/subscription')}
+          className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98]"
+        >
+          <Crown size={18} /> See Premium plans
+        </button>
+        <button onClick={() => navigate('/')} className="mt-3 text-sm text-ink-secondary hover:text-gold">
+          Back to home
+        </button>
+      </div>
+    );
+  }
 
   if (step === 'generating') {
     return (

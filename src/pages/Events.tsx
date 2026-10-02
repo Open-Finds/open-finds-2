@@ -180,7 +180,9 @@ export function EventsPage({
       className="relative flex items-center gap-3 rounded-card border border-gold/20 bg-[#1a1a1a] p-4 transition-all hover:border-gold/50"
     >
       <button
-        onClick={() => onOpenPlan(p.id)}
+        // Guests get the plan as their invite link shows it (RSVP, map,
+        // calendar); the dashboard is the host's.
+        onClick={() => (p.isGuest ? navigate(`/plan/${p.id}`) : onOpenPlan(p.id))}
         className="flex min-w-0 flex-1 items-center gap-3 text-left active:scale-[0.98]"
       >
         <div className="min-w-0 flex-1">

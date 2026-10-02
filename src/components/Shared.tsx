@@ -74,10 +74,19 @@ export function Timeline({
   );
 }
 
+/** Marks the host's own row in an RSVP list. */
+export function HostBadge() {
+  return (
+    <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold">
+      <span aria-hidden="true">👑</span> Host
+    </span>
+  );
+}
+
 export function RsvpList({
   rsvps,
 }: {
-  rsvps: { id: string; name: string; status: RsvpStatus; decline_reason: string | null }[];
+  rsvps: { id: string; name: string; status: RsvpStatus; decline_reason: string | null; is_host?: boolean }[];
 }) {
   if (rsvps.length === 0) {
     return (
@@ -92,7 +101,10 @@ export function RsvpList({
           className="flex items-center justify-between gap-2 rounded-xl border border-gold/10 bg-black/40 px-4 py-3"
         >
           <div className="min-w-0">
-            <p className="truncate font-medium text-white">{r.name}</p>
+            <p className="flex min-w-0 items-center font-medium text-white">
+              <span className="truncate">{r.name}</span>
+              {r.is_host && <HostBadge />}
+            </p>
             {r.status === 'declined' && r.decline_reason && (
               <p className="truncate text-xs text-ink-secondary">
                 "{r.decline_reason}"

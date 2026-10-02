@@ -7,22 +7,19 @@ import {
   sortStops,
   sortStopsByTime,
   resequenceStopsByTime,
-  fetchFriends,
-  fetchFriendGroups,
-  inviteUserToPlan,
-  inviteGroupToPlan,
   type Plan,
   type Stop,
   type Rsvp,
-  type FriendWithProfile,
-  type FriendGroupWithMembers,
 } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
 import { mapsDirectionsUrl } from '../lib/maps';
 import { useCountdown } from '../lib/countdown';
-import { ChevronLeft, CalendarPlus, Clock, Check, X, Clock3, Navigation, Send, Copy, Share2, Users } from 'lucide-react';
+import { ChevronLeft, CalendarPlus, Clock, Check, X, Clock3, Navigation, Share2, Smartphone } from 'lucide-react';
 import { StopCard } from '../components/StopCard';
 import { AddToCalendar } from '../components/AddToCalendar';
+import { HostBadge } from '../components/Shared';
+import { InviteFriendsModal } from '../components/InviteFriendsModal';
+import { ShareOnSocialDialog } from '../components/ShareOnSocial';
+import { buildInviteMessage, getShareUrl } from '../lib/invite';
 
 export function DashboardPage({
   id,
@@ -36,10 +33,9 @@ export function DashboardPage({
   const [stops, setStops] = useState<Stop[]>([]);
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showShare, setShowShare] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
-  const { displayName } = useAuth();
 
   const countdown = useCountdown(plan ? `${plan.date}T19:00:00` : '2099-01-01');
 
@@ -84,37 +80,6 @@ export function DashboardPage({
   }
 
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
-
-  const shareUrl = `${window.location.origin}${window.location.pathname}#/plan/${id}/rsvp`;
-  const formattedDate = new Date(`${plan.date}T00:00:00`).toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const senderName = displayName || plan.host_name;
-  const shareMessage = `${senderName} has invited you to ${plan.title} on ${formattedDate} through The Unsaved\n\nOpen here: ${shareUrl}`;
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(shareMessage);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: plan.title, text: shareMessage, url: shareUrl });
-      } catch {
-        /* cancelled */
-      }
-    } else {
-      handleCopy();
-    }
-  };
 
   const navUrl = mapsDirectionsUrl(stops.map((s) => s.address), plan.location) ?? '#';
 
@@ -190,6 +155,7 @@ export function DashboardPage({
                 >
                   <div>
                     <span className="font-medium text-white">{r.name}</span>
+                    {r.is_host && <HostBadge />}
                     {r.status === 'declined' && r.decline_reason && (
                       <p className="text-xs text-ink-secondary">"{r.decline_reason}"</p>
                     )}
@@ -242,163 +208,28 @@ export function DashboardPage({
           </a>
           <AddToCalendar plan={plan} stops={stops} />
           <button
-            onClick={() => setShowShare(true)}
+            onClick={() => setInviteOpen(true)}
             className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
           >
-            <Send size={18} /> Invite a Friend
+            <Smartphone size={18} /> Invite Friends
+          </button>
+          <button
+            onClick={() => setShareOpen(true)}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
+          >
+            <Share2 size={18} /> Share on Social
           </button>
         </div>
       </div>
 
-      {showShare && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-sm rounded-card border border-gold/20 bg-[#0d0d0d] p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Share your plan</h2>
-              <button
-                onClick={() => setShowShare(false)}
-                className="text-ink-secondary transition-colors hover:text-white"
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <p className="mb-4 text-sm text-ink-secondary">
-              Send this link so friends can RSVP to{' '}
-              <span className="font-medium text-white">{plan.title}</span>.
-            </p>
-
-            <div className="mb-3 rounded-lg border border-gold/20 bg-black/40 px-3 py-2.5">
-              <p className="text-xs text-ink-secondary leading-relaxed break-words">{shareMessage}</p>
-            </div>
-
-            <div className="space-y-3">
-              <button
-                onClick={handleCopy}
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98]"
-              >
-                <Copy size={18} /> {copied ? 'Copied!' : '📋 Copy Invite'}
-              </button>
-              <button
-                onClick={handleNativeShare}
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
-              >
-                <Share2 size={18} /> Share via WhatsApp / Telegram
-              </button>
-            </div>
-
-            <div className="mt-5 border-t border-gold/10 pt-4">
-              <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gold">
-                <Users size={15} /> Invite from Friends
-              </p>
-              <InviteSection planId={id} />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function InviteSection({ planId }: { planId: string }) {
-  const [friends, setFriends] = useState<FriendWithProfile[]>([]);
-  const [groups, setGroups] = useState<FriendGroupWithMembers[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [invited, setInvited] = useState<Set<string>>(new Set());
-  const [inviting, setInviting] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const [f, g] = await Promise.all([fetchFriends(), fetchFriendGroups()]);
-        setFriends(f.filter((x) => x.status === 'accepted'));
-        setGroups(g);
-      } catch { /* ignore */ } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const handleInviteUser = async (userId: string) => {
-    setInviting(userId);
-    try {
-      await inviteUserToPlan(planId, userId);
-      setInvited((prev) => new Set(prev).add(userId));
-    } catch { /* ignore */ } finally {
-      setInviting(null);
-    }
-  };
-
-  const handleInviteGroup = async (groupId: string) => {
-    setInviting(groupId);
-    try {
-      await inviteGroupToPlan(planId, groupId);
-      setInvited((prev) => new Set(prev).add(groupId));
-    } catch { /* ignore */ } finally {
-      setInviting(null);
-    }
-  };
-
-  if (loading) return <p className="text-sm text-ink-secondary">Loading...</p>;
-
-  if (friends.length === 0 && groups.length === 0) {
-    return <p className="text-sm text-ink-secondary">Add friends first to invite them directly.</p>;
-  }
-
-  return (
-    <div className="space-y-3">
-      {groups.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gold/50">Groups</p>
-          {groups.map((g) => (
-            <button
-              key={g.id}
-              onClick={() => handleInviteGroup(g.id)}
-              disabled={invited.has(g.id) || inviting === g.id}
-              className="flex w-full items-center justify-between rounded-card border border-gold/20 bg-[#1a1a1a] p-3 text-left transition-all active:scale-[0.98] hover:border-gold/40 disabled:opacity-50"
-            >
-              <div>
-                <p className="text-sm font-semibold text-white">{g.name}</p>
-                <p className="text-xs text-ink-secondary">{g.members.length} members</p>
-              </div>
-              {invited.has(g.id) ? (
-                <span className="text-sm text-success"><Check size={16} /></span>
-              ) : inviting === g.id ? (
-                <span className="text-sm text-gold">...</span>
-              ) : (
-                <Send size={16} className="text-gold/60" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {friends.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gold/50">Friends</p>
-          {friends.map((f) => (
-            <button
-              key={f.user_id}
-              onClick={() => handleInviteUser(f.user_id)}
-              disabled={invited.has(f.user_id) || inviting === f.user_id}
-              className="flex w-full items-center justify-between rounded-card border border-gold/20 bg-[#1a1a1a] p-3 text-left transition-all active:scale-[0.98] hover:border-gold/40 disabled:opacity-50"
-            >
-              <div>
-                <p className="text-sm font-semibold text-white">{f.display_name}</p>
-                <p className="text-xs text-ink-secondary">@{f.username}</p>
-              </div>
-              {invited.has(f.user_id) ? (
-                <span className="text-sm text-success"><Check size={16} /></span>
-              ) : inviting === f.user_id ? (
-                <span className="text-sm text-gold">...</span>
-              ) : (
-                <Send size={16} className="text-gold/60" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      <InviteFriendsModal open={inviteOpen} onClose={() => setInviteOpen(false)} planId={id} />
+      <ShareOnSocialDialog
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title={plan.title}
+        message={buildInviteMessage(plan)}
+        url={getShareUrl(id)}
+      />
     </div>
   );
 }

@@ -163,7 +163,8 @@ Deno.serve(async (req: Request) => {
         ? `${guestName} just RSVP'd "I'm In" to your plan.`
         : `${guestName} just declined your plan.`;
       resolvedType = "rsvp";
-      resolvedData = { type: "rsvp", url: `/plan/${body.plan_id}` };
+      // The host's view of the plan: who's coming.
+      resolvedData = { type: "rsvp", plan_id: body.plan_id, url: `/#/plan/${body.plan_id}/dashboard` };
 
       if (!plan.owner_id) {
         // A plan made before the host signed in has no account to notify.
@@ -244,8 +245,8 @@ Deno.serve(async (req: Request) => {
       title: resolvedTitle,
       body: resolvedBody,
       data: { ...(resolvedData ?? {}), url: (resolvedData?.url as string | undefined) ?? "/" },
-      icon: "/icon-192.png",
-      badge: "/badge-72.png",
+      icon: "/favicon.png",
+      badge: "/favicon.png",
     });
 
     let sent = 0;

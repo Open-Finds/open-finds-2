@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Plus, X, Loader2, Check, Link2, Sparkles, Folder, FolderPlus, Trash2, Pencil, ChevronLeft, MapPin, Share2, Users, UserMinus } from 'lucide-react';
+import { Search, Plus, X, Loader2, Check, Link2, Sparkles, Folder, FolderPlus, Trash2, Pencil, ChevronLeft, MapPin, Share2, Users, UserMinus, Crown } from 'lucide-react';
 import {
   fetchSavedVenues,
   insertSavedVenue,
@@ -14,6 +14,7 @@ import {
   fetchCollectionVenues,
   fetchCollectionMembers,
   removeCollectionMember,
+  hasPremium,
   type CollectionVenue,
   type SavedVenue,
   type VenueType,
@@ -45,7 +46,7 @@ export function VenuesPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [openCollectionId, setOpenCollectionId] = useState<string | null>(null);
-  const { session } = useAuth();
+  const { session, subscriptionTier, premiumUnlocked } = useAuth();
   const myId = session?.user.id ?? null;
 
   /* ── Shared collections ──
@@ -461,10 +462,10 @@ export function VenuesPage() {
                 </button>
               )}
               <button
-                onClick={() => navigate('/trip-setup')}
+                onClick={() => navigate(hasPremium(subscriptionTier, premiumUnlocked) ? `/trip-setup?collection=${openCollectionId}` : '/subscription')}
                 className="flex items-center gap-2 rounded-card bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-95"
               >
-                <MapPin size={16} /> Plan a Trip
+                <MapPin size={16} /> Plan a Trip <Crown size={13} aria-label="Premium" />
               </button>
             </div>
             <div className="relative mb-4">

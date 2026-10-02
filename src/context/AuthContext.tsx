@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, fetchProfile, fetchPremiumUnlocked, claimDeviceRows, type SubscriptionTier } from '../lib/supabase';
+import { supabase, fetchProfile, fetchPremiumUnlocked, claimDeviceRows, arrivedFromPasswordReset, type SubscriptionTier } from '../lib/supabase';
 import { setMonitoringUser } from '../lib/monitoring';
 
 type AuthContextType = {
@@ -18,6 +18,9 @@ type AuthContextType = {
   /** Open testing: everyone has Premium limits, whatever their tier. */
   premiumUnlocked: boolean;
   isVenuePartner: boolean;
+  /** Signed in from a password-reset email: ask for a new password first. */
+  passwordRecovery: boolean;
+  endPasswordRecovery: () => void;
   refreshProfile: () => Promise<void>;
   setOnboardingCompleted: (v: boolean) => void;
 };
@@ -35,6 +38,8 @@ const AuthContext = createContext<AuthContextType>({
   subscriptionRenewsAt: null,
   premiumUnlocked: false,
   isVenuePartner: false,
+  passwordRecovery: false,
+  endPasswordRecovery: () => {},
   refreshProfile: async () => {},
   setOnboardingCompleted: () => {},
 });
@@ -52,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscriptionRenewsAt, setSubscriptionRenewsAt] = useState<string | null>(null);
   const [premiumUnlocked, setPremiumUnlocked] = useState(false);
   const [isVenuePartner, setIsVenuePartner] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(arrivedFromPasswordReset);
 
   const loadProfile = async (userId: string) => {
     try {
@@ -96,6 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
+      // A reset link that didn't sign anyone in (expired, used) asks nothing.
+      if (!data.session) setPasswordRecovery(false);
       setSession(data.session);
       setMonitoringUser(data.session?.user.id ?? null);
       if (data.session?.user.id) {
@@ -107,7 +115,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
+      if (event === 'SIGNED_OUT') setPasswordRecovery(false);
       setSession(s);
       setMonitoringUser(s?.user.id ?? null);
       setProfileLoaded(false);
@@ -131,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, premiumUnlocked, isVenuePartner, refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
+    <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, premiumUnlocked, isVenuePartner, passwordRecovery, endPasswordRecovery: () => setPasswordRecovery(false), refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
       {children}
     </AuthContext.Provider>
   );

@@ -7,7 +7,7 @@ import {
   Check,
   X,
   Clock3,
-  Copy,
+  Share2,
   LayoutDashboard,
   Sparkles,
   Clock,
@@ -23,12 +23,16 @@ import {
   Tag,
   Link2,
   Compass,
+  Crown,
 } from 'lucide-react';
-import { buildInviteMessage, shareOrCopy } from '../lib/invite';
+import { buildInviteMessage, getShareUrl } from '../lib/invite';
 import { locateUser } from '../lib/geolocation';
 import { navigate } from '../lib/router';
 import { HelpTooltip } from '../components/HelpTooltip';
 import { CheckItOut } from '../components/CheckItOut';
+import { HostBadge } from '../components/Shared';
+import { InviteFriendsModal } from '../components/InviteFriendsModal';
+import { ShareOnSocialDialog } from '../components/ShareOnSocial';
 import {
   fetchRsvps,
   fetchPlan,
@@ -36,17 +40,15 @@ import {
   createPlan,
   createStops,
   updateStop,
-  insertRsvp,
-  sendGuestRsvpPushNotification,
   fetchSavedVenues,
   fetchRecentPlanHistory,
   insertSavedVenue,
   updateSavedVenueCoords,
   sortStops,
+  hasPremium,
   type SavedVenue,
   type VenueType,
   type Rsvp,
-  type RsvpStatus,
   type Plan,
   type Stop,
 } from '../lib/supabase';
@@ -253,11 +255,8 @@ export function HomePage({
   const [stopTimes, setStopTimes] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<Plan | null>(null);
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
-  const [rsvpName, setRsvpName] = useState('');
-  const [rsvpSubmitting, setRsvpSubmitting] = useState(false);
-  const [rsvpMessage, setRsvpMessage] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
@@ -275,7 +274,7 @@ export function HomePage({
   const [savedVenueList, setSavedVenueList] = useState<SavedVenue[]>([]);
   const [savedVenueListLoading, setSavedVenueListLoading] = useState(false);
   const [savedVenueSelectedIds, setSavedVenueSelectedIds] = useState<Set<string>>(new Set());
-  const { displayName, dietaryPreferences } = useAuth();
+  const { displayName, dietaryPreferences, subscriptionTier, premiumUnlocked } = useAuth();
   const [adHocDietaryFilters, setAdHocDietaryFilters] = useState<Set<string>>(new Set());
 
   // Inline venue form state (link extract + manual entry)
@@ -875,62 +874,7 @@ export function HomePage({
     }
   };
 
-  const handleRsvp = async (status: RsvpStatus) => {
-    if (!rsvpName.trim() || !plan) return;
-    setRsvpSubmitting(true);
-    setRsvpMessage(null);
-    try {
-      await insertRsvp({ plan_id: plan.id, name: rsvpName.trim(), status });
-      await sendGuestRsvpPushNotification({ planId: plan.id, rsvpName: rsvpName.trim(), rsvpStatus: status });
-      await refreshRsvps(plan.id);
-      setRsvpName('');
-      setRsvpMessage(
-        status === 'in' ? "You're in! See you there." : 'No worries — maybe next time.'
-      );
-    } catch {
-      setRsvpMessage('Something went wrong. Please try again.');
-    } finally {
-      setRsvpSubmitting(false);
-    }
-  };
-
-  const shareUrl = plan
-    ? `${window.location.origin}${window.location.pathname}#/plan/${plan.id}/rsvp`
-    : '#';
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const handleSocialShare = async () => {
-    if (navigator.share && plan) {
-      try {
-        await navigator.share({
-          title: eventName || 'Night Out',
-          text: `Join me for ${eventName || 'a night out'}!`,
-          url: shareUrl,
-        });
-      } catch {
-        /* cancelled */
-      }
-    } else {
-      handleCopy();
-    }
-  };
-
-  const handleInviteFriend = async () => {
-    if (!plan) return;
-    const message = buildInviteMessage(plan);
-    await shareOrCopy(plan.title, message, shareUrl);
-    setInviteCopied(true);
-    setTimeout(() => setInviteCopied(false), 2000);
-  };
+  const shareUrl = plan ? getShareUrl(plan.id) : '#';
 
   // Mounted on every page that can save a venue. Radix portals it to <body>,
   // so its position in the tree doesn't matter — only that it's rendered.
@@ -973,10 +917,14 @@ export function HomePage({
               <Sparkles size={20} /> Start Planning
             </button>
             <button
-              onClick={() => navigate('/trip-setup')}
+              // Trips are Premium; without it, the button shows the plans.
+              onClick={() => navigate(hasPremium(subscriptionTier, premiumUnlocked) ? '/trip-setup' : '/subscription')}
               className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border-2 border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all duration-200 active:scale-[0.98] hover:border-gold hover:bg-gold/10"
             >
               <Compass size={20} /> Plan a Trip
+              <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gold">
+                <Crown size={10} /> Premium
+              </span>
             </button>
           </div>
 
@@ -1762,64 +1710,33 @@ export function HomePage({
           <h2 className="mb-8 text-3xl font-bold text-gold">Share your plan</h2>
 
           <button
-            onClick={handleCopy}
+            onClick={() => setInviteOpen(true)}
             className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3.5 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98]"
           >
-            <Copy size={20} /> {copied ? 'Copied!' : 'Copy Link'}
+            <Smartphone size={20} /> Invite Friends
           </button>
+          <p className="mt-1.5 text-center text-xs text-ink-secondary">Friends on The Unsaved get a notification.</p>
 
           <button
-            onClick={handleInviteFriend}
-            className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
+            onClick={() => setShareOpen(true)}
+            className="mt-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
           >
-            <Smartphone size={18} /> {inviteCopied ? 'Copied!' : 'Invite a Friend'}
+            <Share2 size={18} /> Share on Social
           </button>
+          <p className="mt-1.5 text-center text-xs text-ink-secondary">A link anyone can open, even without the app.</p>
 
-          <p className="mt-6 mb-3 text-sm font-medium text-ink-secondary">
-            Share on social
-          </p>
-          <div className="grid grid-cols-1 gap-3">
-            <button
-              onClick={handleSocialShare}
-              className="flex min-h-[48px] items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98]"
-            >
-              WhatsApp / Telegram / Instagram
-            </button>
-          </div>
-
-          {/* RSVP form */}
-          <div className="mt-8 rounded-card border border-gold/20 bg-black/40 p-4">
-            <h3 className="mb-3 text-lg font-semibold text-white">Send Your RSVP</h3>
-            <input
-              type="text"
-              value={rsvpName}
-              onChange={(e) => setRsvpName(e.target.value)}
-              placeholder="Your name"
-              disabled={rsvpSubmitting}
-              className="w-full rounded-lg border border-gold/40 bg-black/60 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none disabled:opacity-50"
-            />
-            <div className="mt-3 flex gap-3">
-              <button
-                onClick={() => handleRsvp('in')}
-                disabled={rsvpSubmitting || !rsvpName.trim()}
-                className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-card bg-gold px-4 py-3 text-sm font-bold text-black transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Check size={18} /> I'm In
-              </button>
-              <button
-                onClick={() => handleRsvp('declined')}
-                disabled={rsvpSubmitting || !rsvpName.trim()}
-                className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-4 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <X size={18} /> Can't Make It
-              </button>
-            </div>
-            {rsvpMessage && (
-              <p className="mt-3 text-center text-sm font-medium text-gold">
-                {rsvpMessage}
-              </p>
-            )}
-          </div>
+          {plan && (
+            <>
+              <InviteFriendsModal open={inviteOpen} onClose={() => setInviteOpen(false)} planId={plan.id} />
+              <ShareOnSocialDialog
+                open={shareOpen}
+                onClose={() => setShareOpen(false)}
+                title={plan.title}
+                message={buildInviteMessage(plan)}
+                url={shareUrl}
+              />
+            </>
+          )}
 
           {/* Who's Coming — real RSVPs only */}
           <div className="mt-8">
@@ -1837,6 +1754,7 @@ export function HomePage({
                   >
                     <div>
                       <span className="font-medium text-white">{r.name}</span>
+                      {r.is_host && <HostBadge />}
                       {r.status === 'declined' && r.decline_reason && (
                         <p className="text-xs text-ink-secondary">
                           "{r.decline_reason}"

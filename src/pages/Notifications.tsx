@@ -6,7 +6,7 @@ import {
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
 
-export function NotificationsPage({ onBack }: { onBack: () => void }) {
+export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => void; onOpenFriends: () => void }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -27,14 +27,32 @@ export function NotificationsPage({ onBack }: { onBack: () => void }) {
       setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, read: true } : x));
     }
     const data = n.data ?? {};
-    if (data.plan_id && typeof data.plan_id === 'string') {
-      if (n.type === 'plan_invite') {
-        navigate(`/plan/${data.plan_id}`);
-      } else {
-        navigate(`/plan/${data.plan_id}/dashboard`);
-      }
-      return;
+    // Older RSVP notifications only carry a link (/plan/<id>), not the id.
+    const planId =
+      typeof data.plan_id === 'string'
+        ? data.plan_id
+        : typeof data.url === 'string'
+          ? data.url.match(/\/plan\/([0-9a-f-]{36})/i)?.[1]
+          : undefined;
+
+    switch (n.type) {
+      case 'friend_request':
+      case 'friend_accepted':
+        onOpenFriends();
+        return;
+      case 'collection_shared':
+        if (typeof data.collection_id === 'string') navigate(`/venues?collection=${data.collection_id}`);
+        break;
+      case 'plan_invite':
+        if (planId) navigate(`/plan/${planId}`);
+        break;
+      default:
+        // RSVPs and anything else about a plan: the host's dashboard.
+        if (planId) navigate(`/plan/${planId}/dashboard`);
     }
+    // Navigating to the page already open fires no route change; close the
+    // list either way so the tap always lands somewhere.
+    onBack();
   };
 
   const handleMarkAll = async () => {

@@ -73,6 +73,20 @@ export function buildGoogleCalendarUrl(ev: CalendarEvent): string {
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
+/** Outlook.com's "new event" page, prefilled. Work (Microsoft 365) users can take the .ics. */
+export function buildOutlookCalendarUrl(ev: CalendarEvent): string {
+  const params = new URLSearchParams({
+    path: '/calendar/action/compose',
+    rru: 'addevent',
+    subject: ev.title,
+    startdt: ev.start.toISOString(),
+    enddt: ev.end.toISOString(),
+    body: ev.description,
+    location: ev.location,
+  });
+  return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`;
+}
+
 /** Escapes the characters iCalendar treats as structural (RFC 5545 §3.3.11). */
 function icsText(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
@@ -124,7 +138,7 @@ export function prefersIcs(): boolean {
  * Hands the .ics to the browser. iOS Safari opens it straight into the
  * Add-to-Calendar sheet; desktop browsers save it and the OS calendar opens it.
  */
-export function downloadIcs(ev: CalendarEvent, filename = 'open-finds-plan.ics'): void {
+export function downloadIcs(ev: CalendarEvent, filename = 'the-unsaved-plan.ics'): void {
   const blob = new Blob([buildIcs(ev)], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

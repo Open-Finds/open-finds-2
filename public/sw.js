@@ -17,8 +17,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: "/icon-192.png",
-      badge: "/badge-72.png",
+      icon: "/favicon.png",
+      badge: "/favicon.png",
       data: data.data ?? {},
     })
   );
@@ -26,7 +26,10 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url ?? "/";
+  // The app routes on the hash (/#/plan/…); older notifications sent bare
+  // paths (/plan/…), which would land on the home page.
+  let url = event.notification.data?.url ?? "/";
+  if (url.startsWith("/") && !url.startsWith("/#")) url = "/#" + url;
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((clients) => {
       for (const client of clients) {

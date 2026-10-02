@@ -38,6 +38,7 @@ const PREMIUM_FEATURES = [
   'Up to 5 stops per plan',
   'Unlimited AI extraction',
   'Unlimited Something New',
+  'Multi-day trips',
   'No ads',
 ];
 

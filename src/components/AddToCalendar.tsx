@@ -1,15 +1,26 @@
 import { useState } from 'react';
-import { CalendarPlus, ChevronDown } from 'lucide-react';
+import { Apple, CalendarPlus } from 'lucide-react';
 import type { Plan, Stop } from '../lib/supabase';
-import { planToCalendarEvent, buildGoogleCalendarUrl, downloadIcs, prefersIcs } from '../lib/calendar';
+import { planToCalendarEvent, buildGoogleCalendarUrl, buildOutlookCalendarUrl, downloadIcs } from '../lib/calendar';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { cn } from '@/lib/utils';
 
+const TILE =
+  'flex flex-col items-center justify-center gap-2 rounded-card border border-gold/25 bg-black/40 px-2 py-4 text-sm font-semibold text-white transition-all hover:border-gold/60 hover:bg-gold/10 active:scale-95';
+
+function Letter({ children, className }: { children: string; className: string }) {
+  return (
+    <span aria-hidden="true" className={cn('flex h-10 w-10 items-center justify-center rounded-full text-lg font-black', className)}>
+      {children}
+    </span>
+  );
+}
+
 /**
- * "Add to Calendar" that works on iPhone.
- *
- * Google Calendar is a link; Apple Calendar needs an .ics file. The primary
- * action follows the platform, and a small secondary menu offers the other so
- * an iPhone user who lives in Google Calendar (or vice versa) is not stuck.
+ * "Add to Calendar": one button, then the calendar you use. Google and
+ * Outlook are prefilled web pages; Apple Calendar (and anything else) takes
+ * an .ics file, which on iPhone opens straight into "Add to Calendar".
+ * Works for guests too: nothing here needs an account.
  */
 export function AddToCalendar({
   plan,
@@ -22,76 +33,47 @@ export function AddToCalendar({
 }) {
   const [open, setOpen] = useState(false);
   const ev = planToCalendarEvent(plan, stops);
-  const googleUrl = buildGoogleCalendarUrl(ev);
-  const appleFirst = prefersIcs();
-
-  const addApple = () => {
-    downloadIcs(ev, `${plan.title.replace(/[^\w\- ]+/g, '').trim() || 'plan'}.ics`);
-    setOpen(false);
+  const fileName = `${plan.title.replace(/[^\w\- ]+/g, '').trim() || 'plan'}.ics`;
+  const close = () => setOpen(false);
+  const saveIcs = () => {
+    downloadIcs(ev, fileName);
+    close();
   };
 
-  const primary = appleFirst
-    ? { label: 'Add to Calendar', onClick: addApple }
-    : { label: 'Add to Calendar', href: googleUrl };
-
   return (
-    <div className={cn('relative', className)}>
-      <div className="flex">
-        {primary.href ? (
-          <a
-            href={primary.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-secondary flex flex-1 items-center justify-center gap-2 rounded-r-none"
-          >
-            <CalendarPlus size={18} /> {primary.label}
-          </a>
-        ) : (
-          <button
-            type="button"
-            onClick={primary.onClick}
-            className="btn-secondary flex flex-1 items-center justify-center gap-2 rounded-r-none"
-          >
-            <CalendarPlus size={18} /> {primary.label}
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn('btn-secondary flex w-full items-center justify-center gap-2', className)}
+      >
+        <CalendarPlus size={18} /> Add to Calendar
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-white">Add to Calendar</DialogTitle>
+            <DialogDescription>Pick the calendar you use.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-3 gap-3">
+            <a href={buildGoogleCalendarUrl(ev)} target="_blank" rel="noopener noreferrer" onClick={close} className={TILE}>
+              <Letter className="bg-white text-[#4285F4]">G</Letter> Google
+            </a>
+            <button type="button" onClick={saveIcs} className={TILE}>
+              <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-black">
+                <Apple size={22} />
+              </span>
+              Apple
+            </button>
+            <a href={buildOutlookCalendarUrl(ev)} target="_blank" rel="noopener noreferrer" onClick={close} className={TILE}>
+              <Letter className="bg-[#0078D4] text-white">O</Letter> Outlook
+            </a>
+          </div>
+          <button type="button" onClick={saveIcs} className="text-xs text-ink-secondary underline-offset-2 hover:text-gold hover:underline">
+            Another calendar? Download the .ics file
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label="Other calendar options"
-          className="btn-secondary flex w-11 items-center justify-center rounded-l-none border-l-0 px-0"
-        >
-          <ChevronDown size={16} className={cn('transition-transform', open && 'rotate-180')} />
-        </button>
-      </div>
-
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-card border border-gold/20 bg-surface shadow-lg"
-        >
-          <a
-            role="menuitem"
-            href={googleUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setOpen(false)}
-            className="block px-4 py-3 text-sm text-white hover:bg-gold/10"
-          >
-            Google Calendar
-          </a>
-          <button
-            role="menuitem"
-            type="button"
-            onClick={addApple}
-            className="block w-full px-4 py-3 text-left text-sm text-white hover:bg-gold/10"
-          >
-            Apple Calendar / Outlook (.ics)
-          </button>
-        </div>
-      )}
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

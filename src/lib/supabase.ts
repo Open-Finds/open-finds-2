@@ -17,12 +17,36 @@ const safeStorage = {
   },
 };
 
+/**
+ * How this page was opened from an auth email or sign-in redirect, read
+ * before the client takes the session out of the URL (it then clears the
+ * #access_token=… part). Hash routes (#/plan/…) carry no such parameters.
+ */
+const authRedirect = (() => {
+  try {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    return { type: params.get('type'), error: params.get('error_description') };
+  } catch {
+    return { type: null, error: null };
+  }
+})();
+
+/** Opened from a password-reset email: the app asks for a new password. */
+export const arrivedFromPasswordReset = authRedirect.type === 'recovery';
+
+/** Why an email link didn't work (e.g. it expired), for the sign-in screen. */
+export const authLinkError: string | null = authRedirect.error;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: safeStorage,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    // Password-reset emails and Google/Facebook sign-in come back with the
+    // session in the URL. The implicit flow puts it in the hash, so the link
+    // works on whichever device or browser opens the email.
+    detectSessionInUrl: true,
+    flowType: 'implicit',
   },
   global: {
     fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -47,6 +71,26 @@ export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   return data;
+}
+
+/** Emails a link that signs the user in and asks for a new password. */
+export async function sendPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    // No hash route here: the reset link appends its own #access_token=….
+    redirectTo: `${window.location.origin}/`,
+  });
+  if (error) throw error;
+}
+
+export type OAuthProvider = 'google' | 'facebook';
+
+/** Leaves for Google/Facebook; the session is picked up from the URL on return. */
+export async function signInWithProvider(provider: OAuthProvider) {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: `${window.location.origin}/` },
+  });
+  if (error) throw error;
 }
 
 export async function signOut() {
@@ -224,6 +268,8 @@ export type Rsvp = {
   user_id: string;
   auth_uid: string | null;
   created_at: string;
+  /** The host's own RSVP, added automatically when the plan is created. */
+  is_host?: boolean;
 };
 
 export type VenueType = 'food' | 'activity' | 'dessert' | 'bar';
@@ -1061,7 +1107,19 @@ export async function fetchPlansByIds(ids: string[]): Promise<Plan[]> {
     .eq('canceled', false)
     .order('date', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as Plan[];
+  const found = (data ?? []) as Plan[];
+
+  // Plans you were invited to aren't yours, so the table hides them (only
+  // owners can read plans). Read those through the share RPC instead: the
+  // same view the invite link opens.
+  const seen = new Set(found.map((p) => p.id));
+  const shared = await Promise.all(
+    ids
+      .filter((id) => !seen.has(id))
+      .map((id) => fetchSharedPlanPayload(id).then((s) => s?.plan ?? null).catch(() => null))
+  );
+  const invited = shared.filter((p): p is Plan => p !== null && !p.canceled);
+  return [...found, ...invited].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /* ── Profiles ── */
@@ -1386,7 +1444,7 @@ export async function inviteUserToPlan(planId: string, userId: string): Promise<
     title: 'New event invite',
     body: 'You have been invited to an event',
     type: 'plan_invite',
-    data: { plan_id: planId, from_user_id: session.user.id, url: `/plan/${planId}` },
+    data: { plan_id: planId, from_user_id: session.user.id, url: `/#/plan/${planId}` },
   });
 }
 
@@ -1411,7 +1469,7 @@ export async function inviteGroupToPlan(planId: string, groupId: string): Promis
       title: 'New event invite',
       body: 'Your group has been invited to an event',
       type: 'plan_invite',
-      data: { plan_id: planId, from_user_id: session.user.id, url: `/plan/${planId}` },
+      data: { plan_id: planId, from_user_id: session.user.id, url: `/#/plan/${planId}` },
     });
   }
 }
@@ -1920,6 +1978,11 @@ export const SUBSCRIPTION_PLANS = {
   premium_yearly: { label: 'Premium Yearly', priceCents: 2499, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
   lifetime: { label: 'Lifetime', priceCents: 3999, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
 } as const;
+
+/** Premium features (trips) are open on any paid tier, and to everyone while testing is unlocked. */
+export function hasPremium(tier: SubscriptionTier, premiumUnlocked: boolean): boolean {
+  return premiumUnlocked || tier !== 'free';
+}
 
 export function getPlanLimits(tier: SubscriptionTier) {
   return SUBSCRIPTION_PLANS[tier] ?? SUBSCRIPTION_PLANS.free;

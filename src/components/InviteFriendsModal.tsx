@@ -11,6 +11,20 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { X, Users, User, Check, Send, Lock } from 'lucide-react';
 
+/** The tick box on each row: visible before it's ticked, so it reads as a choice. */
+function Checkbox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all ${
+        checked ? 'border-gold bg-gold text-black' : 'border-gold/40 bg-transparent'
+      }`}
+    >
+      {checked && <Check size={14} strokeWidth={3} />}
+    </span>
+  );
+}
+
 export function InviteFriendsModal({
   open,
   onClose,
@@ -107,7 +121,8 @@ export function InviteFriendsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      // Above the bottom tab bar (z-50), which otherwise covers the Send button on phones.
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
       <div
@@ -181,6 +196,7 @@ export function InviteFriendsModal({
                             setSelectedGroup(isSelected ? null : g.id)
                           }
                           disabled={allInvited}
+                          aria-pressed={isSelected}
                           className={`flex w-full items-center gap-3 rounded-card border p-4 text-left transition-all disabled:opacity-40 ${
                             isSelected
                               ? 'border-gold bg-gold/10'
@@ -200,9 +216,7 @@ export function InviteFriendsModal({
                               {allInvited && ' · all invited'}
                             </p>
                           </div>
-                          {isSelected && (
-                            <Check size={18} className="text-gold" />
-                          )}
+                          {!allInvited && <Checkbox checked={isSelected} />}
                         </button>
                       );
                     })}
@@ -229,6 +243,7 @@ export function InviteFriendsModal({
                           key={f.user_id}
                           onClick={() => toggleFriend(f.user_id)}
                           disabled={isInvited}
+                          aria-pressed={isSelected}
                           className={`flex w-full items-center gap-3 rounded-card border p-3 text-left transition-all disabled:opacity-40 ${
                             isSelected
                               ? 'border-gold bg-gold/10'
@@ -252,9 +267,9 @@ export function InviteFriendsModal({
                             <span className="text-xs font-medium text-emerald-400">
                               Invited
                             </span>
-                          ) : isSelected ? (
-                            <Check size={18} className="text-gold" />
-                          ) : null}
+                          ) : (
+                            <Checkbox checked={isSelected} />
+                          )}
                         </button>
                       );
                     })}
