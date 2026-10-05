@@ -62,6 +62,7 @@ export function ViewToggle({
             return (
               <button
                 key={tabView}
+                data-tour={`tab-${tabView}`}
                 onClick={() => handleClick(tabView)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
@@ -106,6 +107,7 @@ export function ViewToggle({
             return (
               <button
                 key={tabView}
+                data-tour={`tab-${tabView}`}
                 onClick={() => handleClick(tabView)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(

@@ -912,6 +912,7 @@ export function HomePage({
           {/* Primary actions — inline so they never cover the form below */}
           <div className="mt-6 flex w-full flex-col gap-3">
             <button
+              data-tour="plan-night"
               onClick={() => setPage('occasion')}
               className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card bg-gold px-10 py-3.5 text-lg font-bold text-black shadow-gold-glow transition-all duration-200 active:scale-[0.98]"
             >
@@ -936,7 +937,7 @@ export function HomePage({
           )}
 
           {/* Link extraction bar */}
-          <div className="mt-6 w-full rounded-card border border-gold/20 bg-[#0d0d0d] p-5 text-left">
+          <div data-tour="save-venue" className="mt-6 w-full rounded-card border border-gold/20 bg-[#0d0d0d] p-5 text-left">
             {qaError && (
               <p className="mb-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
                 {qaError}

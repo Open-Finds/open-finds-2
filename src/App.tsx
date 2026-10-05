@@ -24,8 +24,8 @@ import { VenuePortalPage } from './pages/VenuePortal';
 import { AdminPage } from './pages/Admin';
 import { SubscriptionPage } from './pages/Subscription';
 import { ViewToggle } from './components/ViewToggle';
-import { Onboarding } from './components/Onboarding';
-import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding } from './lib/supabase';
+import { GuidedTour } from './components/GuidedTour';
+import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences } from './lib/supabase';
 import { Bell } from 'lucide-react';
 
 type View = 'home' | 'events' | 'venues' | 'friends' | 'settings';
@@ -85,8 +85,21 @@ function AppInner() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [homeResetKey, setHomeResetKey] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username } = useAuth();
+  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile } = useAuth();
+
+  // The walkthrough runs over the app until it's finished or skipped, and
+  // again after Settings → Replay Walkthrough. It points at Home's buttons,
+  // so it starts from the Home start screen wherever the app was.
+  const tourActive = !!session && profileLoaded && !onboardingCompleted && !passwordRecovery;
+  useEffect(() => {
+    if (!tourActive) return;
+    setEditPlanId(null);
+    setDashboardId(null);
+    setShowNotifications(false);
+    setView('home');
+    clearPlanDraft();
+    setHomeResetKey((k) => k + 1);
+  }, [tourActive]);
 
   useEffect(() => {
     // Any navigation (including a notification tap) leaves the notifications list.
@@ -184,19 +197,18 @@ function AppInner() {
     return <ChooseUsernamePage />;
   }
 
-  // First-open onboarding walkthrough — keeps showing until user checks "Don't show again"
-  if (!onboardingCompleted || showOnboarding) {
-    const handleComplete = async (dontShowAgain: boolean) => {
-      setShowOnboarding(false);
-      if (dontShowAgain) {
-        setOnboardingCompleted(true);
-        try {
-          await completeOnboarding();
-        } catch { /* ignore */ }
+  // Done or skipped: off for good (until replayed). Dietary picks from the
+  // last step are saved with it.
+  const finishTour = async (dietary: string[] | null) => {
+    setOnboardingCompleted(true);
+    try {
+      await completeOnboarding();
+      if (dietary) {
+        await updateDietaryPreferences(dietary);
+        await refreshProfile();
       }
-    };
-    return <Onboarding onComplete={handleComplete} />;
-  }
+    } catch { /* ignore */ }
+  };
 
   const switchView = (v: View) => {
     setEditPlanId(null);
@@ -275,6 +287,7 @@ function AppInner() {
 
   return (
     <Shell {...shellProps}>
+      {tourActive && <GuidedTour initialDietary={dietaryPreferences} onFinish={finishTour} />}
       <div key={view === 'home' ? `home-${homeResetKey}` : view} className={`animate-slide-${slideDir}`}>
         {view === 'home' ? (
           <HomePage onNavigateToDashboard={openDashboard} />
