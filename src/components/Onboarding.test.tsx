@@ -29,7 +29,6 @@ describe('Onboarding', () => {
       'Plan a night out',
       /Invite friends/,
       'On the night',
-      'Plan trips too',
     ];
     for (const title of expected) {
       await user.click(screen.getByRole('button', { name: /^next/i }));
@@ -45,11 +44,11 @@ describe('Onboarding', () => {
     expect(updateDietaryPreferences).toHaveBeenCalled();
   });
 
-  it('renders 8 progress dots: 7 workflow steps plus dietary', () => {
+  it('renders 7 progress dots: 6 workflow steps plus dietary (trips hidden)', () => {
     const { container } = render(<Onboarding onComplete={vi.fn()} />);
     // Dots are the h-2 rounded-full pips in the progress row.
     const dots = container.querySelectorAll('.h-2.rounded-full');
-    expect(dots.length).toBe(8);
+    expect(dots.length).toBe(7);
   });
 
   it('Skip completes immediately', async () => {

@@ -13,13 +13,14 @@ import {
   Utensils,
 } from 'lucide-react';
 import { updateDietaryPreferences } from '../lib/supabase';
+import { TRIPS_ENABLED } from '../lib/features';
 
 /*
  * One step per workflow the client wants a new user walked through on first
  * open. Each is a single action they can go and do, in the order they'd
  * naturally do it: save → organise → plan → share → go.
  */
-const STEPS = [
+const ALL_STEPS = [
   {
     icon: Link2,
     title: 'Save a venue from any link',
@@ -53,9 +54,12 @@ const STEPS = [
   {
     icon: Compass,
     title: 'Plan trips too',
+    trip: true,
     desc: 'Going away? The Trip Planner maps out multi-day itineraries, with a day-by-day plan and per-stop RSVPs so people can join what suits them.',
   },
-] as const;
+];
+
+const STEPS = ALL_STEPS.filter((s) => TRIPS_ENABLED || !('trip' in s));
 
 const DIETARY_OPTIONS = [
   { key: 'vegetarian', label: 'Vegetarian' },

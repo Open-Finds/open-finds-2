@@ -13,6 +13,7 @@ import {
 import { stripeConfigured } from '../lib/stripe';
 import { BillingPanel, CheckoutDialog, ConfirmDialog } from '../components/Billing';
 import { formatLongDate as formatDate } from '../lib/utils';
+import { TRIPS_ENABLED } from '../lib/features';
 
 const PLAN_ORDER: SubscriptionTier[] = ['free', 'premium_monthly', 'premium_yearly', 'lifetime'];
 
@@ -38,7 +39,7 @@ const PREMIUM_FEATURES = [
   'Up to 5 stops per plan',
   'Unlimited AI extraction',
   'Unlimited Something New',
-  'Multi-day trips',
+  ...(TRIPS_ENABLED ? ['Multi-day trips'] : []),
   'No ads',
 ];
 

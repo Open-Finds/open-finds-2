@@ -29,6 +29,7 @@ import { ShareCollectionModal } from '../components/ShareCollectionModal';
 import { DuplicateVenueDialog, type PendingDuplicate } from '../components/DuplicateVenueDialog';
 import { findSimilarVenues } from '../lib/venueMatch';
 import { useAuth } from '../context/AuthContext';
+import { TRIPS_ENABLED } from '../lib/features';
 
 export function VenuesPage() {
   const [venues, setVenues] = useState<SavedVenue[]>([]);
@@ -461,12 +462,12 @@ export function VenuesPage() {
                   <UserMinus size={16} /> Leave
                 </button>
               )}
-              <button
+              {TRIPS_ENABLED && <button
                 onClick={() => navigate(hasPremium(subscriptionTier, premiumUnlocked) ? `/trip-setup?collection=${openCollectionId}` : '/subscription')}
                 className="flex items-center gap-2 rounded-card bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-95"
               >
                 <MapPin size={16} /> Plan a Trip <Crown size={13} aria-label="Premium" />
-              </button>
+              </button>}
             </div>
             <div className="relative mb-4">
               <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/50" size={18} />

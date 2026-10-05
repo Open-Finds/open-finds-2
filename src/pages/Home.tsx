@@ -64,6 +64,7 @@ import { fetchDistanceMatrix, geocodeAddress, type OriginInput } from '../lib/ap
 import { loadPlanDraft, savePlanDraft, clearPlanDraft } from '../lib/draft';
 import { findSimilarVenues } from '../lib/venueMatch';
 import { DuplicateVenueDialog, type PendingDuplicate } from '../components/DuplicateVenueDialog';
+import { TRIPS_ENABLED } from '../lib/features';
 
 type Page =
   | 'hero'
@@ -916,7 +917,7 @@ export function HomePage({
             >
               <Sparkles size={20} /> Start Planning
             </button>
-            <button
+            {TRIPS_ENABLED && <button
               // Trips are Premium; without it, the button shows the plans.
               onClick={() => navigate(hasPremium(subscriptionTier, premiumUnlocked) ? '/trip-setup' : '/subscription')}
               className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border-2 border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all duration-200 active:scale-[0.98] hover:border-gold hover:bg-gold/10"
@@ -925,7 +926,7 @@ export function HomePage({
               <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gold">
                 <Crown size={10} /> Premium
               </span>
-            </button>
+            </button>}
           </div>
 
           {qaSaved && (
