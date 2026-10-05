@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useRouter, navigate } from './lib/router';
 import { clearPlanDraft } from './lib/draft';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -7,26 +7,32 @@ import { EventsPage } from './pages/Events';
 import { DashboardPage } from './pages/Dashboard';
 import { VenuesPage } from './pages/Venues';
 import { LoginPage } from './pages/Login';
-import { ResetPasswordPage } from './pages/ResetPassword';
-import { ChooseUsernamePage } from './pages/ChooseUsername';
 import { SettingsPage } from './pages/Settings';
 import { RsvpPage } from './pages/Rsvp';
 import { ConfirmedPage } from './pages/Confirmed';
 import { DeclinedPage } from './pages/Declined';
-import { SharePage } from './pages/PlanView';
 import { FriendsPage } from './pages/Friends';
 import { NotificationsPage } from './pages/Notifications';
-import { TripSetupPage } from './pages/TripSetup';
-import { TripOverviewPage } from './pages/TripOverview';
-import { TripRsvpPage } from './pages/TripRsvp';
-import { TripDayPage } from './pages/TripDay';
-import { VenuePortalPage } from './pages/VenuePortal';
-import { AdminPage } from './pages/Admin';
-import { SubscriptionPage } from './pages/Subscription';
 import { ViewToggle } from './components/ViewToggle';
 import { GuidedTour } from './components/GuidedTour';
 import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences } from './lib/supabase';
 import { Bell } from 'lucide-react';
+
+/*
+  Pages most people rarely open (admin, venue portal, subscription and its
+  Stripe code, trips, password reset) download only when opened, so the app
+  everyone starts with is smaller and shows sooner.
+*/
+const ResetPasswordPage = lazy(() => import('./pages/ResetPassword').then((m) => ({ default: m.ResetPasswordPage })));
+const ChooseUsernamePage = lazy(() => import('./pages/ChooseUsername').then((m) => ({ default: m.ChooseUsernamePage })));
+const SharePage = lazy(() => import('./pages/PlanView').then((m) => ({ default: m.SharePage })));
+const TripSetupPage = lazy(() => import('./pages/TripSetup').then((m) => ({ default: m.TripSetupPage })));
+const TripOverviewPage = lazy(() => import('./pages/TripOverview').then((m) => ({ default: m.TripOverviewPage })));
+const TripRsvpPage = lazy(() => import('./pages/TripRsvp').then((m) => ({ default: m.TripRsvpPage })));
+const TripDayPage = lazy(() => import('./pages/TripDay').then((m) => ({ default: m.TripDayPage })));
+const VenuePortalPage = lazy(() => import('./pages/VenuePortal').then((m) => ({ default: m.VenuePortalPage })));
+const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })));
+const SubscriptionPage = lazy(() => import('./pages/Subscription').then((m) => ({ default: m.SubscriptionPage })));
 
 type View = 'home' | 'events' | 'venues' | 'friends' | 'settings';
 
@@ -309,7 +315,10 @@ function App() {
   return (
     <div className="app-shell">
       <AuthProvider>
-        <AppInner />
+        {/* Shown for the moment a page that loads on demand is downloading. */}
+        <Suspense fallback={<div className="min-h-screen bg-black" />}>
+          <AppInner />
+        </Suspense>
       </AuthProvider>
     </div>
   );
