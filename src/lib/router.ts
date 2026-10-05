@@ -18,7 +18,8 @@ export type Route =
   | { name: 'trip-day'; tripId: string; dayId: string }
   | { name: 'venue-portal' }
   | { name: 'venue-dashboard' }
-  | { name: 'subscription' };
+  | { name: 'subscription' }
+  | { name: 'admin' };
 
 function parseHash(): Route {
   const hash = window.location.hash.replace(/^#/, '') || '/';
@@ -53,6 +54,7 @@ function parseHash(): Route {
   if (parts[0] === 'venue-portal') return { name: 'venue-portal' };
   if (parts[0] === 'venue-dashboard') return { name: 'venue-dashboard' };
   if (parts[0] === 'subscription') return { name: 'subscription' };
+  if (parts[0] === 'admin') return { name: 'admin' };
   return { name: 'home' };
 }
 

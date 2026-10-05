@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight } from 'lucide-react';
+import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck } from 'lucide-react';
 import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, SUBSCRIPTION_PLANS } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../lib/router';
@@ -20,7 +20,7 @@ const DIETARY_OPTIONS = [
 ];
 
 export function SettingsPage({ onBack }: { onBack: () => void }) {
-  const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, premiumUnlocked, isVenuePartner } = useAuth();
+  const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, premiumUnlocked, isVenuePartner, role } = useAuth();
   const currentEmail = session?.user.email ?? '';
 
   const [dietarySelections, setDietarySelections] = useState<Set<string>>(new Set(dietaryPreferences));
@@ -366,6 +366,25 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             <ChevronRight size={18} />
           </button>
         </section>
+
+        {/* Admin: staff and admins only */}
+        {role !== 'user' && (
+          <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+              <ShieldCheck size={13} /> Admin
+            </h2>
+            <p className="mb-4 text-sm text-ink-secondary">
+              {role === 'admin' ? 'Venue partners, their numbers and billing, and your team.' : 'Venue partners, their numbers and billing.'}
+            </p>
+            <button
+              onClick={() => navigate('/admin')}
+              className="flex w-full items-center justify-between rounded-card border border-gold/40 bg-black/40 px-4 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] hover:bg-gold/10"
+            >
+              <span className="flex items-center gap-2"><ShieldCheck size={16} /> Open Admin</span>
+              <ChevronRight size={18} />
+            </button>
+          </section>
+        )}
 
         {/* Replay onboarding */}
         <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">

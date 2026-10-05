@@ -193,8 +193,12 @@ export type Profile = {
   subscription_status: string;
   subscription_renews_at: string | null;
   is_venue_partner: boolean;
+  /** Access level: everyone is a user; staff manage venue partners; admins also run the team. */
+  role: AppRole;
   created_at: string;
 };
+
+export type AppRole = 'user' | 'staff' | 'admin';
 
 export type Plan = {
   id: string;
@@ -1749,7 +1753,8 @@ export async function sendGuestRsvpPushNotification(params: {
 
 export type VenuePartner = {
   id: string;
-  owner_id: string;
+  /** Null for venues staff added before the business had an account. */
+  owner_id: string | null;
   business_name: string;
   address: string;
   type: VenueType;
@@ -1766,6 +1771,101 @@ export type VenuePartner = {
   lon: number | null;
   created_at: string;
 };
+
+/* ── Admin: venue partners and the team (staff and admins only) ──
+   The server checks the role on every call; these only shape the data. */
+
+/** A venue partner as the admin page sees it, with its numbers. */
+export type AdminPartner = {
+  id: string;
+  business_name: string;
+  address: string;
+  type: VenueType;
+  contact_name: string;
+  contact_email: string;
+  instagram_link: string | null;
+  website: string | null;
+  monthly_budget_cents: number | null;
+  visit_rate_cents: number;
+  active: boolean;
+  approved: boolean;
+  /** The business has its own account and portal. */
+  has_account: boolean;
+  created_at: string;
+  impressions: number;
+  saves: number;
+  visits: number;
+  month_visits: number;
+  /** Visits this month x rate, never more than the monthly budget. */
+  month_billed_cents: number;
+  total_billed_cents: number;
+};
+
+export type AdminPartnerInput = {
+  business_name: string;
+  address: string;
+  type: VenueType;
+  contact_name: string;
+  contact_email: string;
+  instagram_link: string | null;
+  website: string | null;
+  monthly_budget_cents: number | null;
+  /** Admins only; the server ignores these from staff. */
+  visit_rate_cents?: number;
+  approved?: boolean;
+};
+
+export type TeamMember = {
+  id: string;
+  display_name: string | null;
+  username: string | null;
+  email: string;
+  role: AppRole;
+};
+
+export async function fetchAdminPartners(): Promise<AdminPartner[]> {
+  const { data, error } = await supabase.rpc('admin_partner_overview');
+  if (error) throw error;
+  return ((data ?? []) as AdminPartner[]).map((p) => ({
+    ...p,
+    impressions: Number(p.impressions),
+    saves: Number(p.saves),
+    visits: Number(p.visits),
+    month_visits: Number(p.month_visits),
+    month_billed_cents: Number(p.month_billed_cents),
+    total_billed_cents: Number(p.total_billed_cents),
+  }));
+}
+
+export async function adminCreatePartner(input: AdminPartnerInput): Promise<void> {
+  const { error } = await supabase.from('venue_partners').insert({ ...input, owner_id: null });
+  if (error) throw error;
+}
+
+export async function adminUpdatePartner(
+  id: string,
+  updates: Partial<AdminPartnerInput> & { active?: boolean },
+): Promise<void> {
+  const { error } = await supabase.from('venue_partners').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function adminDeletePartner(id: string): Promise<void> {
+  const { error } = await supabase.from('venue_partners').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function fetchTeam(): Promise<TeamMember[]> {
+  const { data, error } = await supabase.rpc('admin_team');
+  if (error) throw error;
+  return (data ?? []) as TeamMember[];
+}
+
+/** Gives the account with this email a role; 'user' takes access away. */
+export async function setTeamRole(email: string, role: AppRole): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_role', { p_email: email, p_role: role });
+  if (error) throw new Error(error.message);
+}
 
 export type VenueEventType = 'impression' | 'saved' | 'visited';
 

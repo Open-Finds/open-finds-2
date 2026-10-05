@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, fetchProfile, fetchPremiumUnlocked, claimDeviceRows, arrivedFromPasswordReset, type SubscriptionTier } from '../lib/supabase';
+import { supabase, fetchProfile, fetchPremiumUnlocked, claimDeviceRows, arrivedFromPasswordReset, type AppRole, type SubscriptionTier } from '../lib/supabase';
 import { setMonitoringUser } from '../lib/monitoring';
 
 type AuthContextType = {
@@ -18,6 +18,8 @@ type AuthContextType = {
   /** Open testing: everyone has Premium limits, whatever their tier. */
   premiumUnlocked: boolean;
   isVenuePartner: boolean;
+  /** user, staff (venue partners) or admin (also the team). */
+  role: AppRole;
   /** Signed in from a password-reset email: ask for a new password first. */
   passwordRecovery: boolean;
   endPasswordRecovery: () => void;
@@ -38,6 +40,7 @@ const AuthContext = createContext<AuthContextType>({
   subscriptionRenewsAt: null,
   premiumUnlocked: false,
   isVenuePartner: false,
+  role: 'user',
   passwordRecovery: false,
   endPasswordRecovery: () => {},
   refreshProfile: async () => {},
@@ -56,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscriptionStatus, setSubscriptionStatus] = useState('active');
   const [subscriptionRenewsAt, setSubscriptionRenewsAt] = useState<string | null>(null);
   const [premiumUnlocked, setPremiumUnlocked] = useState(false);
+  const [role, setRole] = useState<AppRole>('user');
   const [isVenuePartner, setIsVenuePartner] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(arrivedFromPasswordReset);
 
@@ -71,11 +75,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSubscriptionRenewsAt(profile?.subscription_renews_at ?? null);
       setPremiumUnlocked(await fetchPremiumUnlocked().catch(() => false));
       setIsVenuePartner(profile?.is_venue_partner ?? false);
+      setRole(profile?.role ?? 'user');
     } catch {
       setOnboardingCompletedState(false);
       setDietaryPreferences([]);
       setSubscriptionTier('free');
       setIsVenuePartner(false);
+      setRole('user');
     } finally {
       setProfileLoaded(true);
     }
@@ -132,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setDietaryPreferences([]);
           setSubscriptionTier('free');
           setIsVenuePartner(false);
+          setRole('user');
           setProfileLoaded(true);
         }
       })();
@@ -141,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, premiumUnlocked, isVenuePartner, passwordRecovery, endPasswordRecovery: () => setPasswordRecovery(false), refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
+    <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, premiumUnlocked, isVenuePartner, role, passwordRecovery, endPasswordRecovery: () => setPasswordRecovery(false), refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
       {children}
     </AuthContext.Provider>
   );

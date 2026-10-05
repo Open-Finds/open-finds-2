@@ -21,6 +21,7 @@ import { TripOverviewPage } from './pages/TripOverview';
 import { TripRsvpPage } from './pages/TripRsvp';
 import { TripDayPage } from './pages/TripDay';
 import { VenuePortalPage } from './pages/VenuePortal';
+import { AdminPage } from './pages/Admin';
 import { SubscriptionPage } from './pages/Subscription';
 import { ViewToggle } from './components/ViewToggle';
 import { Onboarding } from './components/Onboarding';
@@ -150,6 +151,11 @@ function AppInner() {
   if (route.name === 'subscription') {
     if (!session) return <LoginPage />;
     return <SubscriptionPage onBack={() => navigate('/')} />;
+  }
+  // Staff and admins only; the page and the server both check the role.
+  if (route.name === 'admin') {
+    if (!session) return <LoginPage />;
+    return <AdminPage onBack={() => navigate('/')} />;
   }
 
   // Blank screen while session loads — avoids flash of login page for returning users
