@@ -30,12 +30,16 @@ import { DuplicateVenueDialog, type PendingDuplicate } from '../components/Dupli
 import { findSimilarVenues } from '../lib/venueMatch';
 import { useAuth } from '../context/AuthContext';
 import { TRIPS_ENABLED } from '../lib/features';
+import { hasCached, useCachedState } from '../lib/cache';
+import { LoadError } from '../components/LoadError';
 
 export function VenuesPage() {
-  const [venues, setVenues] = useState<SavedVenue[]>([]);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [memberships, setMemberships] = useState<Record<string, string[]>>({});
-  const [loading, setLoading] = useState(true);
+  // Remembered between visits; the fresh copy loads behind it.
+  const [venues, setVenues] = useCachedState<SavedVenue[]>('venues', []);
+  const [collections, setCollections] = useCachedState<Collection[]>('venues:collections', []);
+  const [memberships, setMemberships] = useCachedState<Record<string, string[]>>('venues:memberships', {});
+  const [loading, setLoading] = useState(() => !hasCached('venues'));
+  const [loadFailed, setLoadFailed] = useState(false);
   const [search, setSearch] = useState('');
   const [dietaryFilter, setDietaryFilter] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -110,7 +114,8 @@ export function VenuesPage() {
   const [savingMulti, setSavingMulti] = useState(false);
 
   const loadAll = useCallback(async () => {
-    setLoading(true);
+    if (!hasCached('venues')) setLoading(true);
+    setLoadFailed(false);
     try {
       const [v, c, m] = await Promise.all([
         fetchSavedVenues(),
@@ -121,11 +126,11 @@ export function VenuesPage() {
       setCollections(c);
       setMemberships(m);
     } catch {
-      /* ignore */
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setVenues, setCollections, setMemberships]);
 
   useEffect(() => {
     loadAll();
@@ -903,6 +908,8 @@ export function VenuesPage() {
                 <div className="flex items-center justify-center py-12">
                   <Loader2 size={24} className="animate-spin text-gold/50" />
                 </div>
+              ) : loadFailed && venues.length === 0 ? (
+                <LoadError onRetry={loadAll} />
               ) : filtered.length === 0 ? (
                 <div className="rounded-card border border-gold/10 bg-black/40 py-12 text-center">
                   {hasFilters ? (

@@ -5,19 +5,26 @@ import {
   type NotificationItem,
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
+import { hasCached, useCachedState } from '../lib/cache';
+import { LoadError } from '../components/LoadError';
 
 export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => void; onOpenFriends: () => void }) {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useCachedState<NotificationItem[]>('notifications', []);
+  // Seen before: show that while the fresh list loads.
+  const [loading, setLoading] = useState(() => !hasCached('notifications'));
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasCached('notifications')) setLoading(true);
+    setFailed(false);
     try {
       setNotifications(await fetchNotifications());
-    } catch { /* ignore */ } finally {
+    } catch {
+      setFailed(true);
+    } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setNotifications]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -99,6 +106,8 @@ export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => voi
 
         {loading ? (
           <p className="text-sm text-ink-secondary">Loading...</p>
+        ) : failed && notifications.length === 0 ? (
+          <LoadError onRetry={load} />
         ) : notifications.length === 0 ? (
           <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-8 text-center">
             <Bell size={32} className="mx-auto mb-3 text-gold/30" />

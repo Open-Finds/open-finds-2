@@ -37,6 +37,55 @@ export const arrivedFromPasswordReset = authRedirect.type === 'recovery';
 /** Why an email link didn't work (e.g. it expired), for the sign-in screen. */
 export const authLinkError: string | null = authRedirect.error;
 
+/**
+ * Every database and auth request, with a time limit.
+ *
+ * fetch() waits forever by default, so one request lost on a weak mobile
+ * connection left a screen on "Loading…" for good, and a stuck token refresh
+ * held up every request behind it. Reads get a second, longer try, since
+ * that's safe and usually works; writes get one longer try, so nothing is
+ * ever done twice. Edge functions (AI, maps, Stripe) don't come through here
+ * and keep their own, much longer, waits.
+ *
+ * A time-out is raised as an AbortError on purpose: the database client
+ * retries other failures three more times with backoff, which stacked on
+ * these limits kept a dead request going for over a minute. It never
+ * retries an abort, so this function's one retry is the only one.
+ */
+const READ_TIMEOUTS_MS = [6000, 9000];
+const WRITE_TIMEOUT_MS = 20000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers ?? {});
+  try {
+    headers.set('x-user-id', getUserId());
+  } catch { /* getUserId may not have an ID yet — safe to skip */ }
+
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const limits = method === 'GET' || method === 'HEAD' ? READ_TIMEOUTS_MS : [WRITE_TIMEOUT_MS];
+  const outer = init?.signal;
+
+  for (let attempt = 0; ; attempt++) {
+    const controller = new AbortController();
+    const stop = () => controller.abort(outer?.reason);
+    if (outer?.aborted) stop();
+    outer?.addEventListener('abort', stop);
+    const timer = setTimeout(
+      () => controller.abort(new DOMException('The request took too long', 'AbortError')),
+      limits[attempt],
+    );
+    try {
+      return await fetch(input, { ...init, headers, signal: controller.signal });
+    } catch (err) {
+      // The caller cancelled, or that was the last try: give up.
+      if (outer?.aborted || attempt + 1 >= limits.length) throw err;
+    } finally {
+      clearTimeout(timer);
+      outer?.removeEventListener('abort', stop);
+    }
+  }
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: safeStorage,
@@ -48,16 +97,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     flowType: 'implicit',
   },
-  global: {
-    fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      const headers = new Headers(init?.headers ?? {});
-      try {
-        headers.set('x-user-id', getUserId());
-      } catch { /* getUserId may not have an ID yet — safe to skip */ }
-      return fetch(input, { ...init, headers });
-    },
-  },
+  global: { fetch: fetchWithTimeout },
 });
+
 
 /* ── Auth ── */
 

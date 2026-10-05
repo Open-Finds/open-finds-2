@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js';
 import { supabase, fetchProfile, fetchPremiumUnlocked, claimDeviceRows, arrivedFromPasswordReset, type AppRole, type SubscriptionTier } from '../lib/supabase';
 import { setMonitoringUser } from '../lib/monitoring';
+import { setCacheOwner } from '../lib/cache';
 
 type AuthContextType = {
   session: Session | null;
@@ -112,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!data.session) setPasswordRecovery(false);
       setSession(data.session);
       setMonitoringUser(data.session?.user.id ?? null);
+      setCacheOwner(data.session?.user.id ?? null);
       if (data.session?.user.id) {
         loadProfile(data.session.user.id);
         claimForSession();
@@ -126,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_OUT') setPasswordRecovery(false);
       setSession(s);
       setMonitoringUser(s?.user.id ?? null);
+      setCacheOwner(s?.user.id ?? null);
       setProfileLoaded(false);
       (async () => {
         if (s?.user.id) {

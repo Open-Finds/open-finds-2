@@ -12,6 +12,8 @@ import {
 import { navigate } from '../lib/router';
 import { useAuth } from '../context/AuthContext';
 import { ShareCollectionModal } from '../components/ShareCollectionModal';
+import { LoadError } from '../components/LoadError';
+import { hasCached, useCachedState } from '../lib/cache';
 
 // Friend groups were replaced by group collections (client, 2026-10-05): a
 // group is now a shared collection that everyone in it can add venues to.
@@ -27,8 +29,10 @@ export function FriendsPage() {
   const currentUserId = session?.user.id;
 
   // Friends state
-  const [friends, setFriends] = useState<FriendWithProfile[]>([]);
-  const [friendsLoading, setFriendsLoading] = useState(true);
+  // Remembered between visits; the fresh list loads behind it.
+  const [friends, setFriends] = useCachedState<FriendWithProfile[]>('friends', []);
+  const [friendsLoading, setFriendsLoading] = useState(() => !hasCached('friends'));
+  const [friendsFailed, setFriendsFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PublicProfile[]>([]);
   // Each keystroke starts a search; only the latest one may update the list.
@@ -38,25 +42,30 @@ export function FriendsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Group collections state
-  const [mine, setMine] = useState<MyCollection[]>([]);
-  const [sharedWithMe, setSharedWithMe] = useState<Collection[]>([]);
-  const [collectionsLoading, setCollectionsLoading] = useState(true);
+  const [mine, setMine] = useCachedState<MyCollection[]>('friends:my-collections', []);
+  const [sharedWithMe, setSharedWithMe] = useCachedState<Collection[]>('friends:shared-collections', []);
+  const [collectionsLoading, setCollectionsLoading] = useState(() => !hasCached('friends:shared-collections'));
+  const [collectionsFailed, setCollectionsFailed] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
   const [creatingCollection, setCreatingCollection] = useState(false);
   const [collectionError, setCollectionError] = useState<string | null>(null);
   const [sharing, setSharing] = useState<Collection | null>(null);
 
   const loadFriends = useCallback(async () => {
-    setFriendsLoading(true);
+    if (!hasCached('friends')) setFriendsLoading(true);
+    setFriendsFailed(false);
     try {
       setFriends(await fetchFriends());
-    } catch { /* ignore */ } finally {
+    } catch {
+      setFriendsFailed(true);
+    } finally {
       setFriendsLoading(false);
     }
-  }, []);
+  }, [setFriends]);
 
   const loadCollections = useCallback(async () => {
-    setCollectionsLoading(true);
+    if (!hasCached('friends:shared-collections')) setCollectionsLoading(true);
+    setCollectionsFailed(false);
     try {
       // fetchCollections returns everything I can access: my own, and the
       // ones friends have added me to.
@@ -65,10 +74,12 @@ export function FriendsPage() {
       const counts = await Promise.all(own.map((c) => fetchCollectionMembers(c.id).then((m) => m.length).catch(() => 0)));
       setMine(own.map((c, i) => ({ ...c, memberCount: counts[i] })));
       setSharedWithMe(all.filter((c) => c.user_id !== session?.user.id));
-    } catch { /* ignore */ } finally {
+    } catch {
+      setCollectionsFailed(true);
+    } finally {
       setCollectionsLoading(false);
     }
-  }, [session?.user.id]);
+  }, [session?.user.id, setMine, setSharedWithMe]);
 
   useEffect(() => { loadFriends(); }, [loadFriends]);
   useEffect(() => { if (tab === 'collections') loadCollections(); }, [tab, loadCollections]);
@@ -300,6 +311,8 @@ export function FriendsPage() {
               </h2>
               {friendsLoading ? (
                 <p className="text-sm text-ink-secondary">Loading...</p>
+              ) : friendsFailed && friends.length === 0 ? (
+                <LoadError onRetry={loadFriends} />
               ) : acceptedFriends.length === 0 ? (
                 <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-8 text-center">
                   <Users size={32} className="mx-auto mb-3 text-gold/30" />
@@ -382,6 +395,8 @@ export function FriendsPage() {
               <div className="flex justify-center py-10">
                 <Loader2 size={24} className="animate-spin text-gold" />
               </div>
+            ) : collectionsFailed && mine.length === 0 && sharedWithMe.length === 0 ? (
+              <LoadError onRetry={loadCollections} />
             ) : (
               <>
                 {(() => {

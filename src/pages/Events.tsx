@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { parseLocalDate } from '../lib/time';
 import {
   fetchAllPlans,
@@ -18,6 +18,8 @@ import {
   supabase,
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
+import { hasCached, useCachedState } from '../lib/cache';
+import { LoadError } from '../components/LoadError';
 import { CalendarDays, MapPin, Users, ChevronRight, Trash2, X, Compass } from 'lucide-react';
 
 type PlanWithMeta = Plan & {
@@ -39,10 +41,12 @@ export function EventsPage({
 }: {
   onOpenPlan: (planId: string) => void;
 }) {
-  const [upcoming, setUpcoming] = useState<PlanWithMeta[]>([]);
-  const [canceled, setCanceled] = useState<PlanWithMeta[]>([]);
-  const [trips, setTrips] = useState<TripWithMeta[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Remembered between visits; the fresh lists load behind them.
+  const [upcoming, setUpcoming] = useCachedState<PlanWithMeta[]>('events:upcoming', []);
+  const [canceled, setCanceled] = useCachedState<PlanWithMeta[]>('events:canceled', []);
+  const [trips, setTrips] = useCachedState<TripWithMeta[]>('events:trips', []);
+  const [loading, setLoading] = useState(() => !hasCached('events:upcoming'));
+  const [failed, setFailed] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
 
@@ -60,67 +64,63 @@ export function EventsPage({
     };
   };
 
-  const load = async () => {
-    setLoading(true);
+  /*
+    Requests that don't depend on each other go out together, and tidying up
+    old events (auto-cancel past ones, delete month-old cancelled ones) no
+    longer holds the screen: it used to be several round trips one after
+    another before anything showed.
+  */
+  const load = useCallback(async () => {
+    if (!hasCached('events:upcoming')) setLoading(true);
+    setFailed(false);
     try {
       const today = new Date();
       const todayStr = today.toISOString().slice(0, 10);
 
-      // Fetch hosted plans (active + canceled) and guest-confirmed plans
-      const [hostedActive, hostedCanceled] = await Promise.all([
-        fetchAllPlans(),
-        fetchCanceledPlans(),
-      ]);
-
-      const guestName = getGuestName();
       // Signed-in users already get hosted + invited plans; guest-name RSVP
       // matching is only for anonymous RSVP discovery.
       const { data: { session } } = await supabase.auth.getSession();
-      const confirmedIds = session ? [] : await fetchConfirmedPlanIds(guestName);
+      const [hostedActive, hostedCanceled, invitedIds, confirmedIds] = await Promise.all([
+        fetchAllPlans(),
+        fetchCanceledPlans(),
+        fetchInvitedPlanIds(),
+        session ? Promise.resolve<string[]>([]) : fetchConfirmedPlanIds(getGuestName()),
+      ]);
+
       const hostedIds = new Set([...hostedActive, ...hostedCanceled].map((p) => p.id));
       const guestOnlyIds = confirmedIds.filter((id) => !hostedIds.has(id));
-      const guestPlans = await fetchPlansByIds(guestOnlyIds);
-
-      // Fetch plans shared via friends/groups (plan_invites)
-      const invitedIds = await fetchInvitedPlanIds();
       const invitedOnlyIds = invitedIds.filter((id) => !hostedIds.has(id) && !confirmedIds.includes(id));
-      const invitedPlans = await fetchPlansByIds(invitedOnlyIds);
+      const [guestPlans, invitedPlans] = await Promise.all([
+        fetchPlansByIds(guestOnlyIds),
+        fetchPlansByIds(invitedOnlyIds),
+      ]);
 
-      // Auto-cancel past hosted events that are still active
       const pastActive = hostedActive.filter((p) => p.date < todayStr);
-      if (pastActive.length > 0) {
-        await Promise.all(pastActive.map((p) => markPlanCanceled(p.id)));
+      const isOld = (p: Plan) => today.getTime() - parseLocalDate(p.date).getTime() > THIRTY_DAYS_MS;
+      const oldCanceled = hostedCanceled.filter(isOld);
+      // Tidy up in the background.
+      if (pastActive.length || oldCanceled.length) {
+        void Promise.all([
+          ...pastActive.map((p) => markPlanCanceled(p.id)),
+          ...oldCanceled.map((p) => deletePlan(p.id)),
+        ]).catch(() => { /* retried on the next visit */ });
       }
 
-      // Auto-delete canceled events older than 30 days
-      const oldCanceled = hostedCanceled.filter(
-        (p) => today.getTime() - parseLocalDate(p.date).getTime() > THIRTY_DAYS_MS
-      );
-      if (oldCanceled.length > 0) {
-        await Promise.all(oldCanceled.map((p) => deletePlan(p.id)));
-      }
-
-      // Merge active hosted + guest plans + invited plans, then split by date
+      // Upcoming: active plans from today on. Cancelled: cancelled in the last
+      // 30 days, plus anything active whose date has passed.
       const allActive = [...hostedActive, ...guestPlans, ...invitedPlans];
-      const enrichedActive = await Promise.all(
-        allActive.map((p) => enrichPlan(p, !hostedIds.has(p.id)))
-      );
-      const upcomingPlans = enrichedActive.filter((p) => p.date >= todayStr);
-      const pastStillActive = enrichedActive.filter((p) => p.date < todayStr);
+      const upcomingPlans = allActive.filter((p) => p.date >= todayStr);
+      const canceledPlans = Array.from(new Map(
+        [...hostedCanceled.filter((p) => !isOld(p)), ...allActive.filter((p) => p.date < todayStr)].map((p) => [p.id, p]),
+      ).values());
 
-      // Merge newly-auto-canceled with existing canceled (minus deleted old ones)
-      const remainingCanceled = hostedCanceled.filter(
-        (p) => today.getTime() - parseLocalDate(p.date).getTime() <= THIRTY_DAYS_MS
-      );
-      const allCanceled = [...remainingCanceled, ...pastActive, ...pastStillActive];
-      const dedupedCanceled = Array.from(
-        new Map(allCanceled.map((p) => [p.id, p])).values()
-      );
-      const enrichedCanceled = await Promise.all(
-        dedupedCanceled.map((p) => enrichPlan(p, !hostedIds.has(p.id)))
-      );
+      // Stop and RSVP counts for both lists in one go.
+      const [enrichedUpcoming, enrichedCanceled] = await Promise.all([
+        Promise.all(upcomingPlans.map((p) => enrichPlan(p, !hostedIds.has(p.id)))),
+        Promise.all(canceledPlans.map((p) => enrichPlan(p, !hostedIds.has(p.id)))),
+      ]);
 
-      setUpcoming(upcomingPlans);
+      setUpcoming(enrichedUpcoming);
       setCanceled(enrichedCanceled);
       // Show the list immediately — trip enrichment must not block this screen.
       setLoading(false);
@@ -131,12 +131,8 @@ export function EventsPage({
         const tripsWithMeta = await Promise.all(
           allTrips.map(async (t) => {
             const days = await fetchTripDays(t.id);
-            let totalStops = 0;
-            for (const d of days) {
-              const stops = await fetchStops(d.id);
-              totalStops += stops.length;
-            }
-            return { ...t, dayCount: days.length, totalStops };
+            const stopCounts = await Promise.all(days.map((d) => fetchStops(d.id).then((st) => st.length)));
+            return { ...t, dayCount: days.length, totalStops: stopCounts.reduce((a, b) => a + b, 0) };
           })
         );
         setTrips(tripsWithMeta);
@@ -144,15 +140,14 @@ export function EventsPage({
         // ignore trip fetch errors
       }
     } catch {
-      setUpcoming([]);
-      setCanceled([]);
+      setFailed(true);
       setLoading(false);
     }
-  };
+  }, [setUpcoming, setCanceled, setTrips]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   const handleCancel = async () => {
     if (!confirmId) return;
@@ -280,6 +275,8 @@ export function EventsPage({
 
         {loading ? (
           <p className="text-sm text-ink-secondary">Loading...</p>
+        ) : failed && upcoming.length === 0 && canceled.length === 0 ? (
+          <LoadError onRetry={load} />
         ) : (
           <>
             {upcoming.length === 0 && canceled.length === 0 && trips.length === 0 ? (
