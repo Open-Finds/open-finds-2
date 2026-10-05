@@ -210,7 +210,8 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
         ) : (
         <div className="mt-8 rounded-card border border-gold/20 bg-surface p-5 sm:p-7">
           <Tabs value={mode} onValueChange={(v) => switchMode(v as 'signin' | 'signup')}>
-            <TabsList className="w-full">
+            {/* Full width at every size (the shared list shrinks to fit from sm up). */}
+            <TabsList className="w-full sm:w-full">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
