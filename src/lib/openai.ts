@@ -1,5 +1,5 @@
 import type { VenueType, SavedVenue, PlanHistoryEntry } from './supabase';
-import { isGoogleMapsLink, resolveGoogleMapsLink } from './apiKeys';
+import { findStreetAddress, hasStreetNumber, isGoogleMapsLink, resolveGoogleMapsLink } from './apiKeys';
 import { findSimilarVenues, type KnownVenue } from './venueMatch';
 import { edgeAuthHeaders } from './edgeAuth';
 
@@ -285,6 +285,17 @@ export async function extractVenuesFromLink(
   }
 
   items.sort((a, b) => a.order - b.order);
+
+  // Captions often give only an area ("📍 Pocket Burger, Croydon Park"); look
+  // the venue up by name there for its street address and pin.
+  await Promise.all(items.map(async (item) => {
+    if (hasStreetNumber(item.address)) return;
+    const found = await findStreetAddress(item.name, item.address);
+    if (!found) return;
+    item.address = found.address;
+    item.lat = found.lat;
+    item.lon = found.lon;
+  }));
   return items;
 }
 

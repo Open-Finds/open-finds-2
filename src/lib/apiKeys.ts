@@ -112,19 +112,21 @@ const GOOGLE_DOMAIN = /^(?:[a-z0-9-]+\.)*google\.(?:com|co)(?:\.[a-z]{2})?$|^(?:
 
 /**
  * Any link the Google Maps app, the Maps website or Google search shares for
- * a place: maps.app.goo.gl/…, goo.gl/maps/…, g.co/kgs/…, and google.com/maps
- * on any country domain (google.com.au/maps/…). Kept in step with the
- * resolve-place edge function.
+ * a place: maps.app.goo.gl/…, goo.gl/maps/…, g.co/kgs/…, share.google/…
+ * (Google's newer Share button), a place's search result (…/search?kgmid=),
+ * and google.com/maps on any country domain (google.com.au/maps/…). Kept in
+ * step with the resolve-place edge function.
  */
 export function isGoogleMapsLink(url: string): boolean {
   const raw = url.trim();
   try {
     const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
     const host = u.hostname.toLowerCase();
-    if (host === 'maps.app.goo.gl') return true;
+    if (host === 'maps.app.goo.gl' || host === 'share.google') return true;
     if (host === 'goo.gl') return u.pathname.startsWith('/maps');
     if (host === 'g.co') return u.pathname.startsWith('/kgs');
     if (!GOOGLE_DOMAIN.test(host)) return false;
+    if (u.pathname === '/search' && u.searchParams.has('kgmid')) return true;
     return host.startsWith('maps.') || u.pathname.startsWith('/maps');
   } catch {
     return false;
@@ -151,6 +153,43 @@ export async function resolveGoogleMapsLink(url: string): Promise<ResolvedPlace 
       lon: data.lon ?? null,
       type: types.includes(data.type) ? data.type : null,
     };
+  } catch {
+    return null;
+  }
+}
+
+/** A real address has a street number; "Croydon Park NSW 2133" is only an area. */
+export function hasStreetNumber(address: string): boolean {
+  return /\d/.test(address.replace(/\b\d{4}\b\s*(,?\s*australia)?\s*$/i, ''));
+}
+
+/**
+ * The street address for a venue known only by name and area, as captions
+ * give it ("📍 Pocket Burger, Croydon Park"). The result has to be in the
+ * same postcode, or the same suburb, so another branch elsewhere isn't
+ * picked; otherwise null and the caller keeps what it had.
+ */
+export async function findStreetAddress(
+  name: string,
+  area: string,
+): Promise<{ address: string; lat: number; lon: number } | null> {
+  const parts = area.split(',').map((p) => p.trim()).filter(Boolean);
+  const suburb = parts[parts.length - 1] ?? '';
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/geocode`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({ address: `${name} ${suburb}`.trim() }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const found = typeof data?.address === 'string' ? data.address : '';
+    if (data?.lat == null || data?.lon == null || !hasStreetNumber(found)) return null;
+    const postcode = area.match(/\b\d{4}\b/)?.[0];
+    const suburbName = suburb.replace(/\b(NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b|\b\d{4}\b/gi, '').trim().toLowerCase();
+    const sameArea = postcode ? found.includes(postcode) : !!suburbName && found.toLowerCase().includes(suburbName);
+    if (!sameArea) return null;
+    return { address: found.replace(/,\s*Australia$/i, ''), lat: data.lat, lon: data.lon };
   } catch {
     return null;
   }

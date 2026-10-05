@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isGoogleMapsLink } from './apiKeys';
+import { hasStreetNumber, isGoogleMapsLink } from './apiKeys';
 
 /** Every way people share a place from Google Maps has to reach resolve-place. */
 describe('isGoogleMapsLink', () => {
@@ -14,6 +14,9 @@ describe('isGoogleMapsLink', () => {
       'https://maps.google.com.au/maps?cid=123',
       'https://g.co/kgs/AbC123',
       'maps.app.goo.gl/AbCdEf123',
+      // Google's newer Share button, and the place result it opens.
+      'https://share.google/HnI7t4PTlgm1i9vzx',
+      'https://www.google.com/search?kgmid=/g/11t8kpblsr&q=ANGRY+BULL+BURGER',
     ]) {
       expect(isGoogleMapsLink(url), url).toBe(true);
     }
@@ -30,6 +33,20 @@ describe('isGoogleMapsLink', () => {
       'not a link',
     ]) {
       expect(isGoogleMapsLink(url), url).toBe(false);
+    }
+  });
+});
+
+/** Area-only addresses get looked up for a street; real ones are left alone. */
+describe('hasStreetNumber', () => {
+  it('spots a street address', () => {
+    for (const a of ['28 Princes Hwy, Kogarah NSW 2217', '236/240 Georges River Rd, Croydon Park NSW 2133, Australia', 'Shop 14/2 Circular Quay E, Sydney NSW 2000']) {
+      expect(hasStreetNumber(a), a).toBe(true);
+    }
+  });
+  it('treats a suburb, state and postcode as an area only', () => {
+    for (const a of ['at the Barista Bar Metro, Croydon Park NSW 2133', 'Croydon Park', 'Surry Hills NSW 2010, Australia', '']) {
+      expect(hasStreetNumber(a), a).toBe(false);
     }
   });
 });

@@ -25,21 +25,39 @@ function isGoogleDomain(host: string): boolean {
     /^(?:[a-z0-9-]+\.)*google\.[a-z]{2,3}$/.test(host);
 }
 
-const SHORT_HOSTS = new Set(["maps.app.goo.gl", "goo.gl", "g.co"]);
+const SHORT_HOSTS = new Set(["maps.app.goo.gl", "goo.gl", "g.co", "share.google"]);
 
-/** Every link shape the Maps app, the website and Google search share. */
+/**
+ * Every link shape the Maps app, the website and Google search share,
+ * including share.google/… (Google's newer Share button), which opens the
+ * place's search result rather than a map.
+ */
 function isMapsUrl(raw: string): boolean {
   try {
     const u = new URL(raw);
     const host = u.hostname.toLowerCase();
-    if (host === "maps.app.goo.gl") return true;
+    if (host === "maps.app.goo.gl" || host === "share.google") return true;
     if (host === "goo.gl") return u.pathname.startsWith("/maps");
     if (host === "g.co") return u.pathname.startsWith("/kgs");
     if (!isGoogleDomain(host)) return false;
+    // A place's search result (what share.google and g.co/kgs expand to).
+    if (u.pathname === "/search" && u.searchParams.has("kgmid")) return true;
     return host.startsWith("maps.") || u.pathname.startsWith("/maps");
   } catch {
     return false;
   }
+}
+
+/**
+ * share.google/<id> sends everyone through google.com, which redirects to a
+ * country domain based on where the server is (google.com.hk, …) before the
+ * place. Asking google.com.au directly skips that and answers with the place.
+ */
+function shareGoogleTarget(u: URL): string | null {
+  const id = u.hostname === "share.google"
+    ? u.pathname.replace(/^\/+/, "").split("/")[0]
+    : u.pathname === "/share.google" ? u.searchParams.get("q") : null;
+  return id && /^[A-Za-z0-9_-]{4,64}$/.test(id) ? `https://www.google.com.au/share.google?q=${id}` : null;
 }
 
 /**
@@ -65,7 +83,17 @@ async function expandShortLink(raw: string): Promise<string> {
       current = target;
       continue;
     }
-    if (!SHORT_HOSTS.has(host)) return current;
+    // Country redirect (google.com/url?q=https://www.google.com.hk/…).
+    if (u.pathname === "/url" && u.searchParams.get("q")?.startsWith("https://")) {
+      current = u.searchParams.get("q")!;
+      continue;
+    }
+    const share = shareGoogleTarget(u);
+    if (share && share !== current) {
+      current = share;
+      continue;
+    }
+    if (!SHORT_HOSTS.has(host) && !share) return current;
     try {
       const res = await fetch(current, {
         redirect: "manual",
@@ -309,7 +337,8 @@ async function resolve(url: string, apiKey: string): Promise<PlaceResult> {
       return { name, address: found.formattedAddress, lat: found.coord.lat, lon: found.coord.lng, type: null };
     }
   }
-  return EMPTY;
+  // A name with no address still saves the user retyping it.
+  return name ? { ...EMPTY, name } : EMPTY;
 }
 
 const RATE_LIMIT = 60;
