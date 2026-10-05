@@ -35,6 +35,13 @@ type Props = {
   collections?: Collection[];
   venueCollectionIds?: string[];
   onToggleCollection?: (collectionId: string) => void;
+  /**
+   * Read-only cards only: copies this venue into the viewer's own venues. The
+   * original stays in the group collection.
+   */
+  onSaveToMine?: () => Promise<void>;
+  /** The viewer already has this venue in their own list. */
+  savedToMine?: boolean;
 };
 
 export function SavedVenueCard({
@@ -51,7 +58,10 @@ export function SavedVenueCard({
   collections = [],
   venueCollectionIds = [],
   onToggleCollection,
+  onSaveToMine,
+  savedToMine = false,
 }: Props) {
+  const [savingToMine, setSavingToMine] = useState(false);
   const [editName, setEditName] = useState(venue.name);
   const [editAddress, setEditAddress] = useState(venue.address);
   const [editType, setEditType] = useState<VenueType>(venue.type);
@@ -341,10 +351,11 @@ export function SavedVenueCard({
           <MapPin size={13} className="text-gold/70" /> {venue.address}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {venue.visited && (
+          {/* Visited, rating and note are the owner's own; other members don't see them. */}
+          {!readOnly && venue.visited && (
             <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success"><CheckCircle2 size={11} /> Visited</span>
           )}
-          {venue.rating && (
+          {!readOnly && venue.rating && (
             <span className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs text-gold"><Star size={11} fill="currentColor" /> {venue.rating}/5</span>
           )}
           {venueCollections.map((c) => (
@@ -368,8 +379,28 @@ export function SavedVenueCard({
             </span>
           ))}
         </div>
-        {venue.personal_note && <p className="mt-2 line-clamp-2 text-xs italic text-ink-secondary">“{venue.personal_note}”</p>}
+        {!readOnly && venue.personal_note && <p className="mt-2 line-clamp-2 text-xs italic text-ink-secondary">“{venue.personal_note}”</p>}
         <CheckItOut link={venue.link} variant="pill" className="mt-2" />
+        {readOnly && onSaveToMine && (
+          savedToMine ? (
+            <p className="mt-3 flex w-fit items-center gap-1.5 text-xs font-semibold text-success">
+              <Check size={13} /> In your venues
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                setSavingToMine(true);
+                try { await onSaveToMine(); } finally { setSavingToMine(false); }
+              }}
+              disabled={savingToMine}
+              className="mt-3 flex w-fit items-center gap-1.5 rounded-card border border-gold/50 px-3 py-1.5 text-xs font-bold text-gold transition-all hover:bg-gold/10 active:scale-95 disabled:opacity-50"
+            >
+              <Plus size={13} /> {savingToMine ? 'Saving…' : 'Save to my venues'}
+            </button>
+          )
+        )}
       </div>
       {!readOnly && <button
         onClick={(e) => {

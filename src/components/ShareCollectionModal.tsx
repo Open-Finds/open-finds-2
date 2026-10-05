@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Users, User, Check, Loader2, UserMinus, Share2 } from 'lucide-react';
+import { User, Check, Loader2, UserMinus, Share2 } from 'lucide-react';
 import {
   fetchFriends,
-  fetchFriendGroups,
   fetchCollectionMembers,
   shareCollectionWithFriends,
-  shareCollectionWithGroup,
   removeCollectionMember,
   type Collection,
   type CollectionMember,
   type FriendWithProfile,
-  type FriendGroupWithMembers,
 } from '../lib/supabase';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -20,8 +17,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
 /**
- * Owner-side sheet for sharing a collection with friends or a whole group,
- * and for seeing / removing who already has it. Only accepted friends can be
+ * Owner-side sheet for adding friends to a group collection, and for seeing /
+ * removing who already has it. (Friend groups were retired in favour of group
+ * collections, so this offers friends only.) Only accepted friends can be
  * chosen — the server enforces the same rule, this just avoids offering
  * anyone it would refuse.
  */
@@ -38,7 +36,6 @@ export function ShareCollectionModal({
   onChanged?: () => void;
 }) {
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
-  const [groups, setGroups] = useState<FriendGroupWithMembers[]>([]);
   const [members, setMembers] = useState<CollectionMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -48,13 +45,11 @@ export function ShareCollectionModal({
   const load = async () => {
     setLoading(true);
     try {
-      const [f, g, m] = await Promise.all([
+      const [f, m] = await Promise.all([
         fetchFriends(),
-        fetchFriendGroups(),
         fetchCollectionMembers(collection.id),
       ]);
       setFriends(f.filter((x) => x.status === 'accepted'));
-      setGroups(g);
       setMembers(m);
     } catch {
       setNotice("Couldn't load your friends right now.");
@@ -88,23 +83,8 @@ export function ShareCollectionModal({
     setNotice(null);
     try {
       const n = await shareCollectionWithFriends(collection.id, Array.from(selected));
-      setNotice(n === 1 ? 'Shared with 1 friend.' : `Shared with ${n} friends.`);
+      setNotice(n === 1 ? 'Added 1 friend.' : `Added ${n} friends.`);
       setSelected(new Set());
-      await load();
-      onChanged?.();
-    } catch {
-      setNotice("Couldn't share right now. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const shareGroup = async (groupId: string, name: string) => {
-    setBusy(true);
-    setNotice(null);
-    try {
-      const n = await shareCollectionWithGroup(collection.id, groupId);
-      setNotice(n === 0 ? `Everyone in ${name} already has it.` : `Shared with ${n} from ${name}.`);
       await load();
       onChanged?.();
     } catch {
@@ -135,7 +115,7 @@ export function ShareCollectionModal({
             <Share2 size={18} className="text-gold" /> Share “{collection.name}”
           </DialogTitle>
           <DialogDescription>
-            Friends you share with can see every venue in it and add their own.
+            Everyone you add can see every venue in it, add their own, and save any of them to their own venues.
           </DialogDescription>
         </DialogHeader>
 
@@ -147,7 +127,6 @@ export function ShareCollectionModal({
           <Tabs defaultValue="friends">
             <TabsList className="w-full">
               <TabsTrigger value="friends"><User size={14} /> Friends</TabsTrigger>
-              <TabsTrigger value="groups"><Users size={14} /> Groups</TabsTrigger>
               <TabsTrigger value="members">Who has it ({members.length})</TabsTrigger>
             </TabsList>
 
@@ -155,7 +134,7 @@ export function ShareCollectionModal({
               {shareable.length === 0 ? (
                 <p className="py-4 text-center text-sm text-ink-secondary">
                   {friends.length === 0
-                    ? 'Add some friends first, then share collections with them.'
+                    ? 'Add some friends first, then add them to your group collections.'
                     : 'All your friends already have this collection.'}
                 </p>
               ) : (
@@ -190,39 +169,9 @@ export function ShareCollectionModal({
                   </ul>
                   <Button full onClick={shareSelected} disabled={busy || selected.size === 0} className="mt-3">
                     {busy ? <Loader2 className="animate-spin" /> : <Share2 />}
-                    Share with {selected.size || ''} {selected.size === 1 ? 'friend' : 'friends'}
+                    Add {selected.size || ''} {selected.size === 1 ? 'friend' : 'friends'}
                   </Button>
                 </>
-              )}
-            </TabsContent>
-
-            <TabsContent value="groups">
-              {groups.length === 0 ? (
-                <p className="py-4 text-center text-sm text-ink-secondary">
-                  No groups yet. Create one in Friends → Groups to share with everyone at once.
-                </p>
-              ) : (
-                <ul className="space-y-1">
-                  {groups.map((g) => (
-                    <li key={g.id}>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => shareGroup(g.id, g.name)}
-                        className="flex w-full items-center gap-3 rounded-card border border-gold/15 px-3 py-2.5 text-left transition-colors hover:bg-white/5 disabled:opacity-50"
-                      >
-                        <Users size={18} className="shrink-0 text-gold" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-white">{g.name}</span>
-                          <span className="block text-xs text-ink-secondary">
-                            {g.members.length} {g.members.length === 1 ? 'member' : 'members'}
-                          </span>
-                        </span>
-                        <Share2 size={16} className="shrink-0 text-ink-secondary" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
               )}
             </TabsContent>
 

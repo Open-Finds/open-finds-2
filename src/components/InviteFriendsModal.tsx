@@ -1,15 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   fetchFriends,
-  fetchFriendGroups,
   inviteUserToPlan,
-  inviteGroupToPlan,
   fetchInvitedUserIdsForPlan,
   type FriendWithProfile,
-  type FriendGroupWithMembers,
 } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { X, Users, User, Check, Send, Lock } from 'lucide-react';
+import { X, User, Check, Send, Lock } from 'lucide-react';
 
 /** The tick box on each row: visible before it's ticked, so it reads as a choice. */
 function Checkbox({ checked }: { checked: boolean }) {
@@ -36,10 +33,8 @@ export function InviteFriendsModal({
 }) {
   const { session } = useAuth();
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
-  const [groups, setGroups] = useState<FriendGroupWithMembers[]>([]);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
   const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,13 +44,11 @@ export function InviteFriendsModal({
     setLoading(true);
     setError(null);
     try {
-      const [f, g, invited] = await Promise.all([
+      const [f, invited] = await Promise.all([
         fetchFriends(),
-        fetchFriendGroups(),
         fetchInvitedUserIdsForPlan(planId),
       ]);
       setFriends(f.filter((fr) => fr.status === 'accepted'));
-      setGroups(g);
       setInvitedIds(invited);
     } catch {
       setError('Failed to load contacts');
@@ -67,7 +60,6 @@ export function InviteFriendsModal({
   useEffect(() => {
     if (open && session) {
       setSelectedFriends(new Set());
-      setSelectedGroup(null);
       setSuccess(null);
       setError(null);
       load();
@@ -95,17 +87,11 @@ export function InviteFriendsModal({
           count++;
         }
       }
-      if (selectedGroup) {
-        await inviteGroupToPlan(planId, selectedGroup);
-        const g = groups.find((g) => g.id === selectedGroup);
-        count += g?.members.length ?? 0;
-      }
       if (count === 0) {
         setError('Everyone you selected has already been invited.');
       } else {
         setSuccess(`Invitations sent to ${count} ${count === 1 ? 'person' : 'people'}!`);
         setSelectedFriends(new Set());
-        setSelectedGroup(null);
         await load();
       }
     } catch (e) {
@@ -117,7 +103,10 @@ export function InviteFriendsModal({
 
   if (!open) return null;
 
-  const hasSelection = selectedFriends.size > 0 || selectedGroup !== null;
+  const hasSelection = selectedFriends.size > 0;
+  // Friend groups were retired; "Select all" covers inviting everyone at once.
+  const invitable = friends.filter((f) => !invitedIds.has(f.user_id));
+  const allSelected = invitable.length > 0 && invitable.every((f) => selectedFriends.has(f.user_id));
 
   return (
     <div
@@ -177,58 +166,22 @@ export function InviteFriendsModal({
                 </p>
               )}
 
-              {/* Groups section */}
-              {groups.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
-                    <Users size={16} className="text-gold" /> Groups
-                  </h3>
-                  <div className="space-y-2">
-                    {groups.map((g) => {
-                      const allInvited =
-                        g.members.length > 0 &&
-                        g.members.every((m) => invitedIds.has(m.user_id));
-                      const isSelected = selectedGroup === g.id;
-                      return (
-                        <button
-                          key={g.id}
-                          onClick={() =>
-                            setSelectedGroup(isSelected ? null : g.id)
-                          }
-                          disabled={allInvited}
-                          aria-pressed={isSelected}
-                          className={`flex w-full items-center gap-3 rounded-card border p-4 text-left transition-all disabled:opacity-40 ${
-                            isSelected
-                              ? 'border-gold bg-gold/10'
-                              : 'border-gold/10 bg-[#1a1a1a] hover:border-gold/30'
-                          }`}
-                        >
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold/15">
-                            <Users size={18} className="text-gold" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold text-white">
-                              {g.name}
-                            </p>
-                            <p className="text-xs text-ink-secondary">
-                              {g.members.length}{' '}
-                              {g.members.length === 1 ? 'member' : 'members'}
-                              {allInvited && ' · all invited'}
-                            </p>
-                          </div>
-                          {!allInvited && <Checkbox checked={isSelected} />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Friends section */}
               <div>
-                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
-                  <User size={16} className="text-gold" /> Friends
-                </h3>
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <User size={16} className="text-gold" /> Friends
+                  </h3>
+                  {invitable.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFriends(allSelected ? new Set() : new Set(invitable.map((f) => f.user_id)))}
+                      className="text-xs font-semibold text-gold underline-offset-2 hover:underline"
+                    >
+                      {allSelected ? 'Clear' : 'Select all'}
+                    </button>
+                  )}
+                </div>
                 {friends.length === 0 ? (
                   <p className="py-4 text-center text-sm text-ink-secondary">
                     No friends yet. Add friends from the Friends tab first.
@@ -292,7 +245,7 @@ export function InviteFriendsModal({
               {sending
                 ? 'Sending...'
                 : hasSelection
-                  ? `Send Invitations (${selectedFriends.size + (selectedGroup ? groups.find((g) => g.id === selectedGroup)?.members.length ?? 0 : 0)})`
+                  ? `Send Invitations (${selectedFriends.size})`
                   : 'Send Invitations'}
             </button>
           </div>

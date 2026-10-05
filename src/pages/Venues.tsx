@@ -411,6 +411,22 @@ export function VenuesPage() {
 
   const openCollection = openCollectionId ? collectionMap[openCollectionId] : null;
 
+  /* ── Group collections: "Save to my venues" ──
+     A member can copy someone else's venue into their own list. The original
+     stays in the group collection; the copy carries the place and its link,
+     not the other person's note, rating or visited mark. */
+  const alreadyMine = (v: SavedVenue) => findSimilarVenues(v, venues).some((m) => m.confidence >= 0.9);
+  const saveToMine = async (v: SavedVenue) => {
+    try {
+      const copy = await insertSavedVenue({
+        name: v.name, address: v.address, type: v.type, link: v.link, lat: v.lat, lon: v.lon, tags: v.tags,
+      });
+      setVenues((prev) => [copy, ...prev]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save that venue');
+    }
+  };
+
   return (
     <div className="min-h-screen overflow-y-auto bg-black px-6 pt-8 pb-24">
       <DuplicateVenueDialog
@@ -500,6 +516,8 @@ export function VenuesPage() {
                     key={v.id}
                     venue={v}
                     readOnly={v.user_id !== myId}
+                    onSaveToMine={() => saveToMine(v)}
+                    savedToMine={v.user_id !== myId && alreadyMine(v)}
                     isEditing={editingId === v.id}
                     onEditStart={() => setEditingId(v.id)}
                     onEditEnd={() => setEditingId(null)}
