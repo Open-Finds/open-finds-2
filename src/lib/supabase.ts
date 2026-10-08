@@ -126,6 +126,25 @@ export async function sendPasswordReset(email: string) {
 
 export type OAuthProvider = 'google' | 'facebook';
 
+/**
+ * Which social sign-ins are switched on in Supabase right now. Asked rather
+ * than assumed, so a button only shows once its provider is really set up
+ * (otherwise Supabase answers "provider is not enabled"). Nothing on failure.
+ */
+export async function fetchEnabledSignInProviders(): Promise<Set<OAuthProvider>> {
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/settings`, {
+      headers: { apikey: supabaseAnonKey },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return new Set();
+    const external = ((await res.json())?.external ?? {}) as Record<string, boolean>;
+    return new Set((['google', 'facebook'] as const).filter((p) => external[p] === true));
+  } catch {
+    return new Set();
+  }
+}
+
 /** Leaves for Google/Facebook; the session is picked up from the URL on return. */
 export async function signInWithProvider(provider: OAuthProvider) {
   const { error } = await supabase.auth.signInWithOAuth({

@@ -7,6 +7,7 @@ import {
   checkUsernameAvailable,
   sendPasswordReset,
   signInWithProvider,
+  fetchEnabledSignInProviders,
   authLinkError,
   type OAuthProvider,
 } from '../lib/supabase';
@@ -18,12 +19,14 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
 /**
- * Social sign-in shows once its provider is set up in Supabase (client ID and
- * secret) and switched on here, so there's never a button that can't work.
+ * A social sign-in button shows only while that provider is switched on in
+ * Supabase (Authentication → Providers), checked when the page opens, so
+ * there's never a button that can't work and no release is needed to add
+ * one. VITE_GOOGLE_SIGN_IN / VITE_FACEBOOK_SIGN_IN = "false" hides it anyway.
  */
-const SOCIAL_PROVIDERS: { id: OAuthProvider; label: string; enabled: boolean }[] = [
-  { id: 'google', label: 'Continue with Google', enabled: import.meta.env.VITE_GOOGLE_SIGN_IN === 'true' },
-  { id: 'facebook', label: 'Continue with Facebook', enabled: import.meta.env.VITE_FACEBOOK_SIGN_IN === 'true' },
+const SOCIAL_PROVIDERS: { id: OAuthProvider; label: string; allowed: boolean }[] = [
+  { id: 'google', label: 'Continue with Google', allowed: import.meta.env.VITE_GOOGLE_SIGN_IN !== 'false' },
+  { id: 'facebook', label: 'Continue with Facebook', allowed: import.meta.env.VITE_FACEBOOK_SIGN_IN !== 'false' },
 ];
 
 const EXPIRED_LINK = 'That link has expired or was already used. Enter your email to get a new one.';
@@ -53,6 +56,14 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
   // "Forgot password?": ask for the email, send the reset link.
   const [resetting, setResetting] = useState(Boolean(authLinkError));
   const [resetSent, setResetSent] = useState(false);
+  const [liveProviders, setLiveProviders] = useState<Set<OAuthProvider>>(new Set());
+  const socialProviders = SOCIAL_PROVIDERS.filter((p) => p.allowed && liveProviders.has(p.id));
+
+  useEffect(() => {
+    let live = true;
+    void fetchEnabledSignInProviders().then((set) => { if (live) setLiveProviders(set); });
+    return () => { live = false; };
+  }, []);
 
   // An expired email link leaves #error=… in the address; tidy it once shown.
   useEffect(() => {
@@ -226,9 +237,9 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
             </div>
           )}
 
-          {SOCIAL_PROVIDERS.some((p) => p.enabled) && (
+          {socialProviders.length > 0 && (
             <div className="mt-5 flex flex-col gap-3">
-              {SOCIAL_PROVIDERS.filter((p) => p.enabled).map((p) => (
+              {socialProviders.map((p) => (
                 <Button key={p.id} type="button" variant="outline" size="lg" full disabled={loading} onClick={() => handleProvider(p.id)}>
                   {p.id === 'google' && <GoogleMark />} {p.label}
                 </Button>
