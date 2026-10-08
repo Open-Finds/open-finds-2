@@ -20,6 +20,7 @@ import { HostBadge } from '../components/Shared';
 import { InviteFriendsModal } from '../components/InviteFriendsModal';
 import { ShareOnSocialDialog } from '../components/ShareOnSocial';
 import { buildInviteMessage, getShareUrl } from '../lib/invite';
+import { planToCalendarEvent } from '../lib/calendar';
 
 export function DashboardPage({
   id,
@@ -37,7 +38,11 @@ export function DashboardPage({
   const [shareOpen, setShareOpen] = useState(false);
 
 
-  const countdown = useCountdown(plan ? `${plan.date}T19:00:00` : '2099-01-01');
+  // Counts down to the first stop (or 7pm when there are no times), the same
+  // start the calendar export uses.
+  const event = plan ? planToCalendarEvent(plan, stops) : null;
+  const countdown = useCountdown(event ? event.start.toISOString() : '2099-01-01');
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
   useEffect(() => {
     let active = true;
@@ -128,8 +133,19 @@ export function DashboardPage({
           <p className="flex items-center justify-center gap-1.5 text-sm text-ink-secondary">
             <Clock size={14} /> Countdown
           </p>
+          {event && (
+            <p className="mt-1 text-sm font-semibold text-white">
+              {event.start.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {' · '}
+              {event.start.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}
+            </p>
+          )}
           <p className="mt-2 text-xl font-bold text-gold">
-            {countdown.days} days, {countdown.hours} hours, {countdown.minutes} minutes
+            {!countdown.isPast
+              ? `${plural(countdown.days, 'day')}, ${plural(countdown.hours, 'hour')}, ${plural(countdown.minutes, 'minute')}`
+              : event && Date.now() < event.end.getTime()
+                ? "It's on now!"
+                : 'This night has been and gone'}
           </p>
         </div>
 
