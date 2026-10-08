@@ -24,6 +24,7 @@ import {
   Link2,
   Compass,
   Crown,
+  Search,
 } from 'lucide-react';
 import { buildInviteMessage, getShareUrl } from '../lib/invite';
 import { locateUser } from '../lib/geolocation';
@@ -184,7 +185,7 @@ function NextButton({
         disabled={disabled}
         className={`flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card px-6 py-3.5 text-base font-bold shadow-gold-glow transition-all duration-200 active:scale-[0.98] ${
           disabled
-            ? 'cursor-not-allowed border border-gold/20 bg-gold/10 text-gold/40 shadow-none'
+            ? 'cursor-not-allowed border border-gold/25 bg-[#1c1808] text-gold/50 shadow-none'
             : 'bg-gold text-black'
         }`}
       >
@@ -275,6 +276,7 @@ export function HomePage({
   const [savedVenueList, setSavedVenueList] = useState<SavedVenue[]>([]);
   const [savedVenueListLoading, setSavedVenueListLoading] = useState(false);
   const [savedVenueSelectedIds, setSavedVenueSelectedIds] = useState<Set<string>>(new Set());
+  const [savedVenueSearch, setSavedVenueSearch] = useState('');
   const { displayName, dietaryPreferences, subscriptionTier, premiumUnlocked } = useAuth();
   const [adHocDietaryFilters, setAdHocDietaryFilters] = useState<Set<string>>(new Set());
 
@@ -1300,6 +1302,13 @@ export function HomePage({
       setSelectedVibes(Array.from(vibes).slice(0, 3) as Vibe[]);
       await buildAndCreatePlan(chosen.map((v) => ({ name: v.name, address: v.address, type: v.type, vibe_link: v.link })));
     };
+    const q = savedVenueSearch.trim().toLowerCase();
+    const shownSavedVenues = q
+      ? savedVenueList.filter((v) =>
+          savedVenueSelectedIds.has(v.id) ||
+          [v.name, v.address, v.type, VIBE_LABELS[v.type as Vibe]?.label ?? '', ...(v.tags ?? [])]
+            .some((f) => f.toLowerCase().includes(q)))
+      : savedVenueList;
     return (
       <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-44">
         <BackButton onClick={() => setPage('planMyNight')} />
@@ -1315,9 +1324,24 @@ export function HomePage({
             </div>
           ) : (
             <>
+              {/* Search by name, suburb, tag or type; picks stay picked while filtering. */}
+              <div className="relative mb-3">
+                <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/50" size={18} />
+                <input
+                  type="search"
+                  value={savedVenueSearch}
+                  onChange={(e) => setSavedVenueSearch(e.target.value)}
+                  placeholder="Search your venues…"
+                  aria-label="Search your venues"
+                  className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                />
+              </div>
               <p className="mb-3 text-xs font-medium text-gold">{savedVenueSelectedIds.size}/3 selected</p>
+              {shownSavedVenues.length === 0 && (
+                <p className="py-6 text-center text-sm text-ink-secondary">No saved venues match "{savedVenueSearch.trim()}".</p>
+              )}
               <div className="space-y-3">
-                {savedVenueList.map((v) => {
+                {shownSavedVenues.map((v) => {
                   const isSelected = savedVenueSelectedIds.has(v.id);
                   return (
                     <div
