@@ -150,11 +150,16 @@ function AppInner() {
     })();
   }, [session]);
 
-  // Guest-facing routes — render standalone, no auth required
-  if (route.name === 'rsvp') return <RsvpPage id={route.id} />;
-  if (route.name === 'confirmed') return <ConfirmedPage id={route.id} />;
-  if (route.name === 'declined') return <DeclinedPage id={route.id} />;
-  if (route.name === 'share') return <SharePage id={route.id} />;
+  // An event's invitation and RSVP pages. Someone without the app gets them on
+  // their own; someone signed in (opening an invite from Events or a
+  // notification) gets them inside the app, with the menu, further down.
+  const planPage =
+    route.name === 'rsvp' ? <RsvpPage id={route.id} />
+    : route.name === 'confirmed' ? <ConfirmedPage id={route.id} />
+    : route.name === 'declined' ? <DeclinedPage id={route.id} />
+    : route.name === 'share' ? <SharePage id={route.id} />
+    : null;
+  if (planPage && !authLoading && !session) return planPage;
   if (route.name === 'trip-rsvp') return <TripRsvpPage tripId={route.id} />;
 
   // Trip routes — accessible without auth (share links)
@@ -228,6 +233,9 @@ function AppInner() {
       clearPlanDraft();
       setHomeResetKey((k) => k + 1);
       navigate('/');
+    } else if (planPage) {
+      // Leaving an invitation for another tab.
+      navigate('/');
     }
   };
 
@@ -281,6 +289,11 @@ function AppInner() {
         />
       </Shell>
     );
+  }
+
+  // Signed in: an invitation or RSVP page, inside the app with the menu.
+  if (planPage) {
+    return <Shell {...shellProps}>{planPage}</Shell>;
   }
 
   if (dashboardId) {

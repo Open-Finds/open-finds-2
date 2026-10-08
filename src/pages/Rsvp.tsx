@@ -144,9 +144,11 @@ export function RsvpPage({ id }: { id: string }) {
               month: 'long',
             })}
           </span>
-          <span className="inline-flex items-center gap-1">
-            <MapPin size={15} /> {plan.location}
-          </span>
+          {plan.location?.trim() && (
+            <span className="inline-flex items-center gap-1">
+              <MapPin size={15} /> {plan.location}
+            </span>
+          )}
         </div>
       </div>
 
