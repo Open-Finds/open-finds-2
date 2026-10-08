@@ -4,6 +4,8 @@ import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsern
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../lib/router';
 import { ScrollHint } from '../components/ScrollHint';
+import { Button } from '../components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
 const DIETARY_OPTIONS = [
   { key: 'vegetarian', label: 'Vegetarian' },
@@ -141,7 +143,12 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
     }
   };
 
+  // Signing out asks first: it's at the bottom of a long page, easy to hit by mistake.
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
   const handleLogout = async () => {
+    setSigningOut(true);
     try {
       await signOut();
     } catch {
@@ -409,11 +416,25 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
 
         {/* Logout */}
         <button
-          onClick={handleLogout}
+          onClick={() => setConfirmSignOut(true)}
           className="flex w-full items-center justify-center gap-2 rounded-card border border-danger/30 bg-danger/10 py-3.5 text-base font-bold text-danger transition-all active:scale-[0.98] hover:bg-danger/20"
         >
           <LogOut size={18} /> Sign Out
         </button>
+        <Dialog open={confirmSignOut} onOpenChange={(open) => !signingOut && setConfirmSignOut(open)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="text-white">Sign out?</DialogTitle>
+              <DialogDescription>You'll need your email and password, or Google, to sign back in.</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button variant="ghost" onClick={() => setConfirmSignOut(false)} disabled={signingOut}>Cancel</Button>
+              <Button variant="destructive" onClick={handleLogout} disabled={signingOut}>
+                <LogOut /> {signingOut ? 'Signing out…' : 'Sign out'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
       <ScrollHint />
     </div>
