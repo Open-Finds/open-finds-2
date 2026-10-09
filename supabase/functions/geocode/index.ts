@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
       return json(req, { error: "Geocoding request failed" }, 502);
     }
     if (result.coord) {
-      return json(req, { lat: result.coord.lat, lon: result.coord.lng, address: result.formattedAddress });
+      return json(req, { lat: result.coord.lat, lon: result.coord.lng, address: result.formattedAddress, types: result.types ?? [] });
     }
     return json(req, { lat: null, lon: null });
   } catch (err) {

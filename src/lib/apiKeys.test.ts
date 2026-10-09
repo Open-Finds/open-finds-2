@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasStreetNumber, isGoogleMapsLink } from './apiKeys';
+import { areaOf, hasStreetNumber, isAustralianAddress, isGoogleMapsLink, tidyAddress } from './apiKeys';
 
 /** Every way people share a place from Google Maps has to reach resolve-place. */
 describe('isGoogleMapsLink', () => {
@@ -45,8 +45,32 @@ describe('hasStreetNumber', () => {
     }
   });
   it('treats a suburb, state and postcode as an area only', () => {
-    for (const a of ['at the Barista Bar Metro, Croydon Park NSW 2133', 'Croydon Park', 'Surry Hills NSW 2010, Australia', '']) {
+    for (const a of [
+      'at the Barista Bar Metro, Croydon Park NSW 2133', 'Croydon Park', 'Surry Hills NSW 2010, Australia', '',
+      // Overseas postcodes aren't street numbers either.
+      'Nakameguro, Meguro City, Tokyo 153-0061', 'Shibuya, Tokyo, 〒150-0002, Japan',
+    ]) {
       expect(hasStreetNumber(a), a).toBe(false);
     }
+  });
+});
+
+/** Venues abroad: what counts as Australian, the area of an address, and Japanese order. */
+describe('overseas addresses', () => {
+  it('knows Australian addresses', () => {
+    expect(isAustralianAddress('28 Princes Hwy, Kogarah NSW 2217')).toBe(true);
+    expect(isAustralianAddress('1-15-19 Shibuya, Shibuya City, Tokyo 150-0002, Japan')).toBe(false);
+  });
+  it('keeps only the area of an address', () => {
+    expect(areaOf('1-1-1, Asakusa, Taito City, Tokyo 111-0032')).toBe('Asakusa, Taito City, Tokyo 111-0032');
+    expect(areaOf('1-1-1 Kamimeguro, Meguro City, Tokyo, Japan')).toBe('Meguro City, Tokyo, Japan');
+  });
+  it('turns Google\'s big-to-small Japanese addresses round', () => {
+    expect(tidyAddress('Japan, 〒150-0013 Tokyo, Shibuya, Ebisu, 1-chōme−6−６ Saito Bldg., １階'))
+      .toBe('Level 1, 1-chōme-6-6 Saito Bldg., Ebisu, Shibuya, Tokyo 150-0013, Japan');
+    expect(tidyAddress('1-chōme-15-19 Shibuya, Tokyo 150-0002, Japan')).toBe('1-chōme-15-19 Shibuya, Tokyo 150-0002, Japan');
+    expect(tidyAddress('3-chōme-16 1階, Kanda Nishikichō, Chiyoda City, Tokyo 101-0054, Japan'))
+      .toBe('3-chōme-16 Level 1, Kanda Nishikichō, Chiyoda City, Tokyo 101-0054, Japan');
+    expect(tidyAddress('28 Princes Hwy, Kogarah NSW 2217')).toBe('28 Princes Hwy, Kogarah NSW 2217');
   });
 });

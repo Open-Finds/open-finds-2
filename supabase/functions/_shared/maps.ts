@@ -29,6 +29,8 @@ export type GeocodeResult = {
   /** Google's status: OK, ZERO_RESULTS, REQUEST_DENIED, ... or FETCH_FAILED. */
   status: string;
   formattedAddress: string | null;
+  /** What was matched: establishment, street_address, park, locality, ... */
+  types?: string[];
 };
 
 const AU_POSTCODE = /^\d{4}$/;
@@ -40,21 +42,30 @@ const AU_POSTCODE = /^\d{4}$/;
  * Neuchâtel and Johannesburg all use it), so a bare 4-digit number is looked
  * up as an Australian postcode. Anything else is biased to Australia rather
  * than restricted to it, so a full overseas address still works.
+ *
+ * Addresses come back in English (language=en): a Japanese search otherwise
+ * answers "Japan, 〒150-0013 Tokyo, Shibuya, …" in Japanese order.
  */
 export async function geocodeAU(address: string, apiKey: string): Promise<GeocodeResult> {
   const text = address.trim();
   const query = AU_POSTCODE.test(text)
     ? `components=${encodeURIComponent(`postal_code:${text}|country:AU`)}`
     : `address=${encodeURIComponent(text)}&region=au`;
+  const lang = '&language=en';
   try {
-    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${query}&key=${apiKey}`);
+    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${query}${lang}&key=${apiKey}`);
     if (!res.ok) return { coord: null, status: "FETCH_FAILED", formattedAddress: null };
     const data = await res.json();
     if (data.status !== "OK" && data.status !== "ZERO_RESULTS") logGoogleError("geocode", data);
     const top = data?.results?.[0];
     const loc = top?.geometry?.location;
     if (data.status === "OK" && typeof loc?.lat === "number" && typeof loc?.lng === "number") {
-      return { coord: { lat: loc.lat, lng: loc.lng }, status: "OK", formattedAddress: top.formatted_address ?? null };
+      return {
+        coord: { lat: loc.lat, lng: loc.lng },
+        status: "OK",
+        formattedAddress: top.formatted_address ?? null,
+        types: Array.isArray(top.types) ? top.types : [],
+      };
     }
     return { coord: null, status: data.status ?? "UNKNOWN", formattedAddress: null };
   } catch {

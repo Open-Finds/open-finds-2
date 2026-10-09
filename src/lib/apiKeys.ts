@@ -148,7 +148,7 @@ export async function resolveGoogleMapsLink(url: string): Promise<ResolvedPlace 
     const types: VenueType[] = ['food', 'bar', 'dessert', 'activity'];
     return {
       name: data.name ?? null,
-      address: data.address ?? null,
+      address: typeof data.address === 'string' ? tidyAddress(data.address) : null,
       lat: data.lat ?? null,
       lon: data.lon ?? null,
       type: types.includes(data.type) ? data.type : null,
@@ -158,36 +158,105 @@ export async function resolveGoogleMapsLink(url: string): Promise<ResolvedPlace 
   }
 }
 
-/** A real address has a street number; "Croydon Park NSW 2133" is only an area. */
-export function hasStreetNumber(address: string): boolean {
-  return /\d/.test(address.replace(/\b\d{4}\b\s*(,?\s*australia)?\s*$/i, ''));
+const AU_ADDRESS = /\b(NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b|\bAustralia\b/i;
+
+/** "28 Princes Hwy, Kogarah NSW 2217" yes; "1-1-3, Chuo City, Tokyo" no. */
+export function isAustralianAddress(address: string): boolean {
+  return AU_ADDRESS.test(address);
+}
+
+/** One comma part with its postcode (2133, 150-0013, 〒150-0013, 90210) taken off. */
+function withoutPostcode(part: string): string {
+  return part.replace(/〒?\s*\d{3}-\d{4}/g, '').replace(/\b\d{4,5}(-\d{4})?\s*$/, '').trim();
 }
 
 /**
- * The street address for a venue known only by name and area, as captions
- * give it ("📍 Pocket Burger, Croydon Park"). The result has to be in the
- * same postcode, or the same suburb, so another branch elsewhere isn't
- * picked; otherwise null and the caller keeps what it had.
+ * A real address has a street number; "Croydon Park NSW 2133" or
+ * "Nakameguro, Meguro City, Tokyo 153-0061" is only an area. Postcodes don't count.
  */
-export async function findStreetAddress(
+export function hasStreetNumber(address: string): boolean {
+  return address.split(',').some((part) => /\d/.test(withoutPostcode(part)));
+}
+
+/** The area part of an address: "1-1-1, Asakusa, Taito City, Tokyo" → "Asakusa, Taito City, Tokyo". */
+export function areaOf(address: string): string {
+  return address.split(',').map((p) => p.trim()).filter((p) => p && !/\d/.test(withoutPostcode(p))).join(', ');
+}
+
+/**
+ * Google writes some Japanese addresses big-to-small with full-width digits,
+ * even in English: "Japan, 〒150-0013 Tokyo, Shibuya, Ebisu, 1-chōme−6−６ Saito
+ * Bldg., １階". This turns them round to "Level 1, 1-chōme-6-6 Saito Bldg.,
+ * Ebisu, Shibuya, Tokyo 150-0013, Japan". Anything else comes back as it was.
+ */
+export function tidyAddress(address: string): string {
+  const ascii = address
+    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/[−－]/g, '-')
+    .replace(/(^|[\s,])(\d+)階/g, '$1Level $2');
+  const m = ascii.match(/^Japan,\s*〒\s*(\d{3}-\d{4})\s*([^,]+),\s*(.+)$/);
+  if (!m) return ascii === address ? address : ascii;
+  const [, postcode, prefecture, rest] = m;
+  const parts = rest.split(',').map((p) => p.trim()).filter(Boolean);
+  return [...parts.reverse(), `${prefecture.trim()} ${postcode}`, 'Japan'].join(', ');
+}
+
+// Matches that are a place, not a venue: the AI's area words can pull the
+// search to the park or neighbourhood a café sits beside.
+const AREA_TYPES = new Set([
+  'park', 'locality', 'sublocality', 'neighborhood', 'political', 'colloquial_area', 'country',
+  'administrative_area_level_1', 'administrative_area_level_2', 'postal_code', 'route', 'natural_feature',
+  'transit_station', 'train_station', 'airport',
+]);
+const GENERIC_WORDS = new Set(['city', 'ward', 'district', 'prefecture', 'street', 'road', 'shop', 'level', 'floor', 'building']);
+
+/**
+ * A venue's real address, looked up on Google by its name and city. The AI
+ * finds venue names well in any language but can't always find addresses
+ * (it invented "1-1-1, Asakusa" for a Tokyo café), so names are checked here.
+ *
+ * Searched with the name and only the city, not the AI's neighbourhood, and a
+ * match has to be a business in the same area, so another branch, or the
+ * park next door, isn't picked. Null when nothing fits; the caller keeps what
+ * it had.
+ */
+export async function findVenueAddress(
   name: string,
-  area: string,
+  aiAddress: string,
 ): Promise<{ address: string; lat: number; lon: number } | null> {
-  const parts = area.split(',').map((p) => p.trim()).filter(Boolean);
-  const suburb = parts[parts.length - 1] ?? '';
+  const australian = isAustralianAddress(aiAddress);
+  const area = areaOf(aiAddress).split(',').map((p) => p.trim()).filter(Boolean);
+  // Australia: the suburb part ("Croydon Park NSW 2133"). Elsewhere: the city
+  // and the level above it ("Shibuya City, Tokyo"), without the postcode,
+  // which the AI gets wrong abroad and which then pulls the search off course.
+  const tail = (australian ? area.slice(-1) : area.slice(-2).map(withoutPostcode).filter(Boolean)).join(', ');
+  // "茶亭 羽當 (Chatei Hatou)": Google knows the name as written.
+  const cleanName = name.replace(/[（(][^)）]*[)）]/g, '').trim() || name;
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/geocode`, {
       method: 'POST',
       headers: await edgeAuthHeaders(),
-      body: JSON.stringify({ address: `${name} ${suburb}`.trim() }),
+      body: JSON.stringify({ address: tail ? `${cleanName}, ${tail}` : cleanName }),
     });
     if (!res.ok) return null;
     const data = await res.json();
-    const found = typeof data?.address === 'string' ? data.address : '';
+    const found = typeof data?.address === 'string' ? tidyAddress(data.address) : '';
     if (data?.lat == null || data?.lon == null || !hasStreetNumber(found)) return null;
-    const postcode = area.match(/\b\d{4}\b/)?.[0];
-    const suburbName = suburb.replace(/\b(NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b|\b\d{4}\b/gi, '').trim().toLowerCase();
-    const sameArea = postcode ? found.includes(postcode) : !!suburbName && found.toLowerCase().includes(suburbName);
+    const types: string[] = Array.isArray(data.types) ? data.types : [];
+    const namedLikeAPlace = /\b(park|garden|gardens|beach)\b/i.test(cleanName);
+    if (types.some((t) => AREA_TYPES.has(t)) && !(namedLikeAPlace && types.includes('park'))) return null;
+
+    const lower = found.toLowerCase();
+    let sameArea: boolean;
+    if (australian) {
+      const suburb = area[area.length - 1] ?? '';
+      const postcode = aiAddress.match(/\b\d{4}\b/)?.[0];
+      const suburbName = suburb.replace(/\b(NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b|\b\d{4}\b/gi, '').trim().toLowerCase();
+      sameArea = postcode ? found.includes(postcode) : !!suburbName && lower.includes(suburbName);
+    } else {
+      const words = tail.toLowerCase().split(/[^a-z\u00c0-\u024f]+/).filter((w) => w.length >= 4 && !GENERIC_WORDS.has(w));
+      sameArea = words.length === 0 || words.some((w) => lower.includes(w));
+    }
     if (!sameArea) return null;
     return { address: found.replace(/,\s*Australia$/i, ''), lat: data.lat, lon: data.lon };
   } catch {
