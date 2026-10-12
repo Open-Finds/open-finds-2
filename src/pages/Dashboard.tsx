@@ -145,8 +145,11 @@ export function DashboardPage({
               ? `${plural(countdown.days, 'day')}, ${plural(countdown.hours, 'hour')}, ${plural(countdown.minutes, 'minute')}`
               : event && Date.now() < event.end.getTime()
                 ? "It's on now!"
-                : 'This night has been and gone'}
+                : 'This event has passed'}
           </p>
+          {countdown.isPast && event && Date.now() >= event.end.getTime() && (
+            <p className="mt-1 text-sm text-ink-secondary">Give a review and gain some credits</p>
+          )}
         </div>
 
         {/* Confirmed count */}
