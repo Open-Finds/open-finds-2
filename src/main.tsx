@@ -3,10 +3,14 @@ import type { ReactNode, ErrorInfo } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { initMonitoring, reportError } from './lib/monitoring';
+import { captureSharedLink, listenForInstallPrompt } from './lib/shareTarget';
 import './index.css';
 
 // Before render, so a crash during the first paint is still captured.
 initMonitoring();
+// A link shared into the app (share menu or iPhone Shortcut), kept for Home.
+captureSharedLink();
+listenForInstallPrompt();
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   constructor(props: { children: ReactNode }) {

@@ -76,8 +76,9 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub', '12000000-0000-0000-0000-00000000000b', true);
   PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
 
-  PERFORM rep('A5 staff see every venue partner',
-    (SELECT count(*) FROM venue_partners) >= 1);
+  -- Since the sales-team migration, staff see only partners they manage.
+  PERFORM rep('A5 staff don''t see others'' partners',
+    (SELECT count(*) FROM venue_partners) = 0);
 
   INSERT INTO venue_partners (business_name, address, type, contact_name, contact_email, monthly_budget_cents, approved, visit_rate_cents)
   VALUES ('Staff Added', '2 Main St', 'bar', 'Kim', 'kim@x.com', 5000, true, 1)
@@ -85,11 +86,12 @@ BEGIN
   SELECT * INTO v FROM venue_partners WHERE id = new_id;
   PERFORM rep('A6 staff add a venue with no account',
     v.owner_id IS NULL AND v.business_name = 'Staff Added');
-  PERFORM rep('A7 staff additions wait for approval',
-    NOT v.approved AND v.visit_rate_cents = 10);
+  -- Since the workers migration, a worker's venue is live at the rate they agreed.
+  PERFORM rep('A7 staff additions go live at their rate',
+    v.approved AND v.visit_rate_cents = 1);
 
   BEGIN
-    UPDATE venue_partners SET approved = true WHERE id = new_id;
+    UPDATE venue_partners SET approved = false WHERE id = new_id;
     ok := false;
   EXCEPTION WHEN others THEN
     ok := position('approved' in SQLERRM) > 0;

@@ -11,28 +11,48 @@ export class UserFacingError extends Error {}
 /** A free account used today's AI allowance. */
 export class DailyLimitError extends UserFacingError {
   constructor() {
-    super('Free includes 3 of these a day. It resets tomorrow.');
+    super('Free includes 3 of these a day. It resets tomorrow. Review a sponsored venue to earn a credit for one more.');
     this.name = 'DailyLimitError';
   }
 }
 
+export type AIPurpose = 'extract' | 'discover';
+
+/**
+ * Once today's free uses are gone, asks whether to spend a credit on one
+ * more. Set by <CreditPrompt />; without it the limit is simply final.
+ */
+let askToSpendCredit: ((purpose: AIPurpose) => Promise<boolean>) | null = null;
+export function setCreditPrompt(ask: ((purpose: AIPurpose) => Promise<boolean>) | null) {
+  askToSpendCredit = ask;
+}
+
 async function callAI(
   messages: ChatMessage[],
-  opts?: { temperature?: number; responseFormat?: 'json_object'; purpose?: 'extract' | 'discover' }
+  opts?: { temperature?: number; responseFormat?: 'json_object'; purpose?: AIPurpose }
 ): Promise<string> {
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-proxy`;
+  const purpose = opts?.purpose ?? 'discover';
   const body: Record<string, unknown> = {
     messages,
     temperature: opts?.temperature ?? 0,
-    purpose: opts?.purpose ?? 'discover',
+    purpose,
   };
   if (opts?.responseFormat) body.response_format = { type: opts.responseFormat };
 
-  const res = await fetch(apiUrl, {
+  const send = async (useCredit: boolean) => fetch(apiUrl, {
     method: 'POST',
     headers: await edgeAuthHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(useCredit ? { ...body, use_credit: true } : body),
   });
+
+  let res = await send(false);
+  if (res.status === 429 && askToSpendCredit) {
+    const info = await res.clone().json().catch(() => null) as { code?: string } | null;
+    if (info?.code === 'daily_limit' && await askToSpendCredit(purpose)) {
+      res = await send(true);
+    }
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -248,7 +268,7 @@ export async function extractVenuesFromLink(
       {
         role: 'system',
         content:
-          "You are a venue research assistant. You will be given metadata extracted from a social media page or video (Instagram, Facebook, TikTok, or a website) including the page title, description, handle, structured data, video caption, and visible text. Your job is to extract venue details from this metadata FIRST. LANGUAGES: the caption, description and on-page text may be in ANY language (Japanese, Korean, Chinese, Thai, Vietnamese, Spanish, ...) and the venues may be in any country. Read them in that language — never skip or drop a venue because its text isn't English. Keep each venue's name as written; when it isn't in English letters, add its English or romanised name in brackets, e.g. '茶亭 羽當 (Chatei Hatou)' or '猿田彦珈琲 恵比寿本店 (Sarutahiko Coffee Ebisu)'. When searching the web for a venue's address, search its original-language name together with its area and city. If the metadata contains enough information to identify venue names, addresses, and types, use it directly. If any field is missing or unclear, use web search to find the missing information — search for the venue name or handle plus 'address' or 'location'. CRITICAL for reels/videos: There are TWO possibilities — (1) the reel/video is posted BY the venue itself (the creator IS the venue — many venues post their own reels), or (2) the reel/video features or reviews one or more venues. FIRST check if the creator name sounds like a business name and search for it as a venue. THEN look for other venue names mentioned in the caption, description, hashtags, or @ mentions. IMPORTANT: If the caption or description already contains venue names, extract them directly from the text — do NOT do unnecessary web searches. Only use web search to find the full street address for venues you've already identified from the caption, or to find venues when the caption is vague or missing. The content may mention MULTIPLE distinct venues (e.g. a reel listing 'top 5 spots'). You must identify ALL distinct venues mentioned and return them as a list, ordered by the sequence they appear in the content (first mentioned = order 1, second = order 2, etc.). Do NOT duplicate the same venue. If only one venue is mentioned, return a list with one item. For each venue extract: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'); for venues outside Australia write it in English in that country's usual order and include the city and country (e.g. '1-15-19 Shibuya, Shibuya City, Tokyo 150-0002, Japan'). NEVER invent or guess an address, and never give two different venues the same address unless they really share a building — each venue's address must be its own. If you can't find a venue's street address, give its neighbourhood, city and country instead (e.g. 'Nakameguro, Meguro City, Tokyo, Japan'), and (3) the venue type which must be exactly one of: 'food', 'activity', 'dessert', or 'bar'. A restaurant or cafe is 'food'. A bar, pub, cocktail bar, wine bar, brewery, or nightclub is 'bar'. An escape room, bowling, arcade, mini-golf, or experience is 'activity'. A gelato shop, cake shop, ice creamery, or dessert bar is 'dessert'. If you can find the venue but only a suburb (no street address), return the suburb as the address. If the metadata is sparse or the page could not be fully fetched, use web search — search for the creator name plus caption text, or search for the full URL to find articles or blog posts discussing the content and the venues it features. For each venue also extract 0-5 short lowercase tags describing the cuisine, style, or vibe (e.g. \"italian\", \"cocktails\", \"rooftop\", \"brunch\", \"korean bbq\", \"craft beer\", \"family-friendly\", \"date-night\"). COORDINATES: If the structured data (JSON-LD), page text, or web search results contain exact latitude and longitude for a venue (e.g. from schema.org GeoCoordinates, a Google Maps link, or a business listing), include them as numeric \"lat\" and \"lon\" fields. Only include coordinates you are confident are for that specific venue — do NOT guess or estimate. If you cannot find exact coordinates, omit lat and lon (or set them to null). Return JSON: {\"venues\": [{\"name\": \"...\", \"address\": \"...\", \"type\": \"food|activity|dessert|bar\", \"order\": 1, \"tags\": [\"...\"], \"lat\": number|null, \"lon\": number|null}]}. If you cannot find any venue, return {\"venues\": []}.",
+          "You are a venue research assistant. You will be given metadata extracted from a social media page or video (Instagram, Facebook, TikTok, or a website) including the page title, description, handle, structured data, video caption, and visible text. Your job is to extract venue details from this metadata FIRST. LANGUAGES — do this first: detect the language of the caption, description and on-page text. It may be ANY language (Japanese, Korean, Chinese, Thai, Vietnamese, Spanish, ...) and the venues may be in any country. If it isn't English, translate the venue names and any area, street or city details into English before you search. Never skip or drop a venue because its text isn't English. Keep each venue's name as written; when it isn't in English letters, add its English or romanised name in brackets, e.g. '茶亭 羽當 (Chatei Hatou)' or '猿田彦珈琲 恵比寿本店 (Sarutahiko Coffee Ebisu)'. When searching the web for a venue's address, search its English or romanised name AND its original-language name, each together with its area and city, and use the result that is clearly that venue. If the metadata contains enough information to identify venue names, addresses, and types, use it directly. If any field is missing or unclear, use web search to find the missing information — search for the venue name or handle plus 'address' or 'location'. CRITICAL for reels/videos: There are TWO possibilities — (1) the reel/video is posted BY the venue itself (the creator IS the venue — many venues post their own reels), or (2) the reel/video features or reviews one or more venues. FIRST check if the creator name sounds like a business name and search for it as a venue. THEN look for other venue names mentioned in the caption, description, hashtags, or @ mentions. IMPORTANT: If the caption or description already contains venue names, extract them directly from the text — do NOT do unnecessary web searches. Only use web search to find the full street address for venues you've already identified from the caption, or to find venues when the caption is vague or missing. The content may mention MULTIPLE distinct venues (e.g. a reel listing 'top 5 spots'). You must identify ALL distinct venues mentioned and return them as a list, ordered by the sequence they appear in the content (first mentioned = order 1, second = order 2, etc.). Do NOT duplicate the same venue. If only one venue is mentioned, return a list with one item. For each venue extract: (1) the venue name, (2) the FULL street address including street number, street name, suburb, state and postcode (e.g. '123 George St, Sydney NSW 2000'); for venues outside Australia write it in English in that country's usual order and include the city and country (e.g. '1-15-19 Shibuya, Shibuya City, Tokyo 150-0002, Japan'). NEVER invent or guess an address, and never give two different venues the same address unless they really share a building — each venue's address must be its own. If you can't find a venue's street address, give its neighbourhood, city and country instead (e.g. 'Nakameguro, Meguro City, Tokyo, Japan'), and (3) the venue type which must be exactly one of: 'food', 'activity', 'dessert', or 'bar'. A restaurant or cafe is 'food'. A bar, pub, cocktail bar, wine bar, brewery, or nightclub is 'bar'. An escape room, bowling, arcade, mini-golf, or experience is 'activity'. A gelato shop, cake shop, ice creamery, or dessert bar is 'dessert'. If you can find the venue but only a suburb (no street address), return the suburb as the address. If the metadata is sparse or the page could not be fully fetched, use web search — search for the creator name plus caption text, or search for the full URL to find articles or blog posts discussing the content and the venues it features. For each venue also extract 0-5 short lowercase tags describing the cuisine, style, or vibe (e.g. \"italian\", \"cocktails\", \"rooftop\", \"brunch\", \"korean bbq\", \"craft beer\", \"family-friendly\", \"date-night\"). COORDINATES: If the structured data (JSON-LD), page text, or web search results contain exact latitude and longitude for a venue (e.g. from schema.org GeoCoordinates, a Google Maps link, or a business listing), include them as numeric \"lat\" and \"lon\" fields. Only include coordinates you are confident are for that specific venue — do NOT guess or estimate. If you cannot find exact coordinates, omit lat and lon (or set them to null). Return JSON: {\"venues\": [{\"name\": \"...\", \"address\": \"...\", \"type\": \"food|activity|dessert|bar\", \"order\": 1, \"tags\": [\"...\"], \"lat\": number|null, \"lon\": number|null}]}. If you cannot find any venue, return {\"venues\": []}.",
       },
       { role: 'user', content: context },
     ],

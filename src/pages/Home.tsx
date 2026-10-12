@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   ChevronLeft,
@@ -47,7 +47,9 @@ import {
   updateSavedVenueCoords,
   sortStops,
   hasPremium,
+  recordSponsoredEvents,
   type SavedVenue,
+  type SponsoredVenue,
   type VenueType,
   type Rsvp,
   type Plan,
@@ -66,6 +68,7 @@ import { loadPlanDraft, savePlanDraft, clearPlanDraft } from '../lib/draft';
 import { findSimilarVenues } from '../lib/venueMatch';
 import { DuplicateVenueDialog, type PendingDuplicate } from '../components/DuplicateVenueDialog';
 import { TRIPS_ENABLED } from '../lib/features';
+import { takeSharedLink } from '../lib/shareTarget';
 
 type Page =
   | 'hero'
@@ -156,6 +159,9 @@ function Logo({ size = 96 }: { size?: number }) {
     />
   );
 }
+
+// Opened by few, so it downloads only when Sponsored Venues is.
+const SponsoredVenuePicker = lazy(() => import('../components/SponsoredVenues').then((m) => ({ default: m.SponsoredVenuePicker })));
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
@@ -277,6 +283,7 @@ export function HomePage({
   const [savedVenueListLoading, setSavedVenueListLoading] = useState(false);
   const [savedVenueSelectedIds, setSavedVenueSelectedIds] = useState<Set<string>>(new Set());
   const [savedVenueSearch, setSavedVenueSearch] = useState('');
+  const [sponsoredPicked, setSponsoredPicked] = useState<SponsoredVenue[]>([]);
   const { displayName, dietaryPreferences, subscriptionTier, premiumUnlocked } = useAuth();
   const [adHocDietaryFilters, setAdHocDietaryFilters] = useState<Set<string>>(new Set());
 
@@ -400,8 +407,9 @@ export function HomePage({
     setQaError(null);
   };
 
-  const qaHandleExtract = async () => {
-    const link = qaLinkInput.trim();
+  // `shared`: a link that came in through the share menu, before it's in state.
+  const qaHandleExtract = async (shared?: string) => {
+    const link = (shared ?? qaLinkInput).trim();
     if (!link) {
       setQaError('Paste a link first.');
       return;
@@ -432,6 +440,19 @@ export function HomePage({
       setQaExtracting(false);
     }
   };
+
+  // Shared into the app from Instagram, TikTok or Maps: straight to the start
+  // screen with the link in the box, and find the venue without a tap.
+  useEffect(() => {
+    if (editPlanId) return;
+    const shared = takeSharedLink();
+    if (!shared) return;
+    setPage('hero');
+    setQaLinkInput(shared);
+    void qaHandleExtract(shared);
+    window.setTimeout(() => document.querySelector('[data-tour="save-venue"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const qaToggleItem = (idx: number) => {
     setQaSelectedItems((prev) => {
@@ -648,10 +669,11 @@ export function HomePage({
     }
   }, [page, loadSavedVenuesForSelect]);
 
+  /** Makes the plan and opens its itinerary; returns its id, or null if it didn't work. */
   const buildAndCreatePlan = async (
     venues: { name: string; address: string; type: VenueType; vibe_link: string | null }[]
-  ) => {
-    if (creating || venues.length === 0) return;
+  ): Promise<string | null> => {
+    if (creating || venues.length === 0) return null;
     setCreating(true);
     setCreateError(null);
     try {
@@ -683,8 +705,10 @@ export function HomePage({
       setStopTimes(times);
       refreshRsvps(newPlan.id);
       setPage('itinerary');
+      return newPlan.id;
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Something went wrong creating your plan. Check your connection and try again.');
+      return null;
     } finally {
       setCreating(false);
     }
@@ -959,7 +983,7 @@ export function HomePage({
               />
             </div>
             <button
-              onClick={qaHandleExtract}
+              onClick={() => void qaHandleExtract()}
               disabled={qaExtracting}
               className="mt-2 flex w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/40 py-2.5 text-sm font-bold text-gold transition-all active:scale-[0.98] disabled:opacity-50"
             >
@@ -1402,21 +1426,40 @@ export function HomePage({
 
   /* ── PAGE: SPONSORED (4c) ── */
   if (page === 'sponsored') {
+    const picked = new Set(sponsoredPicked.map((v) => v.id));
+    const toggleSponsored = (v: SponsoredVenue) => {
+      setSponsoredPicked((prev) =>
+        prev.some((p) => p.id === v.id) ? prev.filter((p) => p.id !== v.id) : prev.length < 3 ? [...prev, v] : prev);
+    };
+    const handleProceed = async () => {
+      if (sponsoredPicked.length === 0) return;
+      const vibes = new Set(selectedVibes);
+      for (const v of sponsoredPicked) vibes.add(v.type as Vibe);
+      setSelectedVibes(Array.from(vibes).slice(0, 3) as Vibe[]);
+      const planId = await buildAndCreatePlan(sponsoredPicked.map((v) => ({ name: v.business_name, address: v.address, type: v.type, vibe_link: v.instagram_link })));
+      // An itinerary appearance, for the venues' numbers.
+      if (planId) void recordSponsoredEvents(sponsoredPicked.map((v) => v.id), 'saved', planId);
+    };
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-24">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-44">
         <BackButton onClick={() => setPage('planMyNight')} />
         <div className="flex w-full flex-1 flex-col justify-center">
-          <h2 className="mb-2 text-3xl font-bold text-gold">Sponsored Venues</h2>
-          <div className="mt-6 rounded-card border border-gold/20 bg-black/40 p-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gold/30 bg-gold/10">
-              <Building2 size={26} className="text-gold" />
-            </div>
-            <p className="text-sm font-medium text-white">Coming Soon</p>
-            <p className="mt-2 text-xs text-ink-secondary">
-              Sponsored venues from local businesses will appear here. Stay tuned!
-            </p>
-          </div>
+          <h2 className="mb-2 flex items-center gap-2 text-3xl font-bold text-gold"><Building2 size={26} /> Sponsored Venues</h2>
+          <p className="mb-4 text-sm text-ink-secondary">Local businesses on The Unsaved. Pick up to 3 for your night, or tap one for its reviews. Reviewing a venue earns you a credit.</p>
+          <Suspense fallback={<div className="flex justify-center py-10"><Loader2 size={22} className="animate-spin text-gold" /></div>}>
+            <SponsoredVenuePicker selected={picked} onToggle={toggleSponsored} origin={originCoord} />
+          </Suspense>
         </div>
+        {createError && (
+          <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            {createError}
+          </p>
+        )}
+        <NextButton
+          onClick={handleProceed}
+          disabled={sponsoredPicked.length === 0 || creating}
+          label={creating ? 'Saving...' : 'Curate a Date'}
+        />
       </div>
     );
   }

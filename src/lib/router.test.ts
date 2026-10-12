@@ -59,6 +59,9 @@ describe('parseHash', () => {
     expect(routeFor('#/venues')).toEqual({ name: 'venues' });
     // Deep links into a shared collection carry the id as a query param.
     expect(routeFor('#/venues?collection=abc')).toEqual({ name: 'venues' });
+    expect(routeFor('#/my-venues')).toEqual({ name: 'my-venues' });
+    expect(routeFor('#/admin')).toEqual({ name: 'admin' });
+    expect(routeFor('#/admin/approvals')).toEqual({ name: 'admin', tab: 'approvals' });
     expect(routeFor('#/create')).toEqual({ name: 'create' });
     expect(routeFor('#/create/build')).toEqual({ name: 'build' });
   });

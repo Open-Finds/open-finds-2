@@ -6,6 +6,7 @@ export type Route =
   | { name: 'build' }
   | { name: 'saved' }
   | { name: 'venues' }
+  | { name: 'my-venues' }
   | { name: 'plan'; id: string }
   | { name: 'share'; id: string }
   | { name: 'rsvp'; id: string }
@@ -19,7 +20,7 @@ export type Route =
   | { name: 'venue-portal' }
   | { name: 'venue-dashboard' }
   | { name: 'subscription' }
-  | { name: 'admin' };
+  | { name: 'admin'; tab?: string };
 
 function parseHash(): Route {
   const hash = window.location.hash.replace(/^#/, '') || '/';
@@ -34,6 +35,7 @@ function parseHash(): Route {
   }
   if (parts[0] === 'saved') return { name: 'saved' };
   if (parts[0] === 'venues') return { name: 'venues' };
+  if (parts[0] === 'my-venues') return { name: 'my-venues' };
   if (parts[0] === 'plan' && parts[1]) {
     const id = parts[1];
     if (parts[2] === 'share') return { name: 'share', id };
@@ -54,7 +56,7 @@ function parseHash(): Route {
   if (parts[0] === 'venue-portal') return { name: 'venue-portal' };
   if (parts[0] === 'venue-dashboard') return { name: 'venue-dashboard' };
   if (parts[0] === 'subscription') return { name: 'subscription' };
-  if (parts[0] === 'admin') return { name: 'admin' };
+  if (parts[0] === 'admin') return parts[1] ? { name: 'admin', tab: parts[1] } : { name: 'admin' };
   return { name: 'home' };
 }
 

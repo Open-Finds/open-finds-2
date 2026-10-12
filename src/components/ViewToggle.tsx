@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Home, CalendarDays, Bookmark, Settings, Users } from 'lucide-react';
+import { Home, CalendarDays, Bookmark, Settings, Users, Store } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -11,13 +11,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-type View = 'home' | 'events' | 'venues' | 'friends' | 'settings';
+type View = 'home' | 'events' | 'venues' | 'friends' | 'myvenues' | 'settings';
 
-const TABS: { view: View; label: string; icon: typeof Home }[] = [
+const ALL_TABS: { view: View; label: string; icon: typeof Home }[] = [
   { view: 'home', label: 'Home', icon: Home },
   { view: 'events', label: 'Events', icon: CalendarDays },
   { view: 'venues', label: 'Venues', icon: Bookmark },
   { view: 'friends', label: 'Friends', icon: Users },
+  // Workers, managers and the super admin: the venue partners they signed up.
+  { view: 'myvenues', label: 'My Venues', icon: Store },
   { view: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -25,12 +27,15 @@ export function ViewToggle({
   view,
   onChange,
   isEditingItinerary = false,
+  showMyVenues = false,
 }: {
   view: View;
   onChange: (view: View) => void;
   isEditingItinerary?: boolean;
+  showMyVenues?: boolean;
 }) {
   const [pendingView, setPendingView] = useState<View | null>(null);
+  const TABS = showMyVenues ? ALL_TABS : ALL_TABS.filter((t) => t.view !== 'myvenues');
 
   const handleClick = (target: View) => {
     if (isEditingItinerary) {
@@ -76,7 +81,7 @@ export function ViewToggle({
                   strokeWidth={active ? 2.5 : 2}
                   className={active ? 'drop-shadow-[0_0_6px_hsl(var(--primary)/0.5)]' : ''}
                 />
-                <span className="text-[11px] font-medium">{label}</span>
+                <span className="whitespace-nowrap text-[11px] font-medium">{label}</span>
                 <span
                   className={cn(
                     'h-0.5 w-6 rounded-full transition-all',

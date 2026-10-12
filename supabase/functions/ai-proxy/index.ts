@@ -59,6 +59,9 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Method not allowed" }, 405);
   }
 
+  // Gives back a credit spent on a request that then failed.
+  let refundCredit = async () => {};
+
   try {
     // 1. Prove a real signed-in user, not just possession of the public anon key.
     const auth = await requireUser(req);
@@ -72,13 +75,15 @@ Deno.serve(async (req: Request) => {
     if (!body || typeof body !== "object") {
       return json(req, { error: "A JSON body is required" }, 400);
     }
-    const { messages, model, temperature, response_format, purpose } = body as Record<string, unknown>;
+    const { messages, model, temperature, response_format, purpose, use_credit } = body as Record<string, unknown>;
 
     const validated = validateMessages(messages);
     if (!validated.ok) return json(req, { error: validated.error }, 400);
 
-    // Free accounts: 3 link extractions and 3 "Something New" discoveries a day.
-    // Paid accounts keep a high hourly ceiling so a loop cannot run the bill up.
+    // Free accounts: 3 link extractions and 3 "Something New" discoveries a day,
+    // then one more for each credit they choose to spend (earned by reviewing
+    // sponsored venues). Paid accounts keep a high hourly ceiling so a loop
+    // cannot run the bill up.
     const purposeName = purpose === "extract" || purpose === "discover" ? purpose : null;
     let tier = "free";
     if (purposeName) {
@@ -100,13 +105,30 @@ Deno.serve(async (req: Request) => {
       dailyFree ? 3 : RATE_LIMIT,
       dailyFree ? 60 * 60 * 24 : RATE_WINDOW_SECONDS,
     );
-    if (!limit.allowed) {
+    let spentCredit = false;
+    if (!limit.allowed && dailyFree && use_credit === true) {
+      const { data: left, error: spendError } = await serviceClient().rpc("spend_credit", {
+        p_user: auth.user.id,
+        p_reason: purposeName,
+      });
+      if (spendError) console.warn("[ai-proxy] spend_credit failed", spendError.message);
+      spentCredit = !spendError && typeof left === "number";
+    }
+    if (spentCredit) {
+      refundCredit = async () => {
+        refundCredit = async () => {};
+        const { error: refundError } = await serviceClient().rpc("refund_credit", { p_user: auth.user.id });
+        if (refundError) console.error("[ai-proxy] refund_credit failed", refundError.message);
+      };
+    }
+    if (!limit.allowed && !spentCredit) {
       return json(
         req,
         {
           error: dailyFree
             ? "Free includes 3 of these a day. It resets tomorrow."
             : "Rate limit reached. Try again shortly.",
+          code: dailyFree ? "daily_limit" : "rate_limit",
         },
         429,
         { "Retry-After": String(limit.retryAfter) },
@@ -116,6 +138,7 @@ Deno.serve(async (req: Request) => {
     // 3. Only models we have chosen to pay for.
     const requestedModel = typeof model === "string" && model.trim() ? model.trim() : DEFAULT_MODEL;
     if (!ALLOWED_MODELS.has(requestedModel)) {
+      await refundCredit();
       return json(req, { error: `Model '${requestedModel}' is not available` }, 400);
     }
 
@@ -150,6 +173,7 @@ Deno.serve(async (req: Request) => {
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         console.error("[ai-proxy] upstream error", res.status, text.slice(0, 300));
+        await refundCredit();
         // Upstream detail can echo account information, so it is logged but not returned.
         return json(req, { error: `AI request failed (${res.status})` }, res.status);
       }
@@ -163,6 +187,7 @@ Deno.serve(async (req: Request) => {
     }
   } catch (err) {
     console.error("[ai-proxy] internal error", String(err));
+    await refundCredit();
     return json(req, { error: "Internal error" }, 500);
   }
 });

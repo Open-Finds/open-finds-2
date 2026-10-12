@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck } from 'lucide-react';
-import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, SUBSCRIPTION_PLANS } from '../lib/supabase';
+import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins } from 'lucide-react';
+import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isManagerRole, SUBSCRIPTION_PLANS } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../lib/router';
 import { ScrollHint } from '../components/ScrollHint';
+import { ShareIntoApp } from '../components/ShareIntoApp';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
@@ -24,6 +25,12 @@ const DIETARY_OPTIONS = [
 export function SettingsPage({ onBack }: { onBack: () => void }) {
   const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, premiumUnlocked, isVenuePartner, role } = useAuth();
   const currentEmail = session?.user.email ?? '';
+
+  // Null until loaded, or if credits aren't available yet: the card stays hidden.
+  const [credits, setCredits] = useState<number | null>(null);
+  useEffect(() => {
+    fetchMyCredits().then(setCredits, () => setCredits(null));
+  }, []);
 
   const [dietarySelections, setDietarySelections] = useState<Set<string>>(new Set(dietaryPreferences));
   const [dietarySaving, setDietarySaving] = useState(false);
@@ -335,6 +342,22 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           </button>
         </section>
 
+        {/* Credits: earned by reviewing sponsored venues */}
+        {credits != null && (
+          <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+              <Coins size={13} /> Credits
+            </h2>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm text-ink-secondary">Your credits</span>
+              <span className="text-2xl font-bold text-gold" aria-label={`${credits} credits`}>{credits}</span>
+            </div>
+            <p className="text-sm text-ink-secondary">
+              Review a sponsored venue to earn 1 credit. When you've used today's free AI extractions or Something New searches, spend a credit for one more. Credits never expire.
+            </p>
+          </section>
+        )}
+
         {/* Subscription */}
         <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
           <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
@@ -374,14 +397,14 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           </button>
         </section>
 
-        {/* Admin: staff and admins only */}
-        {role !== 'user' && (
+        {/* Admin dashboard: managers and the super admin (workers have My Venues) */}
+        {isManagerRole(role) && (
           <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
             <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
               <ShieldCheck size={13} /> Admin
             </h2>
             <p className="mb-4 text-sm text-ink-secondary">
-              {role === 'admin' ? 'Venue partners, their numbers and billing, and your team.' : 'Venue partners, their numbers and billing.'}
+              {role === 'admin' ? 'Venue partners, approvals, revenue, and your team and their commission.' : 'Venue partners, approvals, revenue and the team.'}
             </p>
             <button
               onClick={() => navigate('/admin')}
@@ -392,6 +415,8 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             </button>
           </section>
         )}
+
+        <ShareIntoApp />
 
         {/* Replay onboarding */}
         <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">

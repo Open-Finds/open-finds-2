@@ -15,7 +15,8 @@ import { FriendsPage } from './pages/Friends';
 import { NotificationsPage } from './pages/Notifications';
 import { ViewToggle } from './components/ViewToggle';
 import { GuidedTour } from './components/GuidedTour';
-import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences } from './lib/supabase';
+import { CreditPrompt } from './components/CreditPrompt';
+import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isTeam } from './lib/supabase';
 import { Bell } from 'lucide-react';
 
 /*
@@ -32,9 +33,10 @@ const TripRsvpPage = lazy(() => import('./pages/TripRsvp').then((m) => ({ defaul
 const TripDayPage = lazy(() => import('./pages/TripDay').then((m) => ({ default: m.TripDayPage })));
 const VenuePortalPage = lazy(() => import('./pages/VenuePortal').then((m) => ({ default: m.VenuePortalPage })));
 const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })));
+const MyVenuesPage = lazy(() => import('./pages/MyVenues').then((m) => ({ default: m.MyVenuesPage })));
 const SubscriptionPage = lazy(() => import('./pages/Subscription').then((m) => ({ default: m.SubscriptionPage })));
 
-type View = 'home' | 'events' | 'venues' | 'friends' | 'settings';
+type View = 'home' | 'events' | 'venues' | 'friends' | 'myvenues' | 'settings';
 
 /**
  * Authenticated chrome. The content column clears the mobile tab bar via
@@ -48,6 +50,7 @@ function Shell({
   unreadCount,
   onOpenNotifications,
   isEditingItinerary = false,
+  showMyVenues = false,
 }: {
   children: React.ReactNode;
   view: View;
@@ -55,6 +58,7 @@ function Shell({
   unreadCount: number;
   onOpenNotifications: () => void;
   isEditingItinerary?: boolean;
+  showMyVenues?: boolean;
 }) {
   return (
     <>
@@ -76,7 +80,7 @@ function Shell({
         )}
       </button>}
 
-      <ViewToggle view={view} onChange={onChangeView} isEditingItinerary={isEditingItinerary} />
+      <ViewToggle view={view} onChange={onChangeView} isEditingItinerary={isEditingItinerary} showMyVenues={showMyVenues} />
     </>
   );
 }
@@ -91,7 +95,7 @@ function AppInner() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [homeResetKey, setHomeResetKey] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile } = useAuth();
+  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile, role } = useAuth();
 
   // The walkthrough runs over the app until it's finished or skipped, and
   // again after Settings → Replay Walkthrough. It points at Home's buttons,
@@ -120,6 +124,10 @@ function AppInner() {
       setDashboardId(null);
       setEditPlanId(null);
       setView('venues');
+    } else if (route.name === 'my-venues') {
+      setDashboardId(null);
+      setEditPlanId(null);
+      setView('myvenues');
     }
   }, [route]);
 
@@ -176,12 +184,6 @@ function AppInner() {
     if (!session) return <LoginPage />;
     return <SubscriptionPage onBack={() => navigate('/')} />;
   }
-  // Staff and admins only; the page and the server both check the role.
-  if (route.name === 'admin') {
-    if (!session) return <LoginPage />;
-    return <AdminPage onBack={() => navigate('/')} />;
-  }
-
   // Blank screen while session loads — avoids flash of login page for returning users
   if (authLoading) {
     return <div className="min-h-screen bg-black" />;
@@ -233,8 +235,8 @@ function AppInner() {
       clearPlanDraft();
       setHomeResetKey((k) => k + 1);
       navigate('/');
-    } else if (planPage) {
-      // Leaving an invitation for another tab.
+    } else if (planPage || route.name === 'admin') {
+      // Leaving an invitation or the admin dashboard for another tab.
       navigate('/');
     }
   };
@@ -262,6 +264,7 @@ function AppInner() {
     onChangeView: switchView,
     unreadCount,
     onOpenNotifications: () => setShowNotifications(true),
+    showMyVenues: isTeam(role),
   };
 
   if (editPlanId) {
@@ -296,6 +299,16 @@ function AppInner() {
     return <Shell {...shellProps}>{planPage}</Shell>;
   }
 
+  // The admin dashboard (managers and the super admin; the page and the
+  // server both check the role), inside the app with the menu.
+  if (route.name === 'admin') {
+    return (
+      <Shell {...shellProps}>
+        <AdminPage tab={route.tab} onBack={() => navigate('/')} />
+      </Shell>
+    );
+  }
+
   if (dashboardId) {
     return (
       <Shell {...shellProps}>
@@ -314,6 +327,8 @@ function AppInner() {
           <EventsPage onOpenPlan={openDashboard} />
         ) : view === 'friends' ? (
           <FriendsPage />
+        ) : view === 'myvenues' ? (
+          <MyVenuesPage />
         ) : view === 'settings' ? (
           <SettingsPage onBack={() => switchView('home')} />
         ) : (
@@ -332,6 +347,8 @@ function App() {
         <Suspense fallback={<div className="min-h-screen bg-black" />}>
           <AppInner />
         </Suspense>
+        {/* Offers a credit for one more AI use once today's free ones are gone. */}
+        <CreditPrompt />
       </AuthProvider>
     </div>
   );

@@ -217,6 +217,31 @@ async function getAuthUserId(): Promise<string | null> {
 }
 
 /**
+ * Filter for the caller's own plans and trips: everything on their account,
+ * plus rows this browser made before signing in that aren't claimed yet.
+ *
+ * These queries used to match this browser's device id alone, so a plan made
+ * on a phone never showed on the same account's computer.
+ */
+async function mineFilter(): Promise<string> {
+  const device = `and(owner_id.is.null,user_id.eq.${getUserId()})`;
+  const uid = await getAuthUserId();
+  return uid ? `owner_id.eq.${uid},${device}` : device;
+}
+
+/** Throws unless the stop is on one of the caller's own plans. */
+async function assertOwnStop(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('stops')
+    .select('id, plans!inner(id)')
+    .eq('id', id)
+    .or(await mineFilter(), { referencedTable: 'plans' })
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('That stop is not on one of your plans.');
+}
+
+/**
  * Adopts this device's plans and trips into the signed-in account.
  *
  * Nothing in the database links a localStorage device id to an account — the
@@ -254,12 +279,25 @@ export type Profile = {
   subscription_status: string;
   subscription_renews_at: string | null;
   is_venue_partner: boolean;
-  /** Access level: everyone is a user; staff manage venue partners; admins also run the team. */
+  /** Access level: everyone is a user; workers (staff) submit venue partners; managers run them; super admins also run the team. */
   role: AppRole;
   created_at: string;
 };
 
-export type AppRole = 'user' | 'staff' | 'admin';
+/** 'staff' is shown as Worker and 'admin' as Super admin. */
+export type AppRole = 'user' | 'staff' | 'manager' | 'admin';
+
+export const ROLE_LABELS: Record<AppRole, string> = {
+  user: 'User',
+  staff: 'Worker',
+  manager: 'Manager',
+  admin: 'Super admin',
+};
+
+/** On the team: workers, managers and super admins. */
+export const isTeam = (role: AppRole) => role !== 'user';
+/** Managers and super admins: the admin dashboard. */
+export const isManagerRole = (role: AppRole) => role === 'manager' || role === 'admin';
 
 export type Plan = {
   id: string;
@@ -539,11 +577,10 @@ export async function createStops(
 }
 
 export async function fetchAllPlans() {
-  const userId = getUserId();
   const { data, error } = await supabase
     .from('plans')
     .select('*')
-    .eq('user_id', userId)
+    .or(await mineFilter())
     .eq('canceled', false)
     .order('date', { ascending: true });
   if (error) throw error;
@@ -602,11 +639,10 @@ export async function fetchRecentPlanHistory(limit = 12): Promise<PlanHistoryEnt
 }
 
 export async function fetchCanceledPlans(): Promise<Plan[]> {
-  const userId = getUserId();
   const { data, error } = await supabase
     .from('plans')
     .select('*')
-    .eq('user_id', userId)
+    .or(await mineFilter())
     .eq('canceled', true)
     .order('date', { ascending: false });
   if (error) throw error;
@@ -614,22 +650,20 @@ export async function fetchCanceledPlans(): Promise<Plan[]> {
 }
 
 export async function markPlanCanceled(id: string) {
-  const userId = getUserId();
   const { error } = await supabase
     .from('plans')
     .update({ canceled: true })
     .eq('id', id)
-    .eq('user_id', userId);
+    .or(await mineFilter());
   if (error) throw error;
 }
 
 export async function deletePlan(id: string) {
-  const userId = getUserId();
   const { error } = await supabase
     .from('plans')
     .delete()
     .eq('id', id)
-    .eq('user_id', userId);
+    .or(await mineFilter());
   if (error) throw error;
 }
 
@@ -637,12 +671,11 @@ export async function updatePlan(
   id: string,
   updates: Partial<Pick<Plan, 'title' | 'date' | 'location' | 'type' | 'accommodation_name' | 'accommodation_address'>>
 ) {
-  const userId = getUserId();
   const { data, error } = await supabase
     .from('plans')
     .update(updates)
     .eq('id', id)
-    .eq('user_id', userId)
+    .or(await mineFilter())
     .select()
     .single();
   if (error) throw error;
@@ -653,12 +686,18 @@ export async function replaceStops(
   planId: string,
   stops: Omit<Stop, 'id' | 'plan_id' | 'user_id'>[]
 ) {
-  const userId = getUserId();
+  const { data: plan, error: planErr } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('id', planId)
+    .or(await mineFilter())
+    .maybeSingle();
+  if (planErr) throw planErr;
+  if (!plan) throw new Error('That plan is not one of yours.');
   const { error: delErr } = await supabase
     .from('stops')
     .delete()
-    .eq('plan_id', planId)
-    .eq('user_id', userId);
+    .eq('plan_id', planId);
   if (delErr) throw delErr;
   return createStops(planId, stops);
 }
@@ -667,12 +706,11 @@ export async function updateStop(
   id: string,
   updates: Partial<Pick<Stop, 'name' | 'address' | 'time' | 'sort_order'>>
 ) {
-  const userId = getUserId();
+  await assertOwnStop(id);
   const { data, error } = await supabase
     .from('stops')
     .update(updates)
     .eq('id', id)
-    .eq('user_id', userId)
     .select()
     .single();
   if (error) throw error;
@@ -694,12 +732,11 @@ export async function insertStop(
 }
 
 export async function deleteStop(id: string): Promise<void> {
-  const userId = getUserId();
+  await assertOwnStop(id);
   const { error } = await supabase
     .from('stops')
     .delete()
-    .eq('id', id)
-    .eq('user_id', userId);
+    .eq('id', id);
   if (error) throw error;
 }
 
@@ -802,11 +839,10 @@ export async function fetchTrip(id: string): Promise<Trip | null> {
 }
 
 export async function fetchAllTrips(): Promise<Trip[]> {
-  const userId = getUserId();
   const { data, error } = await supabase
     .from('trips')
     .select('*')
-    .eq('user_id', userId)
+    .or(await mineFilter())
     .eq('status', 'active')
     .order('start_date', { ascending: true });
   if (error) throw error;
@@ -838,12 +874,11 @@ export async function updateTrip(
   id: string,
   updates: Partial<Pick<Trip, 'name' | 'destination' | 'start_date' | 'num_days' | 'status'>>
 ) {
-  const userId = getUserId();
   const { data, error } = await supabase
     .from('trips')
     .update(updates)
     .eq('id', id)
-    .eq('user_id', userId)
+    .or(await mineFilter())
     .select()
     .single();
   if (error) throw error;
@@ -851,22 +886,20 @@ export async function updateTrip(
 }
 
 export async function deleteTrip(id: string): Promise<void> {
-  const userId = getUserId();
   const { error } = await supabase
     .from('trips')
     .delete()
     .eq('id', id)
-    .eq('user_id', userId);
+    .or(await mineFilter());
   if (error) throw error;
 }
 
 export async function cancelTrip(id: string): Promise<void> {
-  const userId = getUserId();
   const { error } = await supabase
     .from('trips')
     .update({ status: 'canceled' })
     .eq('id', id)
-    .eq('user_id', userId);
+    .or(await mineFilter());
   if (error) throw error;
 }
 
@@ -1844,18 +1877,26 @@ export type AdminPartner = {
   type: VenueType;
   contact_name: string;
   contact_email: string;
+  contact_phone: string | null;
   instagram_link: string | null;
   website: string | null;
   monthly_budget_cents: number | null;
   visit_rate_cents: number;
   active: boolean;
   approved: boolean;
+  /** Why a manager took it down; null unless rejected. */
+  rejection_reason: string | null;
   /** The business has its own account and portal. */
   has_account: boolean;
   created_at: string;
+  /** The team member who brought this partner in and looks after it. */
+  account_manager: string | null;
+  account_manager_name: string | null;
   impressions: number;
   saves: number;
   visits: number;
+  review_count: number;
+  average_rating: number;
   month_visits: number;
   /** Visits this month x rate, never more than the monthly budget. */
   month_billed_cents: number;
@@ -1868,13 +1909,77 @@ export type AdminPartnerInput = {
   type: VenueType;
   contact_name: string;
   contact_email: string;
+  contact_phone?: string | null;
   instagram_link: string | null;
   website: string | null;
   monthly_budget_cents: number | null;
-  /** Admins only; the server ignores these from staff. */
+  /** Managers, or the worker who signed the venue up. */
   visit_rate_cents?: number;
+  /** Managers only; the server refuses these from workers. */
   approved?: boolean;
+  rejection_reason?: string | null;
+  account_manager?: string | null;
 };
+
+export type PartnerStatus = 'live' | 'pending' | 'rejected' | 'paused';
+
+export function partnerStatus(p: Pick<AdminPartner, 'approved' | 'active' | 'rejection_reason'>): PartnerStatus {
+  if (!p.approved) return p.rejection_reason ? 'rejected' : 'pending';
+  return p.active ? 'live' : 'paused';
+}
+
+/** One team member's venues and commission (the sales team). */
+export type SalesSummary = {
+  /** Venues submitted (that they manage). */
+  clients: number;
+  live: number;
+  pending: number;
+  rejected: number;
+  /** Times their venues were shown (appearances). */
+  impressions: number;
+  visits: number;
+  month_billed_cents: number;
+  total_billed_cents: number;
+  commission_percent: number;
+  month_commission_cents: number;
+  total_commission_cents: number;
+  paid_cents: number;
+  unpaid_cents: number;
+};
+
+const toSales = (s: Partial<Record<keyof SalesSummary, unknown>> | null | undefined): SalesSummary => {
+  const n = (k: keyof SalesSummary) => Number(s?.[k] ?? 0);
+  const total = n('total_commission_cents');
+  return {
+    clients: n('clients'),
+    live: n('live'),
+    pending: n('pending'),
+    rejected: n('rejected'),
+    impressions: n('impressions'),
+    visits: n('visits'),
+    month_billed_cents: n('month_billed_cents'),
+    total_billed_cents: n('total_billed_cents'),
+    commission_percent: n('commission_percent'),
+    month_commission_cents: n('month_commission_cents'),
+    total_commission_cents: total,
+    paid_cents: n('paid_cents'),
+    // Before the workers migration there's no record of payouts: all of it is owed.
+    unpaid_cents: s?.unpaid_cents == null ? total : n('unpaid_cents'),
+  };
+};
+
+/** The signed-in staff member's own clients and commission. */
+export async function fetchMySales(): Promise<SalesSummary> {
+  const { data, error } = await supabase.rpc('my_sales_summary');
+  if (error) throw error;
+  return toSales(data as Record<string, unknown>);
+}
+
+/** Admins: a team member's commission, as a percentage of what their clients are billed. */
+export async function setCommission(userId: string, percent: number): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_commission', { p_user: userId, p_percent: percent });
+  if (error) throw new Error(error.message);
+}
 
 export type TeamMember = {
   id: string;
@@ -1882,6 +1987,7 @@ export type TeamMember = {
   username: string | null;
   email: string;
   role: AppRole;
+  sales: SalesSummary;
 };
 
 export async function fetchAdminPartners(): Promise<AdminPartner[]> {
@@ -1889,17 +1995,34 @@ export async function fetchAdminPartners(): Promise<AdminPartner[]> {
   if (error) throw error;
   return ((data ?? []) as AdminPartner[]).map((p) => ({
     ...p,
+    contact_phone: p.contact_phone ?? null,
+    rejection_reason: p.rejection_reason ?? null,
     impressions: Number(p.impressions),
     saves: Number(p.saves),
     visits: Number(p.visits),
+    review_count: Number(p.review_count ?? 0),
+    average_rating: Number(p.average_rating ?? 0),
     month_visits: Number(p.month_visits),
     month_billed_cents: Number(p.month_billed_cents),
     total_billed_cents: Number(p.total_billed_cents),
   }));
 }
 
+/**
+ * Until the sales-team and workers migrations are applied, these columns
+ * don't exist; drop them and try again rather than failing the whole save.
+ */
+const NEW_COLUMNS = ['account_manager', 'contact_phone', 'rejection_reason'] as const;
+const missingColumn = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === 'PGRST204' || e.code === '42703') && NEW_COLUMNS.some((c) => (e.message ?? '').includes(c));
+const withoutNewColumns = <T extends object>(row: T) =>
+  Object.fromEntries(Object.entries(row).filter(([k]) => !(NEW_COLUMNS as readonly string[]).includes(k)));
+
 export async function adminCreatePartner(input: AdminPartnerInput): Promise<void> {
-  const { error } = await supabase.from('venue_partners').insert({ ...input, owner_id: null });
+  let { error } = await supabase.from('venue_partners').insert({ ...input, owner_id: null });
+  if (missingColumn(error)) {
+    ({ error } = await supabase.from('venue_partners').insert({ ...withoutNewColumns(input), owner_id: null }));
+  }
   if (error) throw error;
 }
 
@@ -1907,7 +2030,39 @@ export async function adminUpdatePartner(
   id: string,
   updates: Partial<AdminPartnerInput> & { active?: boolean },
 ): Promise<void> {
-  const { error } = await supabase.from('venue_partners').update(updates).eq('id', id);
+  let { error } = await supabase.from('venue_partners').update(updates).eq('id', id);
+  if (missingColumn(error)) {
+    ({ error } = await supabase.from('venue_partners').update(withoutNewColumns(updates)).eq('id', id));
+  }
+  if (error) throw error;
+}
+
+/* ── Commission paid (super admins record; managers and the person see) ── */
+
+export type Payout = {
+  id: string;
+  user_id: string;
+  amount_cents: number;
+  note: string | null;
+  paid_at: string;
+};
+
+export async function fetchPayouts(): Promise<Payout[]> {
+  const { data, error } = await supabase
+    .from('commission_payouts')
+    .select('id, user_id, amount_cents, note, paid_at')
+    .order('paid_at', { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as Payout[]).map((p) => ({ ...p, amount_cents: Number(p.amount_cents) }));
+}
+
+export async function recordPayout(userId: string, amountCents: number, note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_record_payout', { p_user: userId, p_amount_cents: amountCents, p_note: note ?? null });
+  if (error) throw new Error(error.message);
+}
+
+export async function deletePayout(id: string): Promise<void> {
+  const { error } = await supabase.from('commission_payouts').delete().eq('id', id);
   if (error) throw error;
 }
 
@@ -1919,7 +2074,7 @@ export async function adminDeletePartner(id: string): Promise<void> {
 export async function fetchTeam(): Promise<TeamMember[]> {
   const { data, error } = await supabase.rpc('admin_team');
   if (error) throw error;
-  return (data ?? []) as TeamMember[];
+  return ((data ?? []) as (TeamMember & { sales?: Record<string, unknown> })[]).map((m) => ({ ...m, sales: toSales(m.sales) }));
 }
 
 /** Gives the account with this email a role; 'user' takes access away. */
@@ -2129,6 +2284,86 @@ export async function upsertVenueRating(venueId: string, rating: number): Promis
       updated_at: new Date().toISOString(),
     });
   if (error) throw error;
+}
+
+/* ── Sponsored venues, their reviews, and credits ── */
+
+/** A live venue partner as everyone sees it: no contact details. */
+export type SponsoredVenue = {
+  id: string;
+  business_name: string;
+  address: string;
+  type: VenueType;
+  instagram_link: string | null;
+  website: string | null;
+  lat: number | null;
+  lon: number | null;
+  review_count: number;
+  average_rating: number;
+  reviewed_by_me: boolean;
+  /** False for a venue you own or manage. */
+  can_review: boolean;
+};
+
+export async function fetchSponsoredVenues(): Promise<SponsoredVenue[]> {
+  const { data, error } = await supabase.rpc('sponsored_venues');
+  if (error) throw error;
+  return ((data ?? []) as SponsoredVenue[]).map((v) => ({
+    ...v,
+    review_count: Number(v.review_count),
+    average_rating: Number(v.average_rating),
+  }));
+}
+
+/** Views and saves of sponsored venues, for the venue's numbers. Best effort. */
+export async function recordSponsoredEvents(venueIds: string[], type: 'impression' | 'saved', planId?: string | null): Promise<void> {
+  if (venueIds.length === 0) return;
+  try {
+    await supabase.rpc('record_venue_events', { p_venue_ids: venueIds, p_type: type, p_plan: planId ?? null });
+  } catch { /* the numbers can miss one; the page shouldn't fail */ }
+}
+
+export type VenueReview = {
+  id: string;
+  rating: number;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  name: string;
+  username: string | null;
+  mine: boolean;
+};
+
+export async function fetchVenueReviews(venueId: string): Promise<VenueReview[]> {
+  const { data, error } = await supabase.rpc('venue_reviews_for', { p_venue_id: venueId });
+  if (error) throw error;
+  return (data ?? []) as VenueReview[];
+}
+
+/** Posts or edits your review of a venue. A first review earns a credit (server side). */
+export async function saveVenueReview(venueId: string, rating: number, body: string, existingId?: string): Promise<void> {
+  const { error } = existingId
+    ? await supabase.from('venue_reviews').update({ rating, body }).eq('id', existingId)
+    : await supabase.from('venue_reviews').insert({ venue_id: venueId, rating, body });
+  if (error) {
+    if (error.code === '23505') throw new Error("You've already reviewed this venue.");
+    if (/row-level security/.test(error.message)) throw new Error("You can't review this venue.");
+    if (/reviews a day/.test(error.message)) throw new Error(error.message);
+    if (/body_check|char_length/.test(error.message)) throw new Error('Write at least 10 characters.');
+    throw error;
+  }
+}
+
+export async function deleteVenueReview(id: string): Promise<void> {
+  const { error } = await supabase.from('venue_reviews').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Credits: earned by reviewing sponsored venues, spent on extra AI uses. Never expire. */
+export async function fetchMyCredits(): Promise<number> {
+  const { data, error } = await supabase.rpc('my_credits');
+  if (error) throw error;
+  return Number(data ?? 0);
 }
 
 /* ── Subscription helpers ── */

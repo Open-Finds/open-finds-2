@@ -53,25 +53,26 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub','22222222-2222-2222-2222-222222222222',true);
   BEGIN
     INSERT INTO venue_events (venue_id,event_type,auth_uid,user_id)
-    VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc','visited','11111111-1111-1111-1111-111111111111','x');
+    VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc','saved','11111111-1111-1111-1111-111111111111','x');
     ok := false;
   EXCEPTION WHEN others THEN ok := true; END;
   PERFORM rep('T16 spoofed auth_uid blocked', ok);
+  -- Visits only come from reviews now (workers migration); saves are still recorded directly.
 
   INSERT INTO venue_events (venue_id,event_type,auth_uid,user_id)
-  VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc','visited','22222222-2222-2222-2222-222222222222','x');
+  VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc','saved','22222222-2222-2222-2222-222222222222','x');
   PERFORM rep('T17 honest event allowed', true);
 
   BEGIN
     INSERT INTO venue_events (venue_id,event_type,auth_uid,user_id)
-    VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc','visited','22222222-2222-2222-2222-222222222222','x');
+    VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc','saved','22222222-2222-2222-2222-222222222222','x');
     ok := false;
   EXCEPTION WHEN others THEN ok := true; END;
   PERFORM rep('T18 duplicate same-day blocked', ok);
 
   BEGIN
     INSERT INTO venue_events (venue_id,event_type,auth_uid,user_id)
-    VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','visited','22222222-2222-2222-2222-222222222222','x');
+    VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','saved','22222222-2222-2222-2222-222222222222','x');
     ok := false;
   EXCEPTION WHEN others THEN ok := true; END;
   PERFORM rep('T18b unapproved venue blocked', ok);
