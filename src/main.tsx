@@ -7,6 +7,18 @@ import { initMonitoring, reportError } from './lib/monitoring';
 import { captureSharedLink, listenForInstallPrompt } from './lib/shareTarget';
 import './index.css';
 
+// Open the connection to the database while the rest of the app loads. Done
+// here, not as a %VITE_SUPABASE_URL% tag in index.html: that fails the whole
+// build ("URI malformed") wherever the variable isn't set, as on Vercel previews.
+const databaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+if (databaseUrl) {
+  const link = document.createElement('link');
+  link.rel = 'preconnect';
+  link.href = databaseUrl;
+  link.crossOrigin = '';
+  document.head.appendChild(link);
+}
+
 // Before render, so a crash during the first paint is still captured.
 initMonitoring();
 // A link shared into the app (share menu or iPhone Shortcut), kept for Home.
