@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
-import { suggestAddresses, type AddressSuggestion } from '../lib/apiKeys';
+import { suggestAddresses, fetchPickedPlace, type AddressSuggestion, type PickedPlace } from '../lib/apiKeys';
 import { cn } from '../lib/utils';
 
 /**
@@ -16,6 +16,7 @@ export function AddressInput({
   near,
   ariaLabel,
   id,
+  onPlace,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -26,6 +27,8 @@ export function AddressInput({
   near?: { lat: number; lon: number } | null;
   ariaLabel?: string;
   id?: string;
+  /** The picked place in full (a venue's name, its coordinates), once known. */
+  onPlace?: (place: PickedPlace) => void;
 }) {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -58,6 +61,14 @@ export function AddressInput({
     onChange(s.text);
     setSuggestions([]);
     setOpen(false);
+    // Then its proper street address, with number and postcode.
+    if (s.place_id) {
+      void fetchPickedPlace(s.place_id).then((place) => {
+        if (!place) return;
+        if (place.address && !typed.current) onChange(place.address);
+        onPlace?.(place);
+      });
+    }
   };
 
   const listId = `${id ?? 'address'}-suggestions`;

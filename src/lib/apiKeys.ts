@@ -280,7 +280,24 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; lo
   }
 }
 
-export type AddressSuggestion = { text: string; main: string; secondary: string };
+export type AddressSuggestion = { text: string; main: string; secondary: string; place_id?: string };
+
+/** A picked suggestion in full: street address, the venue's name if it is one, and where it is. */
+export type PickedPlace = { address: string | null; name: string | null; lat: number | null; lon: number | null };
+
+export async function fetchPickedPlace(placeId: string): Promise<PickedPlace | null> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/address-suggest`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({ place_id: placeId }),
+    });
+    if (!res.ok) return null;
+    return ((await res.json())?.place ?? null) as PickedPlace | null;
+  } catch {
+    return null;
+  }
+}
 
 /** Addresses (and places) matching what's been typed so far, nearest first when `near` is known. Empty on any failure. */
 export async function suggestAddresses(

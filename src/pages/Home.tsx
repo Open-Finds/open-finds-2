@@ -1083,7 +1083,13 @@ export function HomePage({
                 <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Venue address</label>
                 <AddressInput
                   value={qaAddress}
-                  onChange={setQaAddress}
+                  // A retyped address is somewhere else: its old coordinates go.
+                  onChange={(v) => { setQaAddress(v); setQaExtractedCoords(null); }}
+                  onPlace={(place) => {
+                    // Picked a venue by name: fill its name too, and keep its exact spot.
+                    if (place.name) setQaName((n) => n.trim() || place.name!);
+                    if (place.lat != null && place.lon != null) setQaExtractedCoords({ lat: place.lat, lon: place.lon });
+                  }}
                   placeholder="Start typing an address or venue"
                   ariaLabel="Venue address"
                   near={originCoord}
