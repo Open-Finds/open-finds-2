@@ -185,7 +185,7 @@ async function summary(stripe: Stripe, customerId: string, sub: Stripe.Subscript
           amount: i.amount_paid || i.amount_due,
           currency: i.currency,
           status: i.status,
-          description: i.lines.data[0]?.description ?? "Open Finds Premium",
+          description: i.lines.data[0]?.description ?? "The Unsaved Premium",
           pdf: i.invoice_pdf ?? null,
         })),
       ...charges.data
@@ -196,7 +196,7 @@ async function summary(stripe: Stripe, customerId: string, sub: Stripe.Subscript
           amount: c.amount,
           currency: c.currency,
           status: c.refunded ? "refunded" : "paid",
-          description: c.description ?? "Open Finds Lifetime",
+          description: c.description ?? "The Unsaved Lifetime",
           pdf: c.receipt_url ?? null,
         })),
     ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6),

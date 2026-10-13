@@ -33,6 +33,7 @@ import {
 } from '../lib/supabase';
 import { geocodeAddress } from '../lib/apiKeys';
 import { VenueTypeSelect } from '../components/ui/select';
+import { AddressInput } from '../components/AddressInput';
 
 const MILESTONE_THRESHOLDS = [10, 50, 100, 500];
 
@@ -181,7 +182,7 @@ function VenueSignupForm({
           <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="e.g. Brazico Churrasco" className={inputClass} />
         </FormField>
         <FormField icon={<MapPin size={16} />} label="Address">
-          <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full street address" className={inputClass} />
+          <AddressInput value={address} onChange={setAddress} placeholder="Start typing your address" ariaLabel="Address" className={inputClass} />
         </FormField>
         <FormField label="Venue Type">
           <VenueTypeSelect value={type} onChange={setType} className={inputClass} />
@@ -480,7 +481,7 @@ function VenueEditForm({
           <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} className={inputClass} />
         </FormField>
         <FormField icon={<MapPin size={16} />} label="Address">
-          <input value={address} onChange={(e) => setAddress(e.target.value)} className={inputClass} />
+          <AddressInput value={address} onChange={setAddress} ariaLabel="Address" className={inputClass} />
         </FormField>
         <FormField label="Venue Type">
           <VenueTypeSelect value={type} onChange={setType} className={inputClass} />

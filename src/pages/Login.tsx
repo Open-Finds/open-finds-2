@@ -3,6 +3,7 @@ import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, User, AtSign, Check, X, Loade
 import {
   signIn,
   signUp,
+  setSigningUp,
   upsertProfile,
   checkUsernameAvailable,
   sendPasswordReset,
@@ -134,9 +135,14 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
           setLoading(false);
           return;
         }
-        await signUp(email.trim(), password);
-        await signIn(email.trim(), password);
-        await upsertProfile(displayName.trim(), cleanUsername);
+        setSigningUp(true);
+        try {
+          await signUp(email.trim(), password);
+          await signIn(email.trim(), password);
+          await upsertProfile(displayName.trim(), cleanUsername);
+        } finally {
+          setSigningUp(false);
+        }
         await refreshProfile();
       } else {
         await signIn(email.trim(), password);
@@ -292,7 +298,11 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                         }
                       }}
                       placeholder="e.g. robbui"
-                      autoComplete="username"
+                      // Not "username": browsers fill that with a saved
+                      // login, which gave a second account the first one's name.
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
                       className="pl-11 pr-11"
                     />
                     {username.trim() && usernameAvailable !== null && (

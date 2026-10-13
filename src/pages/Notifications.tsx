@@ -5,10 +5,12 @@ import {
   type NotificationItem,
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
+import { useAuth } from '../context/AuthContext';
 import { hasCached, useCachedState } from '../lib/cache';
 import { LoadError } from '../components/LoadError';
 
 export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => void; onOpenFriends: () => void }) {
+  const { refreshProfile } = useAuth();
   const [notifications, setNotifications] = useCachedState<NotificationItem[]>('notifications', []);
   // Seen before: show that while the fresh list loads.
   const [loading, setLoading] = useState(() => !hasCached('notifications'));
@@ -52,6 +54,11 @@ export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => voi
         break;
       case 'plan_invite':
         if (planId) navigate(`/plan/${planId}`);
+        break;
+      case 'team_role':
+        // Made a worker or manager: their new tab, with the role loaded.
+        await refreshProfile();
+        navigate('/my-venues');
         break;
       default:
         // RSVPs and anything else about a plan: the host's dashboard.

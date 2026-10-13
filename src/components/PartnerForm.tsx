@@ -1,13 +1,14 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import {
-  adminCreatePartner, adminUpdatePartner, ROLE_LABELS,
+  adminCreatePartner, adminUpdatePartner, fetchVisitRate, ROLE_LABELS,
   type AdminPartner, type AdminPartnerInput, type TeamMember, type VenueType,
 } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { AppSelect, VenueTypeSelect } from './ui/select';
+import { AddressInput } from './AddressInput';
 
 /** Dollars typed by a person, as cents; blank is "none". */
 function toCents(text: string): number | null {
@@ -18,13 +19,15 @@ function toCents(text: string): number | null {
 }
 
 /**
- * Adds or edits a venue partner. Workers submit their own (live straight
- * away, at the rate they agreed); managers also approve and pick who looks
- * after it. The server enforces the same split.
+ * Adds or edits a venue partner. Everyone's additions wait for the super
+ * admin, who alone approves them; every venue pays the one rate the super
+ * admin sets. Managers also pick who looks after a venue. The server
+ * enforces the same split.
  */
 export function PartnerForm({
   partner,
   canManage,
+  canApprove = false,
   team = [],
   onClose,
   onSaved,
@@ -32,6 +35,8 @@ export function PartnerForm({
   partner: AdminPartner | null;
   /** Manager or super admin. */
   canManage: boolean;
+  /** Super admin: approves. */
+  canApprove?: boolean;
   team?: TeamMember[];
   onClose: () => void;
   onSaved: () => Promise<void>;
@@ -48,7 +53,11 @@ export function PartnerForm({
   const [type, setType] = useState<VenueType>((partner?.type as VenueType) ?? 'food');
   const [budget, setBudget] = useState(partner?.monthly_budget_cents != null ? (partner.monthly_budget_cents / 100).toFixed(2) : '');
   const [website, setWebsite] = useState(partner?.website ?? '');
-  const [rate, setRate] = useState(((partner?.visit_rate_cents ?? 10) / 100).toFixed(2));
+  // Shown, not edited: one rate for every venue, set in the admin dashboard.
+  const [rateCents, setRateCents] = useState<number | null>(partner?.visit_rate_cents ?? null);
+  useEffect(() => {
+    if (!partner) fetchVisitRate().then(setRateCents, () => {});
+  }, [partner]);
   const [approved, setApproved] = useState(partner?.approved ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,9 +74,8 @@ export function PartnerForm({
       return;
     }
     const budgetCents = toCents(budget);
-    const rateCents = toCents(rate);
-    if (Number.isNaN(budgetCents) || rateCents == null || Number.isNaN(rateCents)) {
-      setError('Budget and rate are dollar amounts, like 250 or 0.10.');
+    if (Number.isNaN(budgetCents)) {
+      setError('The budget is a dollar amount, like 250.');
       return;
     }
     const input: AdminPartnerInput = {
@@ -80,13 +88,12 @@ export function PartnerForm({
       monthly_budget_cents: budgetCents,
       website: website.trim() || null,
       instagram_link: social.trim() || null,
-      visit_rate_cents: rateCents,
-      ...(canManage
+      ...(canManage ? { account_manager: manager || null } : {}),
+      ...(canApprove
         ? {
             approved,
             // Approving clears an earlier rejection; leaving it unapproved keeps the reason.
             rejection_reason: approved ? null : partner?.rejection_reason ?? null,
-            account_manager: manager || null,
           }
         : {}),
     };
@@ -113,9 +120,9 @@ export function PartnerForm({
           <DialogDescription>
             {partner
               ? 'Changes show in the app straight away.'
-              : canManage
-                ? 'Details, budget and rate.'
-                : 'It goes live in the app straight away, and shows in My Venues.'}
+              : canApprove
+                ? 'Details and budget. Every venue pays the same rate.'
+                : 'It goes live once the super admin approves it. Follow it in My Venues.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-3">
@@ -126,14 +133,19 @@ export function PartnerForm({
             <Labeled label="Email"><input className={field} type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Labeled>
             <Labeled label="Phone (optional)"><input className={field} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></Labeled>
           </div>
-          <Labeled label="Address"><input className={field} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street, suburb, state, postcode" /></Labeled>
+          <Labeled label="Address"><AddressInput className={field} value={address} onChange={setAddress} placeholder="Start typing the address" ariaLabel="Address" /></Labeled>
           <div className="grid gap-3 sm:grid-cols-2">
             <Labeled label="Type"><VenueTypeSelect value={type} onChange={setType} /></Labeled>
             <Labeled label="Monthly budget ($)"><input className={field} inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="No limit" /></Labeled>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Labeled label="Website (optional)"><input className={field} value={website} onChange={(e) => setWebsite(e.target.value)} /></Labeled>
-            <Labeled label="Rate per review / visit ($)"><input className={field} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} /></Labeled>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-ink-secondary">Rate per review / visit</span>
+              <p className="rounded-card border border-gold/10 bg-black/20 px-4 py-2.5 text-sm text-white">
+                {rateCents == null ? '…' : `$${(rateCents / 100).toFixed(2)}`} <span className="text-xs text-ink-secondary">· same for every venue</span>
+              </p>
+            </div>
           </div>
           {canManage && team.length > 0 && (
             <Labeled label="Account manager (who looks after them, and earns the commission)">
@@ -148,7 +160,7 @@ export function PartnerForm({
               />
             </Labeled>
           )}
-          {canManage && (
+          {canApprove && (
             <label className="flex items-center gap-2 text-sm text-white">
               <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} className="size-4 accent-[#D4AF35]" />
               Live in the app (approved)

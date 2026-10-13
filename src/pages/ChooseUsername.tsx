@@ -7,14 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 /**
- * First sign-in with Google or Facebook: those accounts arrive without a
- * username, which is how friends find each other. Asked once.
+ * Any account without a username (first Google sign-in, or an older email
+ * account): usernames are how friends find each other. Asked once.
  */
 export function ChooseUsernamePage() {
-  const { session, displayName: profileName, refreshProfile } = useAuth();
+  const { session, refreshProfile } = useAuth();
   const meta = session?.user.user_metadata ?? {};
+  // Google's name if there is one; never the email-based placeholder.
   const [displayName, setDisplayName] = useState<string>(
-    (meta.full_name as string) || (meta.name as string) || profileName || ''
+    (meta.full_name as string) || (meta.name as string) || ''
   );
   const [username, setUsername] = useState('');
   const [available, setAvailable] = useState<boolean | null>(null);
@@ -96,7 +97,9 @@ export function ChooseUsernamePage() {
                 }}
                 onBlur={() => check(username.trim())}
                 placeholder="e.g. robbui"
-                autoComplete="username"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 className="pl-11 pr-11"
               />
               {username.trim() && available !== null && (

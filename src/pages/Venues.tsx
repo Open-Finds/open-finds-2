@@ -32,6 +32,7 @@ import { useAuth } from '../context/AuthContext';
 import { TRIPS_ENABLED } from '../lib/features';
 import { hasCached, useCachedState } from '../lib/cache';
 import { LoadError } from '../components/LoadError';
+import { AddressInput } from '../components/AddressInput';
 
 export function VenuesPage() {
   // Remembered between visits; the fresh copy loads behind it.
@@ -667,11 +668,11 @@ export function VenuesPage() {
                     </div>
                     <div className="mb-3">
                       <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Venue address</label>
-                      <input
-                        type="text"
+                      <AddressInput
                         value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        placeholder="Suburb or full address"
+                        onChange={setAddress}
+                        placeholder="Start typing an address or venue"
+                        ariaLabel="Venue address"
                         className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
                       />
                     </div>

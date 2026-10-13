@@ -279,3 +279,27 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; lo
     return null;
   }
 }
+
+export type AddressSuggestion = { text: string; main: string; secondary: string };
+
+/** Addresses (and places) matching what's been typed so far, nearest first when `near` is known. Empty on any failure. */
+export async function suggestAddresses(
+  input: string,
+  near?: { lat: number; lon: number } | null,
+  signal?: AbortSignal,
+): Promise<AddressSuggestion[]> {
+  if (input.trim().length < 3) return [];
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/address-suggest`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({ input, lat: near?.lat, lon: near?.lon }),
+      signal,
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.suggestions) ? data.suggestions as AddressSuggestion[] : [];
+  } catch {
+    return [];
+  }
+}

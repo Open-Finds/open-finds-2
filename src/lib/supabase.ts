@@ -103,6 +103,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 /* ── Auth ── */
 
+/**
+ * True from the start of an email sign-up until its name and username are
+ * saved, so the app doesn't ask for a username it's about to get.
+ */
+let signingUp = false;
+export const isSigningUp = () => signingUp;
+export const setSigningUp = (on: boolean) => { signingUp = on; };
+
 export async function signUp(email: string, password: string) {
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
@@ -149,7 +157,13 @@ export async function fetchEnabledSignInProviders(): Promise<Set<OAuthProvider>>
 export async function signInWithProvider(provider: OAuthProvider) {
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: `${window.location.origin}/` },
+    options: {
+      redirectTo: `${window.location.origin}/`,
+      // Always show Google's account picker. Without it Google silently
+      // reuses the account already signed in on the phone, so "creating a
+      // second account" just opened the first one again.
+      queryParams: provider === 'google' ? { prompt: 'select_account' } : undefined,
+    },
   });
   if (error) throw error;
 }
@@ -2037,6 +2051,19 @@ export async function adminUpdatePartner(
   if (error) throw error;
 }
 
+/** The one rate every venue pays per review / visit, in cents. Only the super admin changes it. */
+export async function fetchVisitRate(): Promise<number> {
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'visit_rate_cents').maybeSingle();
+  if (error) throw error;
+  return Number((data as { value?: unknown } | null)?.value ?? 10);
+}
+
+/** Super admin: sets the rate for every venue at once. */
+export async function setVisitRate(cents: number): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_visit_rate', { p_cents: cents });
+  if (error) throw new Error(error.message);
+}
+
 /* ── Commission paid (super admins record; managers and the person see) ── */
 
 export type Payout = {
@@ -2078,9 +2105,22 @@ export async function fetchTeam(): Promise<TeamMember[]> {
 }
 
 /** Gives the account with this email a role; 'user' takes access away. */
+/** Gives someone a role by their sign-in email, and tells them about it. */
 export async function setTeamRole(email: string, role: AppRole): Promise<void> {
-  const { error } = await supabase.rpc('admin_set_role', { p_email: email, p_role: role });
+  const { data, error } = await supabase.rpc('admin_set_role', { p_email: email, p_role: role });
   if (error) throw new Error(error.message);
+  const userId = (data as { id?: string } | null)?.id;
+  if (!userId || role === 'user') return;
+  const label = ROLE_LABELS[role];
+  await sendPushNotification({
+    userId,
+    type: 'team_role',
+    title: `You're now a ${label.toLowerCase()} on The Unsaved`,
+    body: role === 'staff'
+      ? 'Open My Venues to submit venues and track your commission.'
+      : 'Open My Venues, or the admin dashboard from Settings.',
+    data: { url: '/my-venues', role },
+  });
 }
 
 export type VenueEventType = 'impression' | 'saved' | 'visited';

@@ -421,10 +421,12 @@ export async function discoverSmartVenueCandidates(
   // The night gets one stop per vibe, so every vibe needs candidates. Asked
   // for a single mixed list of 8, the model returned all-food for a
   // food + bar + dessert night.
-  // Four each, because some are dropped afterwards: places already saved or
-  // visited, and (in the app) anything outside the travel time.
-  const perVibe = 4;
-  const total = Math.max(10, perVibe * vibes.length);
+  // Three each: one is picked per vibe, and the spares cover places dropped
+  // afterwards (already saved or visited, or outside the travel time). Every
+  // extra venue is more for the AI to look up and write out, and this list
+  // was the slow part of Something New (asking for 10 took ~7s, 12 ~11s).
+  const perVibe = 3;
+  const total = perVibe * vibes.length;
   const quota = vibes.map((v) => `at least ${perVibe} with type '${v}' (${describe(v)})`).join('; ');
 
   const savedSummary = savedVenues.length > 0

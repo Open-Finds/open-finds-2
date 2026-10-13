@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Download, Share2 } from 'lucide-react';
 import { canInstall, isInstalled, onInstallChange, promptInstall } from '../lib/shareTarget';
+import { appBase } from '../lib/invite';
 
 const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
 const isAndroid = () => /Android/.test(navigator.userAgent);
@@ -16,7 +17,7 @@ export function ShareIntoApp() {
   const [installed, setInstalled] = useState(isInstalled());
   useEffect(() => onInstallChange(() => { setInstallable(canInstall()); setInstalled(isInstalled()); }), []);
 
-  const shortcutUrl = `${window.location.origin}/?url=`;
+  const shortcutUrl = `${appBase()}?url=`;
   const step = 'flex gap-3 text-sm text-ink-secondary';
   const num = 'flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold/15 text-[11px] font-bold text-gold';
 

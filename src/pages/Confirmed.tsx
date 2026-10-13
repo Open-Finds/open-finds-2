@@ -12,7 +12,7 @@ import { Timeline, RsvpList } from '../components/Shared';
 import { AddToCalendar } from '../components/AddToCalendar';
 import { useCountdown, formatCountdown } from '../lib/countdown';
 import { MapPin, PartyPopper, Clock, Smartphone, Check } from 'lucide-react';
-import { buildInviteMessage, shareOrCopy } from '../lib/invite';
+import { appBase, buildInviteMessage, shareOrCopy } from '../lib/invite';
 import { mapsDirectionsUrl } from '../lib/maps';
 
 function getRsvpIdFromHash() {
@@ -77,7 +77,7 @@ export function ConfirmedPage({ id }: { id: string }) {
     );
   }
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
-  const shareUrl = `${window.location.origin}${window.location.pathname}#/plan/${id}/rsvp`;
+  const shareUrl = `${appBase()}#/plan/${id}/rsvp`;
   const multiStopMapsUrl = mapsDirectionsUrl(stops.map((s) => s.address), plan.location) ?? '#';
 
   const handleInviteFriend = async () => {

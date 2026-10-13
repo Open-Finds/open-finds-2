@@ -16,7 +16,7 @@ import { NotificationsPage } from './pages/Notifications';
 import { ViewToggle } from './components/ViewToggle';
 import { GuidedTour } from './components/GuidedTour';
 import { CreditPrompt } from './components/CreditPrompt';
-import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isTeam } from './lib/supabase';
+import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isTeam, isSigningUp } from './lib/supabase';
 import { Bell } from 'lucide-react';
 
 /*
@@ -204,9 +204,9 @@ function AppInner() {
     return <div className="min-h-screen bg-black" />;
   }
 
-  // Google/Facebook accounts arrive without a username; ask for one once.
-  const provider = session.user.app_metadata?.provider;
-  if (!username && provider && provider !== 'email') {
+  // Anyone without a username (a first Google sign-in, or an older email
+  // account) picks one, unless an email sign-up is saving it right now.
+  if (!username && !isSigningUp()) {
     return <ChooseUsernamePage />;
   }
 

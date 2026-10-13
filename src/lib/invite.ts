@@ -18,8 +18,21 @@ export function buildInviteMessage(plan: Plan, opts: { includeUrl?: boolean } = 
   return opts.includeUrl ? `${body}\n${getShareUrl(plan.id)}` : body;
 }
 
+/** The app's real address, which links people are sent should always use. */
+export const APP_URL = 'https://www.theunsaved.app';
+
+/**
+ * Start of a link to send someone: the real domain when the app was opened
+ * on an old or Vercel address (open-finds-2.vercel.app), else wherever it's
+ * running (so local testing still links to itself).
+ */
+export function appBase(): string {
+  const { hostname, origin, pathname } = window.location;
+  return hostname.endsWith('.vercel.app') ? `${APP_URL}/` : `${origin}${pathname}`;
+}
+
 export function getShareUrl(planId: string): string {
-  return `${window.location.origin}${window.location.pathname}#/plan/${planId}/rsvp`;
+  return `${appBase()}#/plan/${planId}/rsvp`;
 }
 
 export async function copyToClipboard(text: string): Promise<boolean> {

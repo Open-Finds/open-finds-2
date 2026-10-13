@@ -11,6 +11,7 @@ import {
 import { geocodeAddress } from '../lib/apiKeys';
 import { VenueTypeSelect } from './ui/select';
 import { CheckItOut } from './CheckItOut';
+import { AddressInput } from './AddressInput';
 
 const TYPE_LABELS: Record<VenueType, string> = {
   food: 'Food',
@@ -187,10 +188,10 @@ export function SavedVenueCard({
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-secondary">Address</label>
-            <input
-              type="text"
+            <AddressInput
               value={editAddress}
-              onChange={(e) => setEditAddress(e.target.value)}
+              onChange={setEditAddress}
+              ariaLabel="Address"
               className="w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none"
             />
           </div>

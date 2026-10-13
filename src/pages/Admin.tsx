@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import {
   fetchAdminPartners, adminUpdatePartner, adminDeletePartner,
-  fetchTeam, setTeamRole, setCommission, fetchPayouts, recordPayout, deletePayout,
+  fetchTeam, setTeamRole, setCommission, fetchVisitRate, setVisitRate, fetchPayouts, recordPayout, deletePayout,
   partnerStatus, isManagerRole, ROLE_LABELS,
   type AdminPartner, type AppRole, type Payout, type TeamMember, type PartnerStatus,
 } from '../lib/supabase';
@@ -174,9 +174,9 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
             {loading && partners.length === 0 && team.length === 0 ? (
               <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-gold" /></div>
             ) : tab === 'overview' ? (
-              <Overview partners={partners} team={team} />
+              <Overview partners={partners} team={team} isAdmin={isAdmin} onRateChanged={load} />
             ) : tab === 'approvals' ? (
-              <Approvals partners={partners} busyId={busyId} onApprove={approve} onReject={setRejecting} onEdit={setEditing} />
+              <Approvals partners={partners} isAdmin={isAdmin} busyId={busyId} onApprove={approve} onReject={setRejecting} onEdit={setEditing} />
             ) : tab === 'venues' ? (
               <Venues
                 partners={partners}
@@ -197,6 +197,7 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
               <PartnerForm
                 partner={editing === 'new' ? null : editing}
                 canManage
+                canApprove={isAdmin}
                 team={team}
                 onClose={() => setEditing(null)}
                 onSaved={async () => { setEditing(null); await load(); }}
@@ -222,7 +223,7 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
 
 /* ── Overview ─────────────────────────────────────────────── */
 
-function Overview({ partners, team }: { partners: AdminPartner[]; team: TeamMember[] }) {
+function Overview({ partners, team, isAdmin, onRateChanged }: { partners: AdminPartner[]; team: TeamMember[]; isAdmin: boolean; onRateChanged: () => Promise<void> }) {
   const counts = useMemo(() => {
     const c = { live: 0, pending: 0, rejected: 0, paused: 0 };
     for (const p of partners) c[partnerStatus(p)]++;
@@ -243,6 +244,8 @@ function Overview({ partners, team }: { partners: AdminPartner[]; team: TeamMemb
         <Stat label="Commission owed" value={money(unpaid)} hint={`${money(paid)} paid so far`} />
         <Stat label="Visits this month" value={String(monthVisits)} hint="Each review counts as a visit" />
       </div>
+
+      <RateSetting isAdmin={isAdmin} onChanged={onRateChanged} />
 
       <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
         <h2 className="mb-3 text-sm font-bold text-white">Pending, approved and rejected</h2>
@@ -303,6 +306,60 @@ function Overview({ partners, team }: { partners: AdminPartner[]; team: TeamMemb
   );
 }
 
+/** The one rate every venue pays per review / visit. Only the super admin changes it. */
+function RateSetting({ isAdmin, onChanged }: { isAdmin: boolean; onChanged: () => Promise<void> }) {
+  const [cents, setCents] = useState<number | null>(null);
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    fetchVisitRate().then((c) => { setCents(c); setValue((c / 100).toFixed(2)); }, () => {});
+  }, []);
+  const save = async () => {
+    const next = Math.round(Number(value.replace(/[$,\s]/g, '')) * 100);
+    if (!Number.isFinite(next) || next < 0 || next > 10000) {
+      setMessage({ ok: false, text: 'The rate is a dollar amount from $0 to $100, like 0.10.' });
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      await setVisitRate(next);
+      setCents(next);
+      setMessage({ ok: true, text: `Every venue now pays ${money(next)} per review / visit.` });
+      await onChanged();
+    } catch (e) {
+      setMessage({ ok: false, text: e instanceof Error ? e.message : "Couldn't save the rate." });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
+      <h2 className="text-sm font-bold text-white">Rate per review / visit</h2>
+      <p className="mt-1 text-sm text-ink-secondary">The same for every venue.{isAdmin ? ' Changing it changes it for all of them.' : ' Only the super admin changes it.'}</p>
+      {isAdmin ? (
+        <form onSubmit={(e) => { e.preventDefault(); void save(); }} className="mt-3 flex items-center gap-2">
+          <span className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-secondary">$</span>
+            <input
+              inputMode="decimal"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              aria-label="Rate per review or visit"
+              className="w-28 rounded-card border border-gold/20 bg-black/40 py-2 pl-7 pr-3 text-sm text-white outline-none focus:border-gold"
+            />
+          </span>
+          <Button type="submit" size="sm" disabled={saving || cents == null}>{saving ? <Loader2 className="animate-spin" /> : <Check />} Save</Button>
+        </form>
+      ) : (
+        <p className="mt-2 text-2xl font-bold text-white">{cents == null ? '…' : money(cents)}</p>
+      )}
+      {message && <p role="status" className={cn('mt-2 text-sm', message.ok ? 'text-success' : 'text-red-300')}>{message.text}</p>}
+    </section>
+  );
+}
+
 function BreakdownButton({ label, value, tone, onClick }: { label: string; value: number; tone: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="rounded-card border border-gold/10 bg-black/40 p-3 transition-colors hover:border-gold/40">
@@ -315,9 +372,10 @@ function BreakdownButton({ label, value, tone, onClick }: { label: string; value
 /* ── Approvals ────────────────────────────────────────────── */
 
 function Approvals({
-  partners, busyId, onApprove, onReject, onEdit,
+  partners, isAdmin, busyId, onApprove, onReject, onEdit,
 }: {
   partners: AdminPartner[];
+  isAdmin: boolean;
   busyId: string | null;
   onApprove: (p: AdminPartner) => void;
   onReject: (p: AdminPartner) => void;
@@ -328,7 +386,7 @@ function Approvals({
   return (
     <>
       <p className="mb-4 text-sm text-ink-secondary">
-        Workers' venues go live straight away. Venues that sign themselves up wait here. Reject anything that shouldn't be in the app, with a reason the worker sees.
+        Every new venue waits here until the super admin checks it. Approve it to put it in the app, or reject it with a reason the worker sees.{!isAdmin && ' Only the super admin approves or rejects.'}
       </p>
       {pending.length === 0 ? (
         <Empty icon={Clock} text="Nothing waiting for approval." />
@@ -336,8 +394,8 @@ function Approvals({
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {pending.map((p) => (
             <PartnerCard key={p.id} p={p}>
-              <Button size="sm" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>
-              <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onReject(p)}><X /> Reject</Button>
+              {isAdmin && <Button size="sm" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>}
+              {isAdmin && <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onReject(p)}><X /> Reject</Button>}
               <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil /> Edit</Button>
             </PartnerCard>
           ))}
@@ -349,7 +407,7 @@ function Approvals({
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {rejected.map((p) => (
               <PartnerCard key={p.id} p={p}>
-                <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve after all</Button>
+                {isAdmin && <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve after all</Button>}
               </PartnerCard>
             ))}
           </div>
@@ -428,7 +486,7 @@ function Venues({
             const status = partnerStatus(p);
             return (
               <PartnerCard key={p.id} p={p}>
-                {status !== 'live' && status !== 'paused' && (
+                {isAdmin && status !== 'live' && status !== 'paused' && (
                   <Button size="sm" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>
                 )}
                 <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil /> Edit</Button>
@@ -437,7 +495,7 @@ function Venues({
                     {p.active ? <><Pause /> Pause</> : <><Play /> Resume</>}
                   </Button>
                 )}
-                {status !== 'rejected' && (
+                {isAdmin && status !== 'rejected' && (
                   <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => onReject(p)}><X /> Reject</Button>
                 )}
                 {isAdmin && (

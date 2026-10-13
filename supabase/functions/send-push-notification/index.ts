@@ -225,7 +225,7 @@ Deno.serve(async (req: Request) => {
       });
     }
     const appServer = await webpush.ApplicationServer.new({
-      contactInformation: "mailto:noreply@openfinds.app",
+      contactInformation: "mailto:noreply@theunsaved.app",
       vapidKeys,
     });
 

@@ -33,17 +33,21 @@ BEGIN
   INSERT INTO venue_partners (id, business_name, address, type, contact_name, contact_email, contact_phone, visit_rate_cents, approved)
   VALUES ('14000000-0000-0000-0000-0000000000f1', 'Wes Ramen', '1 Wes St', 'food', 'Kai', 'kai@x.com', '0400 000 000', 50, false);
   SELECT * INTO v FROM venue_partners WHERE id = '14000000-0000-0000-0000-0000000000f1';
-  PERFORM rep('W1 a worker''s venue goes live straight away, at their rate, as theirs',
-    v.approved AND v.active AND v.visit_rate_cents = 50 AND v.account_manager = '14000000-0000-0000-0000-00000000000c' AND v.contact_phone = '0400 000 000');
+  PERFORM rep('W1 a worker''s venue is theirs and waits for the super admin, at the one rate',
+    NOT v.approved AND v.visit_rate_cents = 10 AND v.account_manager = '14000000-0000-0000-0000-00000000000c' AND v.contact_phone = '0400 000 000');
 
-  UPDATE venue_partners SET visit_rate_cents = 60, contact_name = 'Kai Lee' WHERE id = v.id;
-  PERFORM rep('W2 a worker edits their own venue, rate included',
-    (SELECT visit_rate_cents = 60 AND contact_name = 'Kai Lee' FROM venue_partners WHERE id = v.id));
+  UPDATE venue_partners SET contact_name = 'Kai Lee' WHERE id = v.id;
+  BEGIN
+    UPDATE venue_partners SET visit_rate_cents = 60 WHERE id = v.id;
+    ok := false;
+  EXCEPTION WHEN others THEN ok := position('rate' in SQLERRM) > 0; END;
+  PERFORM rep('W2 a worker edits their venue but not its rate',
+    ok AND (SELECT visit_rate_cents = 10 AND contact_name = 'Kai Lee' FROM venue_partners WHERE id = v.id));
 
   BEGIN
-    UPDATE venue_partners SET approved = false, rejection_reason = 'x' WHERE id = v.id;
+    UPDATE venue_partners SET approved = true WHERE id = v.id;
     ok := false;
-  EXCEPTION WHEN others THEN ok := position('manager' in SQLERRM) > 0; END;
+  EXCEPTION WHEN others THEN ok := position('super admin' in SQLERRM) > 0; END;
   PERFORM rep('W3 a worker can''t approve or reject', ok);
 
   BEGIN
@@ -58,8 +62,39 @@ BEGIN
   EXCEPTION WHEN others THEN ok := true; END;
   PERFORM rep('W5 a worker can''t change roles', ok);
 
+END $$;
+
+-- Meg, a manager, can't approve it either; Rob, the super admin, does.
+DO $$
+DECLARE ok boolean;
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', '14000000-0000-0000-0000-00000000000b', true);
+  PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
   BEGIN
-    INSERT INTO venue_reviews (venue_id, rating, body) VALUES (v.id, 5, 'Reviewing my own venue');
+    UPDATE venue_partners SET approved = true WHERE id = '14000000-0000-0000-0000-0000000000f1';
+    ok := false;
+  EXCEPTION WHEN others THEN ok := position('super admin' in SQLERRM) > 0; END;
+  PERFORM rep('A1 a manager can''t approve', ok);
+  BEGIN
+    PERFORM admin_set_visit_rate(99);
+    ok := false;
+  EXCEPTION WHEN others THEN ok := true; END;
+  PERFORM rep('A2 a manager can''t change the rate', ok);
+
+  PERFORM set_config('request.jwt.claim.sub', '14000000-0000-0000-0000-00000000000a', true);
+  UPDATE venue_partners SET approved = true WHERE id = '14000000-0000-0000-0000-0000000000f1';
+  PERFORM rep('A3 the super admin approves',
+    (SELECT approved FROM venue_partners WHERE id = '14000000-0000-0000-0000-0000000000f1'));
+END $$;
+
+-- Wes can't review the venue he manages, now it's live.
+DO $$
+DECLARE ok boolean;
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', '14000000-0000-0000-0000-00000000000c', true);
+  PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
+  BEGIN
+    INSERT INTO venue_reviews (venue_id, rating, body) VALUES ('14000000-0000-0000-0000-0000000000f1', 5, 'Reviewing my own venue');
     ok := false;
   EXCEPTION WHEN others THEN ok := position('row-level security' in SQLERRM) > 0; END;
   PERFORM rep('W6 a worker can''t review a venue they manage', ok);
@@ -186,13 +221,20 @@ BEGIN
   SELECT e->'sales' INTO wes FROM jsonb_array_elements(admin_team()) e WHERE e->>'email' = 'wes@x.com';
   PERFORM rep('M2 the team shows each worker''s venues, visits, billing and 10% commission',
     (wes->>'clients')::int = 1 AND (wes->>'live')::int = 1 AND (wes->>'visits')::int = 1
-    AND (wes->>'impressions')::int = 1 AND (wes->>'total_billed_cents')::int = 60
-    AND (wes->>'commission_percent')::numeric = 10 AND (wes->>'total_commission_cents')::int = 6
-    AND (wes->>'unpaid_cents')::int = 6);
+    AND (wes->>'impressions')::int = 1 AND (wes->>'total_billed_cents')::int = 10
+    AND (wes->>'commission_percent')::numeric = 10 AND (wes->>'total_commission_cents')::int = 1
+    AND (wes->>'unpaid_cents')::int = 1);
 
+  BEGIN
+    UPDATE venue_partners SET approved = false, rejection_reason = 'Closed down' WHERE id = '14000000-0000-0000-0000-0000000000f1';
+    ok := false;
+  EXCEPTION WHEN others THEN ok := position('super admin' in SQLERRM) > 0; END;
+  PERFORM rep('M3 a manager can''t reject', ok);
+  PERFORM set_config('request.jwt.claim.sub', '14000000-0000-0000-0000-00000000000a', true);
   UPDATE venue_partners SET approved = false, rejection_reason = 'Closed down' WHERE id = '14000000-0000-0000-0000-0000000000f1';
-  PERFORM rep('M3 a manager rejects with a reason',
+  PERFORM rep('M3b the super admin rejects with a reason',
     (SELECT NOT approved AND rejection_reason = 'Closed down' FROM venue_partners WHERE id = '14000000-0000-0000-0000-0000000000f1'));
+  PERFORM set_config('request.jwt.claim.sub', '14000000-0000-0000-0000-00000000000b', true);
 
   BEGIN
     PERFORM admin_set_role('uli@x.com', 'staff');
@@ -226,9 +268,13 @@ DECLARE wes jsonb;
 BEGIN
   PERFORM set_config('request.jwt.claim.sub', '14000000-0000-0000-0000-00000000000a', true);
   PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
-  PERFORM admin_record_payout('14000000-0000-0000-0000-00000000000c', 5, 'Bank transfer');
+  PERFORM admin_record_payout('14000000-0000-0000-0000-00000000000c', 1, 'Bank transfer');
   SELECT e->'sales' INTO wes FROM jsonb_array_elements(admin_team()) e WHERE e->>'email' = 'wes@x.com';
-  PERFORM rep('P1 paid and still owed', (wes->>'paid_cents')::int = 5 AND (wes->>'unpaid_cents')::int = 1);
+  PERFORM rep('P1 paid and still owed', (wes->>'paid_cents')::int = 1 AND (wes->>'unpaid_cents')::int = 0);
+
+  PERFORM admin_set_visit_rate(25);
+  PERFORM rep('P5 the super admin sets one rate for every venue',
+    visit_rate_cents() = 25 AND NOT EXISTS (SELECT 1 FROM venue_partners WHERE visit_rate_cents <> 25));
 
   PERFORM admin_set_role('una@x.com', 'manager');
   PERFORM rep('P2 a super admin makes someone a manager',

@@ -4,8 +4,24 @@
     {
       "source": "/assets/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "open-finds-2.vercel.app"
+        }
+      ],
+      "destination": "https://www.theunsaved.app/:path*",
+      "permanent": false
     }
   ]
 }

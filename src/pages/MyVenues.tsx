@@ -95,7 +95,7 @@ export function MyVenuesPage() {
             {venues.length === 0 ? (
               <div className="rounded-card border border-gold/20 bg-[#111] p-8 text-center">
                 <Store size={28} className="mx-auto mb-3 text-gold/50" />
-                <p className="text-sm text-ink-secondary">No venues yet. Submit your first one: it goes live in the app straight away.</p>
+                <p className="text-sm text-ink-secondary">No venues yet. Submit your first one: it goes live once the super admin approves it.</p>
               </div>
             ) : (
               <section aria-label="Your venues" className="overflow-hidden rounded-card border border-gold/20 bg-[#111]">
@@ -114,9 +114,12 @@ export function MyVenuesPage() {
                             <StatusBadge status={status} />
                           </div>
                         </div>
+                        {status === 'pending' && (
+                          <p className="mt-2 text-xs text-pending">Waiting for the super admin to approve it.</p>
+                        )}
                         {status === 'rejected' && (
                           <p className="mt-2 rounded-card border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-red-200">
-                            Taken down by a manager: {p.rejection_reason}
+                            Rejected by the super admin: {p.rejection_reason}
                           </p>
                         )}
                         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">

@@ -86,15 +86,15 @@ BEGIN
   SELECT * INTO v FROM venue_partners WHERE id = new_id;
   PERFORM rep('A6 staff add a venue with no account',
     v.owner_id IS NULL AND v.business_name = 'Staff Added');
-  -- Since the workers migration, a worker's venue is live at the rate they agreed.
-  PERFORM rep('A7 staff additions go live at their rate',
-    v.approved AND v.visit_rate_cents = 1);
+  -- Since 2026-10-12, every venue waits for the super admin, at the one rate.
+  PERFORM rep('A7 staff additions wait for approval at the standard rate',
+    NOT v.approved AND v.visit_rate_cents = 10);
 
   BEGIN
-    UPDATE venue_partners SET approved = false WHERE id = new_id;
+    UPDATE venue_partners SET approved = true WHERE id = new_id;
     ok := false;
   EXCEPTION WHEN others THEN
-    ok := position('approved' in SQLERRM) > 0;
+    ok := position('approve' in SQLERRM) > 0;
   END;
   PERFORM rep('A8 staff cannot approve', ok);
 
@@ -165,7 +165,7 @@ BEGIN
     UPDATE venue_partners SET visit_rate_cents = 0 WHERE id = '12000000-0000-0000-0000-0000000000f1';
     ok := false;
   EXCEPTION WHEN others THEN
-    ok := position('visit_rate_cents' in SQLERRM) > 0;
+    ok := position('rate' in SQLERRM) > 0;
   END;
   PERFORM rep('A20 owners still cannot set their rate', ok);
   PERFORM rep('A21 owners still see only their own',

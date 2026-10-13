@@ -12,7 +12,7 @@ import {
   type Plan,
   type Stop,
 } from '../lib/supabase';
-import { shareOrCopy } from '../lib/invite';
+import { appBase, shareOrCopy } from '../lib/invite';
 import {
   ChevronLeft,
   CalendarDays,
@@ -115,12 +115,12 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
 
   const handleInvite = async () => {
     const message = `Join my trip "${trip.name}" to ${trip.destination}! ${trip.num_days} day${trip.num_days === 1 ? '' : 's'} of fun. RSVP to each stop here:`;
-    const link = `${window.location.origin}${window.location.pathname}#/trip/${tripId}/rsvp`;
+    const link = `${appBase()}#/trip/${tripId}/rsvp`;
     await shareOrCopy(trip.name, message, link);
   };
 
   const handleShare = async () => {
-    const link = `${window.location.origin}${window.location.pathname}#/trip/${tripId}`;
+    const link = `${appBase()}#/trip/${tripId}`;
     const message = `Check out our trip "${trip.name}" to ${trip.destination}! ${link}`;
     try {
       await navigator.clipboard.writeText(message);

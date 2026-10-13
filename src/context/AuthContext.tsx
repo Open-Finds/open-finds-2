@@ -150,6 +150,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // A role given while the app is open (someone just made a worker) shows up
+  // as soon as they come back to the app, with no need to sign in again.
+  // Only the role: a failed check changes nothing.
+  useEffect(() => {
+    const check = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (!s?.user.id) return;
+      try {
+        const p = await fetchProfile(s.user.id);
+        if (p) setRole(p.role ?? 'user');
+      } catch { /* keep what we have */ }
+    };
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('focus', check);
+    return () => {
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('focus', check);
+    };
+  }, []);
+
   return (
     <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, premiumUnlocked, isVenuePartner, role, passwordRecovery, endPasswordRecovery: () => setPasswordRecovery(false), refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>
       {children}

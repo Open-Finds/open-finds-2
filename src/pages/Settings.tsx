@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins } from 'lucide-react';
-import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isManagerRole, SUBSCRIPTION_PLANS } from '../lib/supabase';
+import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins, Store } from 'lucide-react';
+import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isManagerRole, isTeam, ROLE_LABELS, SUBSCRIPTION_PLANS } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../lib/router';
 import { ScrollHint } from '../components/ScrollHint';
@@ -396,6 +396,23 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             <ChevronRight size={18} />
           </button>
         </section>
+
+        {/* Team: My Venues for workers, managers and the super admin */}
+        {isTeam(role) && (
+          <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+              <Store size={13} /> {ROLE_LABELS[role]}
+            </h2>
+            <p className="mb-4 text-sm text-ink-secondary">Submit venues, see how they're doing, and track your commission.</p>
+            <button
+              onClick={() => navigate('/my-venues')}
+              className="flex w-full items-center justify-between rounded-card border border-gold/40 bg-black/40 px-4 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] hover:bg-gold/10"
+            >
+              <span className="flex items-center gap-2"><Store size={16} /> Open My Venues</span>
+              <ChevronRight size={18} />
+            </button>
+          </section>
+        )}
 
         {/* Admin dashboard: managers and the super admin (workers have My Venues) */}
         {isManagerRole(role) && (

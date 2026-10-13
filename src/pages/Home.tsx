@@ -30,6 +30,7 @@ import { buildInviteMessage, getShareUrl } from '../lib/invite';
 import { locateUser } from '../lib/geolocation';
 import { navigate } from '../lib/router';
 import { HelpTooltip } from '../components/HelpTooltip';
+import { AddressInput } from '../components/AddressInput';
 import { CheckItOut } from '../components/CheckItOut';
 import { HostBadge } from '../components/Shared';
 import { InviteFriendsModal } from '../components/InviteFriendsModal';
@@ -48,6 +49,10 @@ import {
   sortStops,
   hasPremium,
   recordSponsoredEvents,
+  fetchCollections,
+  createCollection,
+  addVenueToCollection,
+  type Collection,
   type SavedVenue,
   type SponsoredVenue,
   type VenueType,
@@ -55,7 +60,7 @@ import {
   type Plan,
   type Stop,
 } from '../lib/supabase';
-import { VenueTypeSelect, TimeSelect } from '../components/ui/select';
+import { AppSelect, VenueTypeSelect, TimeSelect } from '../components/ui/select';
 import {
   UserFacingError,
   discoverSmartVenueCandidates,
@@ -162,6 +167,8 @@ function Logo({ size = 96 }: { size?: number }) {
 
 // Opened by few, so it downloads only when Sponsored Venues is.
 const SponsoredVenuePicker = lazy(() => import('../components/SponsoredVenues').then((m) => ({ default: m.SponsoredVenuePicker })));
+
+const NEW_COLLECTION = '__new';
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
@@ -293,7 +300,10 @@ export function HomePage({
   const [qaType, setQaType] = useState<VenueType>('food');
   const [qaTags, setQaTags] = useState<string[]>([]);
   const [qaTagInput, setQaTagInput] = useState('');
+  // The id of one of the user's collections, NEW_COLLECTION, or '' for none.
   const [qaCollection, setQaCollection] = useState('');
+  const [qaNewCollection, setQaNewCollection] = useState('');
+  const [qaCollections, setQaCollections] = useState<Collection[]>([]);
   const [qaSaving, setQaSaving] = useState(false);
   const [qaError, setQaError] = useState<string | null>(null);
   const [qaSaved, setQaSaved] = useState(false);
@@ -393,6 +403,12 @@ export function HomePage({
     setQaTags(qaTags.filter((t) => t !== tag));
   };
 
+  // The collections to pick from when saving a venue.
+  useEffect(() => {
+    if (page !== 'hero') return;
+    fetchCollections().then(setQaCollections, () => {});
+  }, [page]);
+
   const qaResetForm = () => {
     setQaName('');
     setQaAddress('');
@@ -400,6 +416,7 @@ export function HomePage({
     setQaTags([]);
     setQaTagInput('');
     setQaCollection('');
+    setQaNewCollection('');
     setQaLinkInput('');
     setQaExtractedItems([]);
     setQaSelectedItems(new Set());
@@ -551,8 +568,15 @@ export function HomePage({
         lat: qaExtractedCoords?.lat ?? null,
         lon: qaExtractedCoords?.lon ?? null,
         tags: qaTags,
-        collection: qaCollection.trim() || null,
       });
+      // Into the chosen collection, or a new one made here.
+      let collectionId = qaCollections.some((c) => c.id === qaCollection) ? qaCollection : null;
+      if (qaCollection === NEW_COLLECTION && qaNewCollection.trim()) {
+        const created = await createCollection(qaNewCollection.trim());
+        setQaCollections((prev) => [created, ...prev]);
+        collectionId = created.id;
+      }
+      if (collectionId) await addVenueToCollection(collectionId, saved.id);
       if (!qaExtractedCoords) {
         const coords = await geocodeAddress(qaAddress.trim());
         if (coords) await updateSavedVenueCoords(saved.id, coords.lat, coords.lon);
@@ -1057,11 +1081,12 @@ export function HomePage({
               </div>
               <div className="mb-3">
                 <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Venue address</label>
-                <input
-                  type="text"
+                <AddressInput
                   value={qaAddress}
-                  onChange={(e) => setQaAddress(e.target.value)}
-                  placeholder="Suburb or full address"
+                  onChange={setQaAddress}
+                  placeholder="Start typing an address or venue"
+                  ariaLabel="Venue address"
+                  near={originCoord}
                   className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
                 />
               </div>
@@ -1073,13 +1098,27 @@ export function HomePage({
                 <label className="mb-1.5 block text-sm font-medium text-ink-secondary">
                   Collection <span className="text-ink-secondary/60">(optional)</span>
                 </label>
-                <input
-                  type="text"
-                  value={qaCollection}
-                  onChange={(e) => setQaCollection(e.target.value)}
-                  placeholder="e.g. Bali, Sydney, Activities"
-                  className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                <AppSelect
+                  value={qaCollections.some((c) => c.id === qaCollection) || qaCollection === NEW_COLLECTION ? qaCollection : 'none'}
+                  onChange={(v) => setQaCollection(v === 'none' ? '' : v)}
+                  ariaLabel="Collection"
+                  options={[
+                    { value: 'none', label: 'No collection' },
+                    ...qaCollections.map((c) => ({ value: c.id, label: c.name })),
+                    { value: NEW_COLLECTION, label: '+ New collection…' },
+                  ]}
                 />
+                {qaCollection === NEW_COLLECTION && (
+                  <input
+                    type="text"
+                    value={qaNewCollection}
+                    onChange={(e) => setQaNewCollection(e.target.value)}
+                    placeholder="New collection name, e.g. Bali"
+                    aria-label="New collection name"
+                    autoFocus
+                    className="mt-2 w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                  />
+                )}
               </div>
               <div className="mb-4">
                 <label className="mb-1.5 block text-sm font-medium text-ink-secondary">

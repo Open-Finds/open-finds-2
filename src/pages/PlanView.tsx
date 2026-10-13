@@ -13,7 +13,7 @@ import {
 import { Timeline, RsvpList, BackButton } from '../components/Shared';
 import { InviteFriendsModal } from '../components/InviteFriendsModal';
 import { CalendarDays, MapPin, Send, LayoutDashboard, Smartphone, Share2, UserPlus } from 'lucide-react';
-import { buildInviteMessage, shareOrCopy } from '../lib/invite';
+import { appBase, buildInviteMessage, shareOrCopy } from '../lib/invite';
 
 export function PlanViewPage({ id }: { id: string }) {
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -74,7 +74,7 @@ export function PlanViewPage({ id }: { id: string }) {
 
   const handleInviteFriend = async () => {
     const message = buildInviteMessage(plan);
-    await shareOrCopy(plan.title, message, `${window.location.origin}${window.location.pathname}#/plan/${id}/rsvp`);
+    await shareOrCopy(plan.title, message, `${appBase()}#/plan/${id}/rsvp`);
     setInviteCopied(true);
     setTimeout(() => setInviteCopied(false), 2000);
   };
@@ -203,7 +203,7 @@ export function SharePage({ id }: { id: string }) {
     );
   }
 
-  const shareUrl = `${window.location.origin}${window.location.pathname}#/plan/${id}`;
+  const shareUrl = `${appBase()}#/plan/${id}`;
   const shareMessage = `You're invited to ${plan.title} by ${plan.host_name}! Open here: ${shareUrl}`;
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
 
