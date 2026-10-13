@@ -68,16 +68,16 @@ export function DashboardPage({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <p className="text-ink-secondary">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
   if (!plan) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-center">
-        <p className="text-danger">Plan not found.</p>
-        <button onClick={onBack} className="mt-4 text-gold underline">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">
+        <p className="text-destructive-text">Plan not found.</p>
+        <button onClick={onBack} className="mt-4 text-primary-text underline">
           Go back
         </button>
       </div>
@@ -104,21 +104,21 @@ export function DashboardPage({
   };
 
   return (
-    <div className="relative min-h-screen overflow-y-auto bg-black px-6 pt-20 pb-24">
+    <div className="relative min-h-screen overflow-y-auto bg-background px-6 pt-20 pb-24">
       <button
         onClick={onBack}
         aria-label="Back"
-        className="absolute left-5 top-5 flex items-center justify-center rounded-full text-gold transition-all active:scale-90"
+        className="absolute left-3 top-3 flex size-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted active:scale-95"
       >
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
 
       <div className="mx-auto w-full">
         {/* Header */}
-        <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-5">
-          <h1 className="text-2xl font-bold text-gold">{plan.title}</h1>
-          <p className="mt-2 flex items-center gap-1.5 text-sm text-ink-secondary">
-            <CalendarPlus size={14} className="text-gold/70" />
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h1 className="text-title text-foreground">{plan.title}</h1>
+          <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+            <CalendarPlus size={14} className="text-muted-foreground" />
             {parseLocalDate(plan.date).toLocaleDateString('en-AU', {
               weekday: 'long',
               day: 'numeric',
@@ -129,18 +129,18 @@ export function DashboardPage({
         </div>
 
         {/* Countdown */}
-        <div className="mt-4 rounded-card border border-gold/20 bg-[#1a1a1a] p-4 text-center">
-          <p className="flex items-center justify-center gap-1.5 text-sm text-ink-secondary">
+        <div className="mt-4 rounded-lg border border-border bg-card p-4 text-center">
+          <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
             <Clock size={14} /> Countdown
           </p>
           {event && (
-            <p className="mt-1 text-sm font-semibold text-white">
+            <p className="mt-1 text-sm font-semibold text-foreground">
               {event.start.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
               {' · '}
               {event.start.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}
             </p>
           )}
-          <p className="mt-2 text-xl font-bold text-gold">
+          <p className="mt-2 text-heading text-foreground">
             {!countdown.isPast
               ? `${plural(countdown.days, 'day')}, ${plural(countdown.hours, 'hour')}, ${plural(countdown.minutes, 'minute')}`
               : event && Date.now() < event.end.getTime()
@@ -148,35 +148,35 @@ export function DashboardPage({
                 : 'This event has passed'}
           </p>
           {countdown.isPast && event && Date.now() >= event.end.getTime() && (
-            <p className="mt-1 text-sm text-ink-secondary">Give a review and gain some credits</p>
+            <p className="mt-1 text-sm text-muted-foreground">Give a review and gain some credits</p>
           )}
         </div>
 
         {/* Confirmed count */}
-        <div className="mt-4 flex items-center justify-between rounded-card border border-gold/20 bg-[#1a1a1a] px-4 py-3">
-          <span className="text-sm text-ink-secondary">Confirmed</span>
-          <span className="text-lg font-bold text-gold">
+        <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-card px-4 py-3">
+          <span className="text-sm text-muted-foreground">Confirmed</span>
+          <span className="text-heading text-foreground">
             {confirmedCount}/{rsvps.length} confirmed
           </span>
         </div>
 
         {/* RSVP list */}
         <div className="mt-6">
-          <h2 className="mb-3 text-lg font-semibold text-white">RSVP List</h2>
+          <h2 className="mb-3 text-heading text-foreground">RSVP List</h2>
           {rsvps.length === 0 ? (
-            <p className="text-sm text-ink-secondary">No RSVPs yet.</p>
+            <p className="text-sm text-muted-foreground">No RSVPs yet.</p>
           ) : (
             <ul className="space-y-2">
               {rsvps.map((r) => (
                 <li
                   key={r.id}
-                  className="flex items-center justify-between rounded-xl border border-gold/10 bg-black/40 px-4 py-3"
+                  className="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3"
                 >
                   <div>
-                    <span className="font-medium text-white">{r.name}</span>
+                    <span className="font-medium text-foreground">{r.name}</span>
                     {r.is_host && <HostBadge />}
                     {r.status === 'declined' && r.decline_reason && (
-                      <p className="text-xs text-ink-secondary">"{r.decline_reason}"</p>
+                      <p className="text-xs text-muted-foreground">"{r.decline_reason}"</p>
                     )}
                   </div>
                   {r.status === 'in' && (
@@ -185,12 +185,12 @@ export function DashboardPage({
                     </span>
                   )}
                   {r.status === 'declined' && (
-                    <span className="inline-flex items-center gap-1 text-sm font-medium text-danger">
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-destructive-text">
                       <X size={16} /> Can't make it
                     </span>
                   )}
                   {r.status === 'pending' && (
-                    <span className="inline-flex items-center gap-1 text-sm font-medium text-pending">
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-warning">
                       <Clock3 size={16} /> Pending
                     </span>
                   )}
@@ -202,7 +202,7 @@ export function DashboardPage({
 
         {/* Itinerary */}
         <div className="mt-6">
-          <h2 className="mb-3 text-lg font-semibold text-white">Itinerary</h2>
+          <h2 className="mb-3 text-heading text-foreground">Itinerary</h2>
           <div className="space-y-3">
             {stops.map((stop, i) => (
               <StopCard
@@ -221,20 +221,20 @@ export function DashboardPage({
             href={navUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98]"
+            className="btn-primary w-full"
           >
             <Navigation size={18} /> Open in Maps
           </a>
           <AddToCalendar plan={plan} stops={stops} />
           <button
             onClick={() => setInviteOpen(true)}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-base font-medium text-foreground transition-all active:scale-[0.98]"
           >
             <Smartphone size={18} /> Invite Friends
           </button>
           <button
             onClick={() => setShareOpen(true)}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-base font-medium text-foreground transition-all active:scale-[0.98]"
           >
             <Share2 size={18} /> Share on Social
           </button>

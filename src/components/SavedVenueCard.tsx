@@ -170,41 +170,41 @@ export function SavedVenueCard({
 
   if (isEditing) {
     return (
-      <div className="rounded-card border border-gold/40 bg-[#1a1a1a] p-4">
+      <div className="rounded-lg border border-input bg-card p-4">
         {error && (
-          <p className="mb-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+          <p className="mb-3 rounded-lg border border-destructive-text/30 bg-destructive-soft px-3 py-2 text-xs text-destructive-text">
             {error}
           </p>
         )}
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Name</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
             <input
               type="text"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
-              className="w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none"
+              className="w-full rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Address</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Address</label>
             <AddressInput
               value={editAddress}
               onChange={setEditAddress}
               ariaLabel="Address"
-              className="w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none"
+              className="w-full rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Type</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Type</label>
             <VenueTypeSelect
               value={editType}
               onChange={setEditType}
-              className="rounded-lg border-gold/30 bg-black/50 px-3 py-2 text-sm"
+              className="rounded-lg border-border bg-background px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Tags</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Tags</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -217,12 +217,12 @@ export function SavedVenueCard({
                   }
                 }}
                 placeholder="Add a tag (e.g. pho, pizza)"
-                className="flex-1 rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                className="flex-1 rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
               />
               <button
                 onClick={addTag}
                 type="button"
-                className="flex shrink-0 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 px-3 text-gold transition-all active:scale-90"
+                className="flex shrink-0 items-center justify-center rounded-lg border border-border bg-primary-soft px-3 text-foreground transition-all active:scale-90"
               >
                 <Plus size={16} />
               </button>
@@ -232,13 +232,13 @@ export function SavedVenueCard({
                 {editTags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 text-xs font-medium text-gold"
+                    className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                   >
                     {tag}
                     <button
                       onClick={() => removeTag(tag)}
                       type="button"
-                      className="text-gold/60 transition-colors hover:text-danger"
+                      className="text-muted-foreground transition-colors hover:text-destructive-text"
                     >
                       <X size={11} />
                     </button>
@@ -248,23 +248,23 @@ export function SavedVenueCard({
             )}
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Personal note</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Personal note</label>
             <textarea
               value={editNote}
               onChange={(e) => setEditNote(e.target.value)}
               rows={2}
               placeholder="What should you remember about this place?"
-              className="w-full resize-none rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+              className="w-full resize-none rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             />
           </div>
-          <div className="flex items-center justify-between rounded-lg border border-gold/20 bg-black/30 px-3 py-2">
-            <label className="flex items-center gap-2 text-sm text-white">
-              <input type="checkbox" checked={editVisited} onChange={(e) => setEditVisited(e.target.checked)} className="accent-gold" />
+          <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" checked={editVisited} onChange={(e) => setEditVisited(e.target.checked)} className="accent-primary" />
               Been here
             </label>
             <div className="flex items-center gap-1" aria-label="Rating">
               {[1, 2, 3, 4, 5].map((value) => (
-                <button key={value} type="button" onClick={() => setEditRating(editRating === value ? 0 : value)} className="p-0.5 text-gold transition-transform hover:scale-110">
+                <button key={value} type="button" onClick={() => setEditRating(editRating === value ? 0 : value)} className="p-0.5 text-primary-text transition-transform hover:scale-110">
                   <Star size={16} fill={value <= editRating ? 'currentColor' : 'none'} />
                 </button>
               ))}
@@ -272,7 +272,7 @@ export function SavedVenueCard({
           </div>
           {collections.length > 0 && onToggleCollection && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-ink-secondary">Collections</label>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Collections</label>
               <div className="flex flex-wrap gap-1.5">
                 {collections.map((c) => {
                   const isMember = venueCollectionIds.includes(c.id);
@@ -283,8 +283,8 @@ export function SavedVenueCard({
                       type="button"
                       className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-all active:scale-90 ${
                         isMember
-                          ? 'border-gold bg-gold/20 text-gold'
-                          : 'border-gold/20 bg-black/40 text-ink-secondary hover:border-gold/40'
+                          ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:border-input'
                       }`}
                     >
                       {isMember ? <Check size={10} /> : <Plus size={10} />}
@@ -300,14 +300,14 @@ export function SavedVenueCard({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gold py-2.5 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
+            className="btn-primary btn-sm flex-1"
           >
             <Save size={16} /> {saving ? 'Saving...' : 'Save'}
           </button>
           <button
             onClick={handleCancel}
             disabled={saving}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-secondary/40 bg-transparent py-2.5 text-sm font-medium text-ink-secondary transition-all active:scale-95 disabled:opacity-50"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-transparent py-2.5 text-sm font-medium text-muted-foreground transition-all active:scale-95 disabled:opacity-50"
           >
             <X size={16} /> Cancel
           </button>
@@ -320,8 +320,8 @@ export function SavedVenueCard({
             disabled={saving || deleting}
             className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border py-2.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-50 ${
               confirmDelete
-                ? 'border-danger bg-danger/15 text-danger'
-                : 'border-danger/30 bg-transparent text-danger/80 hover:bg-danger/10'
+                ? 'border-destructive-text bg-destructive-soft text-destructive-text'
+                : 'border-destructive-text/30 bg-transparent text-destructive-text hover:bg-destructive-soft'
             }`}
           >
             <Trash2 size={16} />
@@ -338,49 +338,49 @@ export function SavedVenueCard({
   return (
     <div
       onClick={selectable ? onSelect : undefined}
-      className={`group relative flex items-start gap-3 rounded-card border p-4 transition-all ${
+      className={`group relative flex items-start gap-3 rounded-md border p-4 transition-all ${
         selectable ? 'cursor-pointer active:scale-[0.98]' : ''
       } ${
         isSelected
-          ? 'border-gold bg-gold/10 shadow-gold-glow'
-          : 'border-gold/20 bg-[#1a1a1a] hover:border-gold/50'
+          ? 'border-primary bg-primary-soft'
+          : 'border-border bg-card hover:border-input'
       }`}
     >
       <div className="min-w-0 flex-1">
-        <h3 className="truncate font-semibold text-white">{venue.name}</h3>
-        <p className="mt-1 flex items-center gap-1 text-sm text-ink-secondary">
-          <MapPin size={13} className="text-gold/70" /> {venue.address}
+        <h3 className="truncate font-semibold text-foreground">{venue.name}</h3>
+        <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+          <MapPin size={13} className="text-muted-foreground" /> {venue.address}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {/* Visited, rating and note are the owner's own; other members don't see them. */}
           {!readOnly && venue.visited && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success"><CheckCircle2 size={11} /> Visited</span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success-soft px-2.5 py-0.5 text-xs font-medium text-success"><CheckCircle2 size={11} /> Visited</span>
           )}
           {!readOnly && venue.rating && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs text-gold"><Star size={11} fill="currentColor" /> {venue.rating}/5</span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-foreground"><Star size={11} fill="currentColor" /> {venue.rating}/5</span>
           )}
           {venueCollections.map((c) => (
             <span
               key={c.id}
-              className="inline-flex items-center gap-1 rounded-full border border-gold/40 bg-gold/15 px-2.5 py-0.5 text-xs font-bold text-gold"
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-bold text-primary-soft-foreground"
             >
               <Folder size={10} /> {c.name}
             </span>
           ))}
-          <span className="inline-flex items-center rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs font-medium text-gold">
+          <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
             {TYPE_LABELS[venue.type as VenueType] ?? venue.type}
           </span>
           {tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-0.5 rounded-full border border-gold/20 bg-black/40 px-2 py-0.5 text-xs text-gold/80"
+              className="inline-flex items-center gap-0.5 rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground"
             >
-              <Tag size={9} className="text-gold/50" />
+              <Tag size={9} className="text-muted-foreground" />
               {tag}
             </span>
           ))}
         </div>
-        {!readOnly && venue.personal_note && <p className="mt-2 line-clamp-2 text-xs italic text-ink-secondary">“{venue.personal_note}”</p>}
+        {!readOnly && venue.personal_note && <p className="mt-2 line-clamp-2 text-xs italic text-muted-foreground">“{venue.personal_note}”</p>}
         <CheckItOut link={venue.link} variant="pill" className="mt-2" />
         {readOnly && onSaveToMine && (
           savedToMine ? (
@@ -396,7 +396,7 @@ export function SavedVenueCard({
                 try { await onSaveToMine(); } finally { setSavingToMine(false); }
               }}
               disabled={savingToMine}
-              className="mt-3 flex w-fit items-center gap-1.5 rounded-card border border-gold/50 px-3 py-1.5 text-xs font-bold text-gold transition-all hover:bg-gold/10 active:scale-95 disabled:opacity-50"
+              className="mt-3 flex w-fit items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-muted active:scale-95 disabled:opacity-50"
             >
               <Plus size={13} /> {savingToMine ? 'Saving…' : 'Save to my venues'}
             </button>
@@ -409,12 +409,12 @@ export function SavedVenueCard({
           handleEdit();
         }}
         aria-label="Edit venue"
-        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-gold/30 bg-black/40 text-gold transition-all hover:bg-gold/20 active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-primary-text transition-all hover:bg-muted active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
       >
         <Pencil size={14} />
       </button>}
       {isSelected && (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>

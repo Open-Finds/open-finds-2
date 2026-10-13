@@ -17,7 +17,6 @@ import {
   RefreshCw,
   Dice5,
   Building2,
-  Wand2,
   LocateFixed,
   Plus,
   Tag,
@@ -25,6 +24,7 @@ import {
   Compass,
   Crown,
   Search,
+  CalendarPlus,
 } from 'lucide-react';
 import { buildInviteMessage, getShareUrl } from '../lib/invite';
 import { locateUser } from '../lib/geolocation';
@@ -159,8 +159,7 @@ function Logo({ size = 96 }: { size?: number }) {
       src="/the-unsaved-mark.png"
       width={size}
       height={size}
-      alt="The Unsaved logo"
-      className="drop-shadow-[0_0_24px_rgba(255,140,60,0.35)]"
+      alt=""
     />
   );
 }
@@ -175,7 +174,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       aria-label="Back"
-      className="absolute left-5 top-5 flex items-center justify-center rounded-full text-gold transition-all active:scale-90"
+      className="absolute left-3 top-3 flex size-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted active:scale-95"
     >
       <ChevronLeft size={28} strokeWidth={2.5} />
     </button>
@@ -196,11 +195,7 @@ function NextButton({
       <button
         onClick={onClick}
         disabled={disabled}
-        className={`flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card px-6 py-3.5 text-base font-bold shadow-gold-glow transition-all duration-200 active:scale-[0.98] ${
-          disabled
-            ? 'cursor-not-allowed border border-gold/25 bg-[#1c1808] text-gold/50 shadow-none'
-            : 'bg-gold text-black'
-        }`}
+        className="btn-primary btn-lg w-full shadow-2"
       >
         {label} {!disabled && <ChevronRight size={20} />}
       </button>
@@ -220,8 +215,8 @@ function TravelSlider({
   return (
     <div className="mt-2">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-medium text-gold">Travel time?</span>
-        <span className="flex items-center gap-1 text-sm font-bold text-gold">
+        <span className="text-sm font-medium text-foreground">Travel time?</span>
+        <span className="flex items-center gap-1 text-sm font-bold text-foreground">
           <Clock size={14} /> {value >= 240 ? '240+ min' : `${value} min`}
         </span>
       </div>
@@ -232,19 +227,19 @@ function TravelSlider({
         step={5}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="slider-gold w-full"
+        className="slider-primary w-full"
       />
       <div className="mt-2 flex justify-between px-0.5">
         {ticks.map((t) => (
           <span
             key={t}
-            className={`text-[10px] ${value >= t ? 'text-gold' : 'text-ink-secondary/50'}`}
+            className={`text-xs ${value >= t ? 'text-foreground' : 'text-muted-foreground'}`}
           >
             {t === 240 ? '240+' : t}
           </span>
         ))}
       </div>
-      <p className="mt-1 text-xs text-ink-secondary">Max drive from your starting point</p>
+      <p className="mt-1 text-xs text-muted-foreground">Max drive from your starting point</p>
     </div>
   );
 }
@@ -941,75 +936,64 @@ export function HomePage({
   /* ── PAGE: HERO ── */
   if (page === 'hero') {
     return (
-      <div className="relative flex min-h-screen flex-col items-center overflow-y-auto bg-black px-6 pb-28 pt-16 text-center">
+      <div className="relative flex min-h-screen flex-col items-center overflow-y-auto bg-background px-6 pb-28 pt-16 text-center">
         {dupDialog}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(ellipse at center, #1a1207 0%, #0a0a0a 55%, #000000 100%)',
-          }}
-        />
         <div className="relative z-10 flex w-full max-w-md flex-col items-center">
-          <Logo size={104} />
-          <h1 className="mt-5 text-3xl font-bold tracking-[0.3em] text-white">
-            THE UNSAVED
-          </h1>
-          <p className="mt-3 text-base font-medium text-gold">
-            Turn reels into real life!
-          </p>
+          <Logo size={88} />
+          <h1 className="mt-4 text-display text-foreground">The Unsaved</h1>
+          <p className="mt-2 text-body text-muted-foreground">Turn reels into real life!</p>
 
           {/* Primary actions — inline so they never cover the form below */}
           <div className="mt-6 flex w-full flex-col gap-3">
             <button
               data-tour="plan-night"
               onClick={() => setPage('occasion')}
-              className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card bg-gold px-10 py-3.5 text-lg font-bold text-black shadow-gold-glow transition-all duration-200 active:scale-[0.98]"
+              className="btn-secondary btn-lg w-full"
             >
-              <Sparkles size={20} /> Start Planning
+              <CalendarPlus size={20} /> Start Planning
             </button>
             {TRIPS_ENABLED && <button
               // Trips are Premium; without it, the button shows the plans.
               onClick={() => navigate(hasPremium(subscriptionTier, premiumUnlocked) ? '/trip-setup' : '/subscription')}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border-2 border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all duration-200 active:scale-[0.98] hover:border-gold hover:bg-gold/10"
+              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border-2 border-input bg-background px-6 py-3 text-base font-medium text-foreground transition-all duration-200 active:scale-[0.98] hover:border-input hover:bg-muted"
             >
               <Compass size={20} /> Plan a Trip
-              <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gold">
+              <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary-soft-foreground">
                 <Crown size={10} /> Premium
               </span>
             </button>}
           </div>
 
           {qaSaved && (
-            <div className="mt-5 flex w-full items-center justify-center gap-2 rounded-card border border-success/30 bg-success/10 px-4 py-3 text-sm font-medium text-success animate-fade-in">
+            <div className="mt-5 flex w-full items-center justify-center gap-2 rounded-md border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success animate-fade-in">
               <Check size={18} /> Venue saved! Find it in your Venues tab.
             </div>
           )}
 
           {/* Link extraction bar */}
-          <div data-tour="save-venue" className="mt-6 w-full rounded-card border border-gold/20 bg-[#0d0d0d] p-5 text-left">
+          <div data-tour="save-venue" className="mt-6 w-full rounded-lg border border-border bg-card p-5 text-left">
             {qaError && (
-              <p className="mb-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+              <p className="mb-4 rounded-lg border border-destructive-text/30 bg-destructive-soft px-3 py-2 text-xs text-destructive-text">
                 {qaError}
               </p>
             )}
-            <label className="mb-2 block text-sm font-medium text-ink-secondary">
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
               Paste a link to extract venue details
             </label>
             <div className="relative">
-              <Link2 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold" size={18} />
+              <Link2 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <input
                 type="url"
                 value={qaLinkInput}
                 onChange={(e) => setQaLinkInput(e.target.value)}
                 placeholder="https://instagram.com/..."
-                className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-12 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
               />
             </div>
             <button
               onClick={() => void qaHandleExtract()}
               disabled={qaExtracting}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/40 py-2.5 text-sm font-bold text-gold transition-all active:scale-[0.98] disabled:opacity-50"
+              className="btn-ai mt-3 w-full"
             >
               {qaExtracting ? (
                 <><Loader2 size={18} className="animate-spin" /> Extracting...</>
@@ -1021,12 +1005,12 @@ export function HomePage({
 
           {/* Multi-venue extraction results */}
           {qaExtractedItems.length > 1 && (
-            <div className="mt-3 w-full rounded-card border border-gold/20 bg-[#0d0d0d] p-4 text-left">
+            <div className="mt-3 w-full rounded-lg border border-border bg-card p-4 text-left">
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-gold">
+                <p className="text-sm font-semibold text-foreground">
                   {qaExtractedItems.length} venues found
                 </p>
-                <span className="text-xs text-ink-secondary">Tap to select</span>
+                <span className="text-xs text-muted-foreground">Tap to select</span>
               </div>
               <div className="space-y-2">
                 {qaExtractedItems.map((item, idx) => {
@@ -1036,15 +1020,15 @@ export function HomePage({
                       key={idx}
                       onClick={() => qaToggleItem(idx)}
                       className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all active:scale-[0.98] ${
-                        isSelected ? 'border-gold bg-gold/10' : 'border-gold/10 bg-black/20 opacity-60'
+                        isSelected ? 'border-primary bg-primary-soft' : 'border-border bg-background opacity-60'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-white">{item.name}</p>
-                        <p className="truncate text-xs text-ink-secondary">{item.address}</p>
+                        <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{item.address}</p>
                       </div>
                       <div className={`flex h-5 w-5 items-center justify-center rounded border transition-all ${
-                        isSelected ? 'border-gold bg-gold text-black' : 'border-gold/30 bg-transparent'
+                        isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-transparent'
                       }`}>
                         {isSelected && <Check size={14} strokeWidth={3} />}
                       </div>
@@ -1055,7 +1039,7 @@ export function HomePage({
               <button
                 onClick={qaHandleSaveMulti}
                 disabled={qaSavingMulti || qaSelectedItems.size === 0}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-40"
+                className="btn-primary mt-4 w-full"
               >
                 {qaSavingMulti ? (
                   <><Loader2 size={18} className="animate-spin" /> Saving...</>
@@ -1068,19 +1052,19 @@ export function HomePage({
 
           {/* Manual entry form — only when not showing multi-venue results */}
           {qaExtractedItems.length <= 1 && (
-            <div className="mt-3 w-full rounded-card border border-gold/20 bg-[#0d0d0d] p-5 text-left">
+            <div className="mt-3 w-full rounded-lg border border-border bg-card p-5 text-left">
               <div className="mb-3">
-                <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Venue name</label>
+                <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Venue name</label>
                 <input
                   type="text"
                   value={qaName}
                   onChange={(e) => setQaName(e.target.value)}
                   placeholder="e.g. Brazico Churrasco"
-                  className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                  className="w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                 />
               </div>
               <div className="mb-3">
-                <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Venue address</label>
+                <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Venue address</label>
                 <AddressInput
                   value={qaAddress}
                   // A retyped address is somewhere else: its old coordinates go.
@@ -1093,16 +1077,16 @@ export function HomePage({
                   placeholder="Start typing an address or venue"
                   ariaLabel="Venue address"
                   near={originCoord}
-                  className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                  className="w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                 />
               </div>
               <div className="mb-3">
-                <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Type</label>
+                <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Type</label>
                 <VenueTypeSelect value={qaType} onChange={setQaType} />
               </div>
               <div className="mb-3">
-                <label className="mb-1.5 block text-sm font-medium text-ink-secondary">
-                  Collection <span className="text-ink-secondary/60">(optional)</span>
+                <label className="mb-1.5 block text-sm font-medium text-muted-foreground">
+                  Collection <span className="text-muted-foreground">(optional)</span>
                 </label>
                 <AppSelect
                   value={qaCollections.some((c) => c.id === qaCollection) || qaCollection === NEW_COLLECTION ? qaCollection : 'none'}
@@ -1122,13 +1106,13 @@ export function HomePage({
                     placeholder="New collection name, e.g. Bali"
                     aria-label="New collection name"
                     autoFocus
-                    className="mt-2 w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                    className="mt-2 w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                   />
                 )}
               </div>
               <div className="mb-4">
-                <label className="mb-1.5 block text-sm font-medium text-ink-secondary">
-                  Tags <span className="text-ink-secondary/60">(optional)</span>
+                <label className="mb-1.5 block text-sm font-medium text-muted-foreground">
+                  Tags <span className="text-muted-foreground">(optional)</span>
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -1142,12 +1126,12 @@ export function HomePage({
                       }
                     }}
                     placeholder="Add a tag (e.g. pho, pizza)"
-                    className="flex-1 rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                    className="flex-1 rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                   />
                   <button
                     onClick={qaAddTag}
                     type="button"
-                    className="flex shrink-0 items-center justify-center rounded-card border border-gold/30 bg-gold/10 px-4 text-gold transition-all active:scale-90"
+                    className="flex shrink-0 items-center justify-center rounded-md border border-border bg-primary-soft px-4 text-foreground transition-all active:scale-90"
                   >
                     <Plus size={18} />
                   </button>
@@ -1157,14 +1141,14 @@ export function HomePage({
                     {qaTags.map((tag) => (
                       <span
                         key={tag}
-                        className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 text-xs font-medium text-gold"
+                        className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                       >
-                        <Tag size={9} className="text-gold/50" />
+                        <Tag size={9} className="text-muted-foreground" />
                         {tag}
                         <button
                           onClick={() => qaRemoveTag(tag)}
                           type="button"
-                          className="text-gold/60 transition-colors hover:text-danger"
+                          className="text-muted-foreground transition-colors hover:text-destructive-text"
                         >
                           <X size={11} />
                         </button>
@@ -1176,7 +1160,7 @@ export function HomePage({
               <button
                 onClick={handleQuickAddSave}
                 disabled={qaSaving}
-                className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3.5 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-40"
+                className="btn-primary btn-lg w-full"
               >
                 {qaSaving ? 'Saving...' : 'Save Venue'}
               </button>
@@ -1191,24 +1175,24 @@ export function HomePage({
   if (page === 'occasion') {
     const canProceed = eventName.trim() && eventDate;
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-44">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-background px-6 pt-20 pb-44">
         <BackButton onClick={() => setPage('hero')} />
         <div className="flex w-full flex-1 flex-col justify-center">
-          <h2 className="mb-8 text-3xl font-bold text-gold">What's the occasion?</h2>
+          <h2 className="mb-8 text-title text-foreground">What's the occasion?</h2>
           <input
             type="text"
             value={eventName}
             onChange={(e) => setEventName(e.target.value)}
             placeholder="Event name"
-            className="w-full rounded-card border border-gold/40 bg-black/60 px-4 py-3.5 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/50"
+            className="w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3.5 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <input
             type="date"
             value={eventDate}
             onChange={(e) => setEventDate(e.target.value)}
-            className="mt-4 w-full rounded-card border border-gold/40 bg-black/60 px-4 py-3.5 text-white focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/50 [color-scheme:dark]"
+            className="mt-4 w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3.5 text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring [color-scheme:dark]"
           />
-          <p className="mt-3 text-sm text-ink-secondary">
+          <p className="mt-3 text-sm text-muted-foreground">
             Choose a date for your night out
           </p>
         </div>
@@ -1221,8 +1205,8 @@ export function HomePage({
   if (page === 'planMyNight') {
     if (loadingEdit) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-black">
-          <p className="text-sm text-gold">Loading plan...</p>
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <p className="text-sm text-foreground">Loading plan...</p>
         </div>
       );
     }
@@ -1230,14 +1214,14 @@ export function HomePage({
       { key: 'randomNight', icon: Dice5, title: 'Curate a Random Night', desc: 'Pick from your saved venues by vibe & travel time' },
       { key: 'savedVenuesSelect', icon: FolderOpen, title: 'From Saved Venues', desc: 'Choose up to 3 venues from your list' },
       { key: 'sponsored', icon: Building2, title: 'Sponsored Venues', desc: 'Discover businesses near you' },
-      { key: 'somethingNew', icon: Wand2, title: 'Something New', desc: 'AI finds venues matching your taste' },
+      { key: 'somethingNew', icon: Sparkles, title: 'Something New', desc: 'AI finds venues matching your taste' },
     ] as const;
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-24">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-background px-6 pt-20 pb-24">
         <BackButton onClick={() => (editPlanId && onCancelEdit ? onCancelEdit() : setPage('occasion'))} />
         <div className="flex w-full flex-1 flex-col justify-center">
-          <h2 className="mb-2 text-3xl font-bold text-gold">Plan My Night</h2>
-          <p className="mb-6 text-sm text-ink-secondary">How do you want to build your night out?</p>
+          <h2 className="mb-2 text-title text-foreground">Plan My Night</h2>
+          <p className="mb-6 text-sm text-muted-foreground">How do you want to build your night out?</p>
           <div className="space-y-3">
             {choiceButtons.map((btn) => {
               const Icon = btn.icon;
@@ -1245,16 +1229,17 @@ export function HomePage({
                 <button
                   key={btn.key}
                   onClick={() => setPage(btn.key)}
-                  className="flex w-full items-center gap-4 rounded-card border border-gold/30 bg-black/40 p-4 text-left transition-all active:scale-[0.98] hover:border-gold/60"
+                  className="flex w-full items-center gap-4 rounded-lg border border-border bg-card p-4 text-left shadow-1 transition-colors hover:border-input hover:bg-muted/50 active:scale-[0.98]"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-gold/10">
-                    <Icon size={22} className="text-gold" />
+                  {/* Violet marks the AI-powered way in; the rest stay neutral. */}
+                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${btn.key === 'somethingNew' ? 'bg-ai-soft text-ai-soft-foreground' : 'bg-muted text-muted-foreground'}`}>
+                    <Icon size={22} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-white">{btn.title}</p>
-                    <p className="text-xs text-ink-secondary">{btn.desc}</p>
+                    <p className="text-subheading text-foreground">{btn.title}</p>
+                    <p className="text-small text-muted-foreground">{btn.desc}</p>
                   </div>
-                  <ChevronRight size={20} className="text-gold/50" />
+                  <ChevronRight size={20} className="text-muted-foreground" />
                 </button>
               );
             })}
@@ -1267,22 +1252,22 @@ export function HomePage({
   /* ── PAGE: RANDOM NIGHT (4a) ── */
   if (page === 'randomNight') {
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-44">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-background px-6 pt-20 pb-44">
         <BackButton onClick={() => setPage('planMyNight')} />
         <div className="flex w-full flex-1 flex-col justify-center">
-          <h2 className="mb-6 text-3xl font-bold text-gold">Curate a Random Night</h2>
-          <p className="mb-4 text-sm text-ink-secondary">Pick your vibes and we'll randomly select from your saved venues.</p>
-          <div className="flex justify-center gap-3">
+          <h2 className="mb-6 text-title text-foreground">Curate a Random Night</h2>
+          <p className="mb-4 text-sm text-muted-foreground">Pick your vibes and we'll randomly select from your saved venues.</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(Object.keys(VIBE_LABELS) as Vibe[]).map((vibe) => {
               const selected = selectedVibes.includes(vibe);
               return (
                 <button
                   key={vibe}
                   onClick={() => toggleVibe(vibe)}
-                  className={`flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-card border px-3 py-3 text-sm font-semibold transition-all duration-200 active:scale-95 ${
+                  className={`flex min-h-11 items-center justify-center gap-2 rounded-md border px-3 text-small transition-colors active:scale-95 ${
                     selected
-                      ? 'border-gold bg-gold text-black shadow-gold-glow'
-                      : 'border-gold/30 bg-black/50 text-gold hover:border-gold/60'
+                      ? 'border-transparent bg-primary-soft text-primary-soft-foreground'
+                      : 'border-border bg-muted text-foreground hover:border-input'
                   }`}
                 >
                   <span className="text-lg">{VIBE_LABELS[vibe].icon}</span>
@@ -1291,13 +1276,13 @@ export function HomePage({
               );
             })}
           </div>
-          <p className="mt-2 text-center text-xs text-ink-secondary">Select 1–3 options</p>
+          <p className="mt-2 text-center text-xs text-muted-foreground">Select 1–3 options</p>
           {selectedVibes.length > 0 && (
             <div className="mt-6">
               <TravelSlider value={travelTime} onChange={setTravelTime} />
             </div>
           )}
-          <label className="mt-6 block text-sm font-medium text-gold">📍 Where from?</label>
+          <label className="mt-6 block text-sm font-medium text-foreground">📍 Where from?</label>
           <div className="mt-2 flex gap-2">
             <input
               type="text"
@@ -1307,38 +1292,38 @@ export function HomePage({
                 if (e.target.value.trim()) setOriginCoord(null);
               }}
               placeholder={originCoord ? 'Using your location' : 'Suburb or postcode'}
-              className={`flex-1 rounded-card border bg-black/60 px-4 py-3.5 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/50 ${
-                originCoord ? 'border-gold/50' : 'border-gold/40'
+              className={`flex-1 rounded-md border bg-card dark:bg-background px-4 py-3.5 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring ${
+                originCoord ? 'border-input' : 'border-input'
               }`}
             />
             <button
               onClick={handleUseMyLocation}
               disabled={locating}
               aria-label="Use my location"
-              className={`flex shrink-0 items-center justify-center rounded-card border px-4 py-3.5 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 ${
+              className={`flex shrink-0 items-center justify-center rounded-md border px-4 py-3.5 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 ${
                 originCoord
-                  ? 'border-gold bg-gold/15 text-gold'
-                  : 'border-gold/30 bg-black/60 text-gold hover:bg-gold/10'
+                  ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                  : 'border-border bg-background text-primary-text hover:bg-muted'
               }`}
             >
               {locating ? <Loader2 size={18} className="animate-spin" /> : <LocateFixed size={18} />}
             </button>
           </div>
           {originCoord && (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-gold/70">
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
               <MapPin size={12} /> Location set to your current position
             </p>
           )}
           {locationError && (
-            <p className="mt-2 text-xs text-danger">{locationError}</p>
+            <p className="mt-2 text-xs text-destructive-text">{locationError}</p>
           )}
           {randomNightError && (
-            <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
               {randomNightError}
             </p>
           )}
           {createError && (
-            <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
               {createError}
             </p>
           )}
@@ -1379,35 +1364,35 @@ export function HomePage({
             .some((f) => f.toLowerCase().includes(q)))
       : savedVenueList;
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-44">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-background px-6 pt-20 pb-44">
         <BackButton onClick={() => setPage('planMyNight')} />
         <div className="flex w-full flex-1 flex-col justify-center">
-          <h2 className="mb-2 text-3xl font-bold text-gold">From Saved Venues</h2>
-          <p className="mb-4 text-sm text-ink-secondary">Select up to 3 venues from your list.</p>
+          <h2 className="mb-2 text-title text-foreground">From Saved Venues</h2>
+          <p className="mb-4 text-sm text-muted-foreground">Select up to 3 venues from your list.</p>
           {savedVenueListLoading ? (
-            <p className="py-8 text-center text-sm text-ink-secondary">Loading...</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>
           ) : savedVenueList.length === 0 ? (
             <div className="py-8 text-center">
-              <p className="mb-2 text-sm text-ink-secondary">No saved venues yet.</p>
-              <p className="text-xs text-ink-secondary">Add venues from the Add Venue tab first.</p>
+              <p className="mb-2 text-sm text-muted-foreground">No saved venues yet.</p>
+              <p className="text-xs text-muted-foreground">Add venues from the Add Venue tab first.</p>
             </div>
           ) : (
             <>
               {/* Search by name, suburb, tag or type; picks stay picked while filtering. */}
               <div className="relative mb-3">
-                <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/50" size={18} />
+                <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                 <input
                   type="search"
                   value={savedVenueSearch}
                   onChange={(e) => setSavedVenueSearch(e.target.value)}
                   placeholder="Search your venues…"
                   aria-label="Search your venues"
-                  className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                  className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-12 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                 />
               </div>
-              <p className="mb-3 text-xs font-medium text-gold">{savedVenueSelectedIds.size}/3 selected</p>
+              <p className="mb-3 text-xs font-medium text-foreground">{savedVenueSelectedIds.size}/3 selected</p>
               {shownSavedVenues.length === 0 && (
-                <p className="py-6 text-center text-sm text-ink-secondary">No saved venues match "{savedVenueSearch.trim()}".</p>
+                <p className="py-6 text-center text-sm text-muted-foreground">No saved venues match "{savedVenueSearch.trim()}".</p>
               )}
               <div className="space-y-3">
                 {shownSavedVenues.map((v) => {
@@ -1415,21 +1400,21 @@ export function HomePage({
                   return (
                     <div
                       key={v.id}
-                      className={`flex w-full items-start gap-3 rounded-card border p-4 text-left transition-all active:scale-[0.98] ${
+                      className={`flex w-full items-start gap-3 rounded-md border p-4 text-left transition-all active:scale-[0.98] ${
                         isSelected
-                          ? 'border-gold bg-gold/10 shadow-gold-glow'
-                          : 'border-gold/20 bg-[#1a1a1a] hover:border-gold/50'
+                          ? 'border-primary bg-primary-soft'
+                          : 'border-border bg-card hover:border-input'
                       }`}
                     >
                       <button
                         onClick={() => toggleSavedSelect(v.id)}
                         className="min-w-0 flex-1 text-left"
                       >
-                        <h3 className="truncate font-semibold text-white">{v.name}</h3>
-                        <p className="mt-1 flex items-center gap-1 text-sm text-ink-secondary">
-                          <MapPin size={13} className="text-gold/70" /> {v.address}
+                        <h3 className="truncate font-semibold text-foreground">{v.name}</h3>
+                        <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                          <MapPin size={13} className="text-muted-foreground" /> {v.address}
                         </p>
-                        <span className="mt-2 inline-flex items-center rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs font-medium text-gold">
+                        <span className="mt-2 inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
                           {VIBE_LABELS[v.type as Vibe]?.label ?? v.type}
                         </span>
                       </button>
@@ -1439,13 +1424,13 @@ export function HomePage({
                         rel="noopener noreferrer"
                         aria-label={`View ${v.name} on Google Maps`}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-gold/5 text-gold transition-all active:scale-90 hover:bg-gold/15"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-foreground transition-all active:scale-90 hover:bg-muted"
                       >
                         <MapPin size={15} />
                       </a>
                       {isSelected && (
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold">
-                          <Check size={14} className="text-black" />
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary">
+                          <Check size={14} className="text-primary-foreground" />
                         </div>
                       )}
                     </div>
@@ -1456,7 +1441,7 @@ export function HomePage({
           )}
         </div>
         {createError && (
-          <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+          <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
             {createError}
           </p>
         )}
@@ -1486,17 +1471,17 @@ export function HomePage({
       if (planId) void recordSponsoredEvents(sponsoredPicked.map((v) => v.id), 'saved', planId);
     };
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-44">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-background px-6 pt-20 pb-44">
         <BackButton onClick={() => setPage('planMyNight')} />
         <div className="flex w-full flex-1 flex-col justify-center">
-          <h2 className="mb-2 flex items-center gap-2 text-3xl font-bold text-gold"><Building2 size={26} /> Sponsored Venues</h2>
-          <p className="mb-4 text-sm text-ink-secondary">Local businesses on The Unsaved. Pick up to 3 for your night, or tap one for its reviews. Reviewing a venue earns you a credit.</p>
-          <Suspense fallback={<div className="flex justify-center py-10"><Loader2 size={22} className="animate-spin text-gold" /></div>}>
+          <h2 className="mb-2 flex items-center gap-2 text-title text-foreground"><Building2 size={26} /> Sponsored Venues</h2>
+          <p className="mb-4 text-sm text-muted-foreground">Local businesses on The Unsaved. Pick up to 3 for your night, or tap one for its reviews. Reviewing a venue earns you a credit.</p>
+          <Suspense fallback={<div className="flex justify-center py-10"><Loader2 size={22} className="animate-spin text-muted-foreground" /></div>}>
             <SponsoredVenuePicker selected={picked} onToggle={toggleSponsored} origin={originCoord} />
           </Suspense>
         </div>
         {createError && (
-          <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+          <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
             {createError}
           </p>
         )}
@@ -1517,23 +1502,23 @@ export function HomePage({
       await buildAndCreatePlan(discoveredVenues.map((v) => ({ name: v.name, address: v.address, type: v.type, vibe_link: v.vibe_link })));
     };
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-44">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-background px-6 pt-20 pb-44">
         {dupDialog}
         <BackButton onClick={() => setPage('planMyNight')} />
         <div className="flex w-full flex-1 flex-col justify-center">
-          <h2 className="mb-2 text-3xl font-bold text-gold">Something New</h2>
-          <p className="mb-4 text-sm text-ink-secondary">Our AI finds venues near you that match your taste, learning from your saved venues.</p>
-          <div className="flex justify-center gap-3">
+          <h2 className="mb-2 text-title text-foreground">Something New</h2>
+          <p className="mb-4 text-sm text-muted-foreground">Our AI finds venues near you that match your taste, learning from your saved venues.</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(Object.keys(VIBE_LABELS) as Vibe[]).map((vibe) => {
               const selected = selectedVibes.includes(vibe);
               return (
                 <button
                   key={vibe}
                   onClick={() => toggleVibe(vibe)}
-                  className={`flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-card border px-3 py-3 text-sm font-semibold transition-all duration-200 active:scale-95 ${
+                  className={`flex min-h-11 items-center justify-center gap-2 rounded-md border px-3 text-small transition-colors active:scale-95 ${
                     selected
-                      ? 'border-gold bg-gold text-black shadow-gold-glow'
-                      : 'border-gold/30 bg-black/50 text-gold hover:border-gold/60'
+                      ? 'border-transparent bg-primary-soft text-primary-soft-foreground'
+                      : 'border-border bg-muted text-foreground hover:border-input'
                   }`}
                 >
                   <span className="text-lg">{VIBE_LABELS[vibe].icon}</span>
@@ -1542,7 +1527,7 @@ export function HomePage({
               );
             })}
           </div>
-          <p className="mt-2 text-center text-xs text-ink-secondary">Select 1–3 options</p>
+          <p className="mt-2 text-center text-xs text-muted-foreground">Select 1–3 options</p>
           {selectedVibes.length > 0 && (
             <div className="mt-6">
               <TravelSlider value={travelTime} onChange={setTravelTime} />
@@ -1551,7 +1536,7 @@ export function HomePage({
 
           {/* Dietary filter chips */}
           <div className="mt-5">
-            <p className="mb-2 text-sm font-medium text-gold">Dietary needs?</p>
+            <p className="mb-2 text-sm font-medium text-foreground">Dietary needs?</p>
             <div className="flex flex-wrap gap-2">
               {DIETARY_OPTIONS.map((opt) => {
                 const isSaved = dietaryPreferences.includes(opt.key);
@@ -1570,26 +1555,26 @@ export function HomePage({
                     }}
                     className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 ${
                       isActive
-                        ? 'border-gold bg-gold text-black'
-                        : 'border-gold/30 bg-black/50 text-gold hover:border-gold/60'
+                        ? 'border-transparent bg-primary-soft text-primary-soft-foreground'
+                        : 'border-border bg-muted text-foreground hover:border-input'
                     }`}
                   >
                     {opt.label}
                     {isSaved && !isToggled && (
-                      <span className="ml-0.5 text-[9px] opacity-70">saved</span>
+                      <span className="ml-0.5 text-xs opacity-70">saved</span>
                     )}
                   </button>
                 );
               })}
             </div>
             {dietaryPreferences.length > 0 && (
-              <p className="mt-1.5 text-[11px] text-ink-secondary/70">
+              <p className="mt-1.5 text-xs text-muted-foreground">
                 Your saved preferences are applied automatically. Tap chips to add extra filters for this search.
               </p>
             )}
           </div>
 
-          <label className="mt-6 block text-sm font-medium text-gold">📍 Where from?</label>
+          <label className="mt-6 block text-sm font-medium text-foreground">📍 Where from?</label>
           <div className="mt-2 flex gap-2">
             <input
               type="text"
@@ -1599,63 +1584,63 @@ export function HomePage({
                 if (e.target.value.trim()) setOriginCoord(null);
               }}
               placeholder={originCoord ? 'Using your location' : 'Suburb or postcode'}
-              className={`flex-1 rounded-card border bg-black/60 px-4 py-3.5 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/50 ${
-                originCoord ? 'border-gold/50' : 'border-gold/40'
+              className={`flex-1 rounded-md border bg-card dark:bg-background px-4 py-3.5 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring ${
+                originCoord ? 'border-input' : 'border-input'
               }`}
             />
             <button
               onClick={handleUseMyLocation}
               disabled={locating}
               aria-label="Use my location"
-              className={`flex shrink-0 items-center justify-center rounded-card border px-4 py-3.5 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 ${
+              className={`flex shrink-0 items-center justify-center rounded-md border px-4 py-3.5 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 ${
                 originCoord
-                  ? 'border-gold bg-gold/15 text-gold'
-                  : 'border-gold/30 bg-black/60 text-gold hover:bg-gold/10'
+                  ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                  : 'border-border bg-background text-primary-text hover:bg-muted'
               }`}
             >
               {locating ? <Loader2 size={18} className="animate-spin" /> : <LocateFixed size={18} />}
             </button>
           </div>
           {originCoord && (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-gold/70">
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
               <MapPin size={12} /> Location set to your current position
             </p>
           )}
           {locationError && (
-            <p className="mt-2 text-xs text-danger">{locationError}</p>
+            <p className="mt-2 text-xs text-destructive-text">{locationError}</p>
           )}
           <div className="mt-4">
             <button
               onClick={handleDiscoverNew}
               disabled={newNightLoading || selectedVibes.length === 0 || !effectiveOrigin}
-              className="flex w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/40 py-3 text-sm font-medium text-gold transition-all active:scale-[0.98] disabled:opacity-40"
+              className="btn-ai w-full"
             >
               {newNightLoading ? (
                 <><Loader2 size={18} className="animate-spin" /> Finding venues...</>
               ) : (
-                <><Wand2 size={18} /> Discover Venues</>
+                <><Sparkles size={18} /> Discover Venues</>
               )}
             </button>
           </div>
           {newNightError && (
-            <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
               {newNightError}
             </p>
           )}
           {createError && (
-            <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
               {createError}
             </p>
           )}
           {discoveredVenues.length > 0 && (
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gold">Itinerary preview</p>
+                <p className="text-sm font-medium text-foreground">Itinerary preview</p>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={handleDiscoverNew}
                     disabled={newNightLoading}
-                    className="flex items-center gap-1 text-xs text-ink-secondary transition-colors hover:text-gold disabled:opacity-40"
+                    className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary-text disabled:opacity-40"
                   >
                     <RefreshCw size={12} /> Shuffle
                   </button>
@@ -1670,31 +1655,31 @@ export function HomePage({
                 return (
                 <div
                   key={`${v.name}-${v.address}`}
-                  className="flex items-center gap-3 rounded-card border border-gold/20 bg-[#1a1a1a] p-3"
+                  className="flex items-center gap-3 rounded-lg border border-border bg-card p-3"
                 >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold text-xs font-bold text-gold">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border text-xs font-bold text-foreground">
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-white">{v.name}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{v.name}</p>
                       {newNightDistanceLoading && travel === undefined && (
-                        <span className="shrink-0 text-[10px] text-ink-secondary/60">…</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">…</span>
                       )}
                       {travel && (
-                        <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 text-[10px] font-medium text-gold">
+                        <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
                           {travel} drive
                         </span>
                       )}
                     </div>
-                    <p className="truncate text-xs text-ink-secondary">{v.address}</p>
+                    <p className="truncate text-xs text-muted-foreground">{v.address}</p>
                   </div>
                   <a
                     href={googleMapsUrl(v.name, v.address)}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={`View ${v.name} on Google Maps`}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-gold/5 text-gold transition-all active:scale-90 hover:bg-gold/15"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-foreground transition-all active:scale-90 hover:bg-muted"
                   >
                     <MapPin size={15} />
                   </a>
@@ -1704,8 +1689,8 @@ export function HomePage({
                     aria-label={isSaved ? 'Saved' : `Save ${v.name} to your venues`}
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all active:scale-90 ${
                       isSaved
-                        ? 'border-success bg-success/15 text-success'
-                        : 'border-gold/30 bg-gold/5 text-gold hover:bg-gold/15 disabled:opacity-50'
+                        ? 'border-success bg-success-soft text-success'
+                        : 'border-border bg-primary-soft text-primary-soft-foreground hover:bg-muted disabled:opacity-50'
                     }`}
                   >
                     {isSaving ? (
@@ -1734,13 +1719,13 @@ export function HomePage({
   /* ── PAGE: ITINERARY ── */
   if (page === 'itinerary') {
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-24">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-background px-6 pt-20 pb-24">
         <BackButton onClick={() => setPage('planMyNight')} />
         <div className="w-full">
-          <h2 className="mb-2 text-3xl font-bold text-gold">Your Itinerary</h2>
-          {eventName && <p className="mb-1 text-sm text-white/80">{eventName}</p>}
+          <h2 className="mb-2 text-title text-foreground">Your Itinerary</h2>
+          {eventName && <p className="mb-1 text-sm text-foreground">{eventName}</p>}
           {eventDate && (
-            <p className="mb-6 text-sm text-ink-secondary">
+            <p className="mb-6 text-sm text-muted-foreground">
               {new Date(eventDate).toLocaleDateString('en-AU', {
                 weekday: 'long',
                 day: 'numeric',
@@ -1755,10 +1740,10 @@ export function HomePage({
               return (
                 <div
                   key={timeKey}
-                  className="rounded-card border border-gold/20 bg-[#1a1a1a] p-4"
+                  className="rounded-lg border border-border bg-card p-4"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-gold bg-black text-sm font-bold text-gold">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-border bg-background text-sm font-bold text-foreground">
                       {i + 1}
                     </span>
                     <TimeSelect
@@ -1779,9 +1764,9 @@ export function HomePage({
                       className="min-w-0 flex-1"
                     />
                   </div>
-                  <h3 className="mt-3 text-lg font-bold text-white">{stop.name}</h3>
-                  <p className="mt-1 flex items-center gap-1 text-sm text-ink-secondary">
-                    <MapPin size={14} className="text-gold/70" /> {stop.address}
+                  <h3 className="mt-3 text-heading text-foreground">{stop.name}</h3>
+                  <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                    <MapPin size={14} className="text-muted-foreground" /> {stop.address}
                   </p>
                   {stop.vibe_link && (
                     <div className="mt-3 flex items-center gap-2">
@@ -1798,14 +1783,14 @@ export function HomePage({
             {editPlanId && onNavigateToDashboard && (
               <button
                 onClick={() => onNavigateToDashboard(editPlanId)}
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-base font-medium text-foreground transition-all active:scale-[0.98]"
               >
                 <Check size={18} /> Done
               </button>
             )}
             <button
               onClick={() => setPage('share')}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98]"
+              className="btn-primary w-full"
             >
               Next
             </button>
@@ -1818,26 +1803,26 @@ export function HomePage({
   /* ── PAGE: SHARE ── */
   if (page === 'share') {
     return (
-      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-black px-6 pt-20 pb-24">
+      <div className="relative flex min-h-screen flex-col overflow-y-auto bg-background px-6 pt-20 pb-24">
         <BackButton onClick={() => setPage('itinerary')} />
         <div className="w-full">
-          <h2 className="mb-8 text-3xl font-bold text-gold">Share your plan</h2>
+          <h2 className="mb-8 text-title text-foreground">Share your plan</h2>
 
           <button
             onClick={() => setInviteOpen(true)}
-            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3.5 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98]"
+            className="btn-primary btn-lg w-full"
           >
             <Smartphone size={20} /> Invite Friends
           </button>
-          <p className="mt-1.5 text-center text-xs text-ink-secondary">Friends on The Unsaved get a notification.</p>
+          <p className="mt-1.5 text-center text-xs text-muted-foreground">Friends on The Unsaved get a notification.</p>
 
           <button
             onClick={() => setShareOpen(true)}
-            className="mt-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
+            className="mt-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-base font-medium text-foreground transition-all active:scale-[0.98]"
           >
             <Share2 size={18} /> Share on Social
           </button>
-          <p className="mt-1.5 text-center text-xs text-ink-secondary">A link anyone can open, even without the app.</p>
+          <p className="mt-1.5 text-center text-xs text-muted-foreground">A link anyone can open, even without the app.</p>
 
           {plan && (
             <>
@@ -1854,9 +1839,9 @@ export function HomePage({
 
           {/* Who's Coming — real RSVPs only */}
           <div className="mt-8">
-            <h3 className="mb-3 text-lg font-semibold text-white">Who's Coming</h3>
+            <h3 className="mb-3 text-heading text-foreground">Who's Coming</h3>
             {rsvps.length === 0 ? (
-              <p className="text-sm text-ink-secondary">
+              <p className="text-sm text-muted-foreground">
                 No RSVPs yet. Share the link with your friends.
               </p>
             ) : (
@@ -1864,13 +1849,13 @@ export function HomePage({
                 {rsvps.map((r) => (
                   <li
                     key={r.id}
-                    className="flex items-center justify-between rounded-xl border border-gold/10 bg-black/40 px-4 py-3"
+                    className="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3"
                   >
                     <div>
-                      <span className="font-medium text-white">{r.name}</span>
+                      <span className="font-medium text-foreground">{r.name}</span>
                       {r.is_host && <HostBadge />}
                       {r.status === 'declined' && r.decline_reason && (
-                        <p className="text-xs text-ink-secondary">
+                        <p className="text-xs text-muted-foreground">
                           "{r.decline_reason}"
                         </p>
                       )}
@@ -1881,12 +1866,12 @@ export function HomePage({
                       </span>
                     )}
                     {r.status === 'declined' && (
-                      <span className="inline-flex items-center gap-1 text-sm font-medium text-danger">
+                      <span className="inline-flex items-center gap-1 text-sm font-medium text-destructive-text">
                         <X size={16} /> Can't make it
                       </span>
                     )}
                     {r.status === 'pending' && (
-                      <span className="inline-flex items-center gap-1 text-sm font-medium text-pending">
+                      <span className="inline-flex items-center gap-1 text-sm font-medium text-warning">
                         <Clock3 size={16} /> Pending
                       </span>
                     )}
@@ -1899,7 +1884,7 @@ export function HomePage({
           {plan && (
             <button
               onClick={() => { clearPlanDraft(); onNavigateToDashboard(editPlanId ?? plan.id); }}
-              className="mt-8 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-base font-bold text-gold transition-all active:scale-[0.98]"
+              className="mt-8 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-base font-medium text-foreground transition-all active:scale-[0.98]"
             >
               <LayoutDashboard size={18} /> View Dashboard
             </button>

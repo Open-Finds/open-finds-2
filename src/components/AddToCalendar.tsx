@@ -6,11 +6,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from '@/lib/utils';
 
 const TILE =
-  'flex flex-col items-center justify-center gap-2 rounded-card border border-gold/25 bg-black/40 px-2 py-4 text-sm font-semibold text-white transition-all hover:border-gold/60 hover:bg-gold/10 active:scale-95';
+  'flex flex-col items-center justify-center gap-2 rounded-md border border-border bg-background px-2 py-4 text-sm font-semibold text-foreground transition-all hover:border-input hover:bg-muted active:scale-95';
 
 function Letter({ children, className }: { children: string; className: string }) {
   return (
-    <span aria-hidden="true" className={cn('flex h-10 w-10 items-center justify-center rounded-full text-lg font-black', className)}>
+    <span aria-hidden="true" className={cn('flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold', className)}>
       {children}
     </span>
   );
@@ -45,31 +45,31 @@ export function AddToCalendar({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={cn('btn-secondary flex w-full items-center justify-center gap-2', className)}
+        className={cn('btn-outline flex w-full items-center justify-center gap-2', className)}
       >
         <CalendarPlus size={18} /> Add to Calendar
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-white">Add to Calendar</DialogTitle>
+            <DialogTitle className="text-foreground">Add to Calendar</DialogTitle>
             <DialogDescription>Pick the calendar you use.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-3 gap-3">
             <a href={buildGoogleCalendarUrl(ev)} target="_blank" rel="noopener noreferrer" onClick={close} className={TILE}>
-              <Letter className="bg-white text-[#4285F4]">G</Letter> Google
+              <Letter className="bg-muted text-foreground">G</Letter> Google
             </a>
             <button type="button" onClick={saveIcs} className={TILE}>
-              <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-black">
+              <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground">
                 <Apple size={22} />
               </span>
               Apple
             </button>
             <a href={buildOutlookCalendarUrl(ev)} target="_blank" rel="noopener noreferrer" onClick={close} className={TILE}>
-              <Letter className="bg-[#0078D4] text-white">O</Letter> Outlook
+              <Letter className="bg-muted text-foreground">O</Letter> Outlook
             </a>
           </div>
-          <button type="button" onClick={saveIcs} className="text-xs text-ink-secondary underline-offset-2 hover:text-gold hover:underline">
+          <button type="button" onClick={saveIcs} className="text-xs text-muted-foreground underline-offset-2 hover:text-primary-text hover:underline">
             Another calendar? Download the .ics file
           </button>
         </DialogContent>

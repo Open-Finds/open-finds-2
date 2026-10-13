@@ -267,7 +267,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 size={32} className="animate-spin text-gold" />
+        <Loader2 size={32} className="animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -275,8 +275,8 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
   if (error || !plan || !trip) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger">{error ?? 'Day not found.'}</p>
-        <button onClick={() => navigate(`/trip/${tripId}`)} className="btn-secondary mt-4">
+        <p className="text-destructive-text">{error ?? 'Day not found.'}</p>
+        <button onClick={() => navigate(`/trip/${tripId}`)} className="btn-outline mt-4">
           Back to trip
         </button>
       </div>
@@ -306,19 +306,19 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-24 pt-8">
       <button
         onClick={() => navigate(`/trip/${tripId}`)}
-        className="mb-6 flex items-center text-gold transition-all active:scale-90"
+        className="mb-6 flex items-center text-primary-text transition-all active:scale-90"
       >
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
 
       {/* Day Header */}
-      <div className="gold-gradient-bg animate-fade-in rounded-card p-5 text-black shadow-gold-glow">
+      <div className="animate-fade-in rounded-lg border border-border bg-card p-5 text-card-foreground shadow-1">
         <div className="flex items-center gap-2">
           <Compass size={18} />
-          <span className="text-xs font-bold uppercase tracking-wide text-black/60">{trip.name}</span>
+          <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{trip.name}</span>
         </div>
-        <h1 className="mt-1 text-2xl font-bold leading-tight">{plan.title}</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-black/80">
+        <h1 className="mt-1 text-title leading-tight">{plan.title}</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <CalendarDays size={15} />
             {parseLocalDate(plan.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -332,30 +332,30 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
       {/* Accommodation Section */}
       <section className="mt-4">
         {editingAccommodation ? (
-          <div className="rounded-card border border-gold/40 bg-[#1a1a1a] p-4">
+          <div className="rounded-lg border border-input bg-card p-4">
             <div className="mb-3 flex items-center gap-2">
-              <Home size={16} className="text-gold" />
-              <span className="text-sm font-semibold text-gold">Edit Accommodation</span>
+              <Home size={16} className="text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Edit Accommodation</span>
             </div>
             <input
               type="text"
               value={accName}
               onChange={(e) => setAccName(e.target.value)}
               placeholder="Hotel or BnB name"
-              className="mb-2 w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+              className="mb-2 w-full rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             />
             <input
               type="text"
               value={accAddress}
               onChange={(e) => setAccAddress(e.target.value)}
               placeholder="Address"
-              className="mb-3 w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+              className="mb-3 w-full rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             />
             <div className="flex gap-2">
               <button
                 onClick={handleSaveAccommodation}
                 disabled={savingAcc}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gold py-2 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
+                className="btn-primary btn-sm flex-1"
               >
                 {savingAcc ? 'Saving...' : 'Save'}
               </button>
@@ -366,7 +366,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                   setAccAddress(plan.accommodation_address ?? '');
                 }}
                 disabled={savingAcc}
-                className="flex items-center justify-center rounded-lg border border-gold/30 px-4 py-2 text-sm text-ink-secondary transition-all active:scale-95"
+                className="flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground transition-all active:scale-95"
               >
                 Cancel
               </button>
@@ -375,24 +375,24 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
         ) : (
           <button
             onClick={() => setEditingAccommodation(true)}
-            className="flex w-full items-center gap-3 rounded-card border border-gold/20 bg-[#1a1a1a] p-4 text-left transition-all hover:border-gold/40 active:scale-[0.98]"
+            className="flex w-full items-center gap-3 rounded-lg border border-border bg-card p-4 text-left transition-all hover:border-input active:scale-[0.98]"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-black">
-              <Home size={16} className="text-gold" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-background">
+              <Home size={16} className="text-muted-foreground" />
             </div>
             <div className="min-w-0 flex-1">
               {plan.accommodation_name || plan.accommodation_address ? (
                 <>
-                  <p className="truncate text-sm font-medium text-white">{plan.accommodation_name || 'Accommodation'}</p>
+                  <p className="truncate text-sm font-medium text-foreground">{plan.accommodation_name || 'Accommodation'}</p>
                   {plan.accommodation_address && (
-                    <p className="truncate text-xs text-ink-secondary">{plan.accommodation_address}</p>
+                    <p className="truncate text-xs text-muted-foreground">{plan.accommodation_address}</p>
                   )}
                 </>
               ) : (
-                <p className="text-sm text-ink-secondary">Add where you're staying (optional)</p>
+                <p className="text-sm text-muted-foreground">Add where you're staying (optional)</p>
               )}
             </div>
-            <span className="text-xs text-gold/60">Edit</span>
+            <span className="text-xs text-muted-foreground">Edit</span>
           </button>
         )}
       </section>
@@ -400,11 +400,11 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
       {/* Stops */}
       <section className="mt-6">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Itinerary</h2>
-          <span className="text-sm text-ink-secondary">{stops.length} stop{stops.length === 1 ? '' : 's'}</span>
+          <h2 className="text-heading text-foreground">Itinerary</h2>
+          <span className="text-sm text-muted-foreground">{stops.length} stop{stops.length === 1 ? '' : 's'}</span>
         </div>
         {stops.length === 0 ? (
-          <p className="text-sm text-ink-secondary">No stops for this day yet. Add one below.</p>
+          <p className="text-sm text-muted-foreground">No stops for this day yet. Add one below.</p>
         ) : (
           <div className="space-y-3">
             {stops.map((stop, i) => {
@@ -417,7 +417,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                       <button
                         onClick={() => handleMoveStop(stop.id, -1)}
                         disabled={i === 0}
-                        className="text-gold/40 transition-all hover:text-gold disabled:opacity-20"
+                        className="text-muted-foreground transition-all hover:text-primary-text disabled:opacity-20"
                         aria-label="Move up"
                       >
                         <ChevronLeft size={14} className="rotate-90" />
@@ -425,7 +425,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                       <button
                         onClick={() => handleMoveStop(stop.id, 1)}
                         disabled={i === stops.length - 1}
-                        className="text-gold/40 transition-all hover:text-gold disabled:opacity-20"
+                        className="text-muted-foreground transition-all hover:text-primary-text disabled:opacity-20"
                         aria-label="Move down"
                       >
                         <ChevronRight size={14} className="rotate-90" />
@@ -437,7 +437,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                     <button
                       onClick={() => handleDeleteStop(stop.id)}
                       aria-label="Delete stop"
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-danger/60 transition-all hover:bg-danger/10 hover:text-danger active:scale-90"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-destructive-text transition-all hover:bg-destructive-soft hover:text-destructive-text active:scale-90"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -450,7 +450,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                         </span>
                       )}
                       {outCount > 0 && (
-                        <span className="flex items-center gap-1 text-danger/70">
+                        <span className="flex items-center gap-1 text-destructive-text">
                           <X size={12} /> {outCount} skip
                         </span>
                       )}
@@ -469,17 +469,17 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
         <button
           onClick={handleAiSuggest}
           disabled={aiSuggesting}
-          className="flex w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-gold/10 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-primary-soft py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] disabled:opacity-50"
         >
           {aiSuggesting ? <><Loader2 size={18} className="animate-spin" /> Finding venues...</> : <><Sparkles size={18} /> Suggest with AI</>}
         </button>
 
         {/* AI Results */}
         {aiResults.length > 0 && (
-          <div className="rounded-card border border-gold/20 bg-[#0d0d0d] p-4">
+          <div className="rounded-lg border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold text-gold">{aiResults.length} venues found nearby</p>
-              <button onClick={() => { setAiResults([]); setAiSelected(new Set()); }} className="text-ink-secondary hover:text-gold">
+              <p className="text-sm font-semibold text-foreground">{aiResults.length} venues found nearby</p>
+              <button onClick={() => { setAiResults([]); setAiSelected(new Set()); }} className="text-muted-foreground hover:text-primary-text">
                 <X size={18} />
               </button>
             </div>
@@ -496,15 +496,15 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                       return next;
                     })}
                     className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all active:scale-[0.98] ${
-                      isSelected ? 'border-gold bg-gold/10' : 'border-gold/10 bg-black/20 opacity-60'
+                      isSelected ? 'border-primary bg-primary-soft' : 'border-border bg-background opacity-60'
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-white">{venue.name}</p>
-                      <p className="truncate text-xs text-ink-secondary">{venue.address}</p>
+                      <p className="truncate text-sm font-medium text-foreground">{venue.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{venue.address}</p>
                     </div>
                     <div className={`flex h-5 w-5 items-center justify-center rounded border transition-all ${
-                      isSelected ? 'border-gold bg-gold text-black' : 'border-gold/30 bg-transparent'
+                      isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-transparent'
                     }`}>
                       {isSelected && <Check size={14} strokeWidth={3} />}
                     </div>
@@ -515,7 +515,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
             <button
               onClick={handleAddAiVenues}
               disabled={savingStop || aiSelected.size === 0}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-card bg-gold py-2.5 text-sm font-bold text-black transition-all active:scale-[0.98] disabled:opacity-40"
+              className="btn-primary mt-3 w-full"
             >
               {savingStop ? 'Adding...' : `Add ${aiSelected.size > 0 ? aiSelected.size : ''} to Itinerary`}
             </button>
@@ -526,13 +526,13 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
         <div className="flex gap-3">
           <button
             onClick={() => setShowAddStop(!showAddStop)}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-card border border-dashed border-gold/30 py-3 text-sm font-medium text-gold/70 transition-all hover:border-gold hover:text-gold active:scale-[0.98]"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-3 text-sm font-medium text-muted-foreground transition-all hover:border-input hover:text-primary-text active:scale-[0.98]"
           >
             <Plus size={18} /> Add Stop
           </button>
           <button
             onClick={() => setShowVenuePicker(true)}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-card border border-dashed border-gold/30 py-3 text-sm font-medium text-gold/70 transition-all hover:border-gold hover:text-gold active:scale-[0.98]"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-3 text-sm font-medium text-muted-foreground transition-all hover:border-input hover:text-primary-text active:scale-[0.98]"
           >
             <MapPin size={18} /> From Saved
           </button>
@@ -540,21 +540,21 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
 
         {/* Manual Add Stop Form */}
         {showAddStop && (
-          <div className="rounded-card border border-gold/30 bg-[#1a1a1a] p-4">
-            <h3 className="mb-3 text-sm font-semibold text-gold">Add a Stop</h3>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">Add a Stop</h3>
             <input
               type="text"
               value={addStopName}
               onChange={(e) => setAddStopName(e.target.value)}
               placeholder="Venue name"
-              className="mb-2 w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+              className="mb-2 w-full rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             />
             <input
               type="text"
               value={addStopAddress}
               onChange={(e) => setAddStopAddress(e.target.value)}
               placeholder="Address"
-              className="mb-2 w-full rounded-lg border border-gold/30 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+              className="mb-2 w-full rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             />
             <div className="mb-3 flex items-center gap-2">
               <TimeSelect
@@ -568,7 +568,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                     key={v}
                     onClick={() => setAddStopVibe(v)}
                     className={`rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-                      addStopVibe === v ? 'bg-gold text-black' : 'border border-gold/20 bg-black/40 text-ink-secondary'
+                      addStopVibe === v ? 'bg-primary-soft text-primary-soft-foreground' : 'border border-border bg-muted text-foreground'
                     }`}
                   >
                     {v}
@@ -580,13 +580,13 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
               <button
                 onClick={handleAddStop}
                 disabled={savingStop || !addStopName.trim() || !addStopAddress.trim()}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gold py-2.5 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
+                className="btn-primary btn-sm flex-1"
               >
                 {savingStop ? 'Adding...' : 'Add Stop'}
               </button>
               <button
                 onClick={() => setShowAddStop(false)}
-                className="flex items-center justify-center rounded-lg border border-gold/30 px-4 py-2.5 text-sm text-ink-secondary transition-all active:scale-95"
+                className="flex items-center justify-center rounded-lg border border-border px-4 py-2.5 text-sm text-muted-foreground transition-all active:scale-95"
               >
                 Cancel
               </button>
@@ -601,7 +601,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
           href={mapsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-secondary w-full"
+          className="btn-outline w-full"
         >
           <MapPin size={18} /> Open in Google Maps
         </a>
@@ -609,26 +609,26 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
 
       {/* Venue Picker Modal */}
       {showVenuePicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setShowVenuePicker(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 px-4" onClick={() => setShowVenuePicker(false)}>
           <div
-            className="flex h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-gold/20 bg-[#0d0d0d]"
+            className="flex h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-border bg-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-gold/10 p-5">
-              <h2 className="text-lg font-bold text-gold">Pick a Saved Venue</h2>
-              <button onClick={() => setShowVenuePicker(false)} className="text-ink-secondary transition-colors hover:text-gold">
+            <div className="flex items-center justify-between border-b border-border p-5">
+              <h2 className="text-heading text-foreground">Pick a Saved Venue</h2>
+              <button onClick={() => setShowVenuePicker(false)} className="text-muted-foreground transition-colors hover:text-primary-text">
                 <X size={22} />
               </button>
             </div>
             <div className="p-4">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gold/50" size={16} />
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
                 <input
                   type="text"
                   value={venueSearch}
                   onChange={(e) => setVenueSearch(e.target.value)}
                   placeholder="Search venues..."
-                  className="w-full rounded-card border border-gold/20 bg-black/40 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                  className="w-full rounded-md border border-input bg-card dark:bg-background py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                 />
               </div>
               {collections.length > 0 && (
@@ -637,8 +637,8 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                     onClick={() => setVenuePickerCollection(null)}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                       !venuePickerCollection
-                        ? 'border-gold bg-gold/20 text-gold'
-                        : 'border-gold/20 bg-black/40 text-ink-secondary'
+                        ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                        : 'border-border bg-background text-muted-foreground'
                     }`}
                   >
                     All
@@ -649,8 +649,8 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                       onClick={() => setVenuePickerCollection(c.id)}
                       className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                         venuePickerCollection === c.id
-                          ? 'border-gold bg-gold/20 text-gold'
-                          : 'border-gold/20 bg-black/40 text-ink-secondary'
+                          ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                          : 'border-border bg-background text-muted-foreground'
                       }`}
                     >
                       <Folder size={10} /> {c.name}
@@ -661,7 +661,7 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
             </div>
             <div className="flex-1 overflow-y-auto px-4 pb-4">
               {filteredVenues.length === 0 ? (
-                <p className="py-8 text-center text-sm text-ink-secondary">No saved venues found.</p>
+                <p className="py-8 text-center text-sm text-muted-foreground">No saved venues found.</p>
               ) : (
                 <div className="space-y-2">
                   {filteredVenues.map((v) => (
@@ -669,18 +669,18 @@ export function TripDayPage({ tripId, dayId }: { tripId: string; dayId: string }
                       key={v.id}
                       onClick={() => handleAddSavedVenue(v)}
                       disabled={savingStop}
-                      className="flex w-full items-center gap-3 rounded-xl border border-gold/20 bg-black/40 p-3 text-left transition-all hover:border-gold hover:bg-gold/5 active:scale-[0.98] disabled:opacity-50"
+                      className="flex w-full items-center gap-3 rounded-xl border border-border bg-background p-3 text-left transition-all hover:border-input hover:bg-muted active:scale-[0.98] disabled:opacity-50"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-white">{v.name}</p>
-                        <p className="truncate text-xs text-ink-secondary">{v.address}</p>
+                        <p className="truncate text-sm font-medium text-foreground">{v.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{v.address}</p>
                         {v.collection && (
-                          <span className="mt-1 inline-block rounded-full border border-gold/20 bg-black/40 px-2 py-0.5 text-[10px] text-gold/80">
+                          <span className="mt-1 inline-block rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground">
                             {v.collection}
                           </span>
                         )}
                       </div>
-                      <Plus size={18} className="shrink-0 text-gold" />
+                      <Plus size={18} className="shrink-0 text-muted-foreground" />
                     </button>
                   ))}
                 </div>

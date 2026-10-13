@@ -30,24 +30,43 @@ export function getStripe({ fresh = false } = {}): Promise<Stripe | null> {
   return stripePromise;
 }
 
-/** Matches the app: black surfaces, gold accents. */
-export const stripeAppearance: Appearance = {
-  theme: 'night',
-  variables: {
-    colorPrimary: '#D4AF35',
-    colorBackground: '#1A1A1A',
-    colorText: '#FFFFFF',
-    colorDanger: '#EF4444',
-    colorTextSecondary: '#A3A3A3',
-    colorTextPlaceholder: '#6B6B6B',
-    borderRadius: '12px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  rules: {
-    '.Input': { backgroundColor: '#0D0D0D', border: '1px solid rgba(212, 175, 53, 0.25)', boxShadow: 'none' },
-    '.Input:focus': { borderColor: '#D4AF35', boxShadow: '0 0 0 1px #D4AF35' },
-    '.Tab': { backgroundColor: '#0D0D0D', border: '1px solid rgba(212, 175, 53, 0.25)' },
-    '.Tab--selected': { borderColor: '#D4AF35', backgroundColor: 'rgba(212, 175, 53, 0.1)' },
-    '.Label': { color: '#A3A3A3' },
-  },
-};
+/** A design token ("--primary") as the hex colour Stripe's iframes need. */
+function token(name: string): string {
+  const [h, s, l] = getComputedStyle(document.documentElement).getPropertyValue(name).trim().split(/\s+/).map((v) => parseFloat(v));
+  if (![h, s, l].every(Number.isFinite)) return '#000000';
+  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+  const channel = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return Math.round(255 * (l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0');
+  };
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
+}
+
+/**
+ * Stripe's payment fields, in the app's current theme. Stripe draws them in
+ * its own iframe, so it's handed the tokens' values rather than class names;
+ * read when the form opens, so it follows light and dark.
+ */
+export function stripeAppearance(): Appearance {
+  const dark = document.documentElement.classList.contains('dark');
+  return {
+    theme: dark ? 'night' : 'stripe',
+    variables: {
+      colorPrimary: token('--primary-text'),
+      colorBackground: token('--card'),
+      colorText: token('--foreground'),
+      colorDanger: token('--destructive-text'),
+      colorTextSecondary: token('--muted-foreground'),
+      colorTextPlaceholder: token('--muted-foreground'),
+      borderRadius: '12px',
+      fontFamily: '"Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif',
+    },
+    rules: {
+      '.Input': { backgroundColor: token(dark ? '--background' : '--card'), border: `1px solid ${token('--input')}`, boxShadow: 'none' },
+      '.Input:focus': { borderColor: token('--ring'), boxShadow: `0 0 0 1px ${token('--ring')}` },
+      '.Tab': { backgroundColor: token(dark ? '--background' : '--card'), border: `1px solid ${token('--border')}` },
+      '.Tab--selected': { borderColor: token('--primary'), backgroundColor: token('--primary-soft') },
+      '.Label': { color: token('--muted-foreground') },
+    },
+  };
+}

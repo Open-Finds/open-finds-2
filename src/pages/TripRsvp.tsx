@@ -142,7 +142,7 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 size={32} className="animate-spin text-gold" />
+        <Loader2 size={32} className="animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -150,8 +150,8 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
   if (error || !trip) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger">{error ?? 'Trip not found.'}</p>
-        <button onClick={() => navigate('/')} className="btn-secondary mt-4">
+        <p className="text-destructive-text">{error ?? 'Trip not found.'}</p>
+        <button onClick={() => navigate('/')} className="btn-outline mt-4">
           Back home
         </button>
       </div>
@@ -163,8 +163,8 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
       {celebrating && <Confetti />}
 
       {trip.status === 'canceled' && (
-        <div className="mb-6 rounded-card border border-danger/40 bg-danger/10 px-4 py-3 text-center">
-          <p className="font-bold text-danger">
+        <div className="mb-6 rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-center">
+          <p className="font-bold text-destructive-text">
             This trip has been canceled by the host.
           </p>
         </div>
@@ -172,21 +172,21 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
 
       <button
         onClick={() => navigate(`/trip/${tripId}`)}
-        className="mb-6 flex items-center text-gold transition-all active:scale-90"
+        className="mb-6 flex items-center text-primary-text transition-all active:scale-90"
       >
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
 
       {/* Trip Header */}
-      <div className="gold-gradient-bg animate-fade-in rounded-card p-5 text-black shadow-gold-glow">
+      <div className="animate-fade-in rounded-lg border border-border bg-card p-5 text-card-foreground shadow-1">
         <div className="flex items-center gap-2">
           <Compass size={18} />
-          <span className="text-xs font-bold uppercase tracking-wide text-black/60">
+          <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
             Trip RSVP
           </span>
         </div>
-        <h1 className="mt-1 text-2xl font-bold leading-tight">{trip.name}</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-black/80">
+        <h1 className="mt-1 text-title leading-tight">{trip.name}</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <MapPin size={15} /> {trip.destination}
           </span>
@@ -206,17 +206,17 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
             })}
           </span>
         </div>
-        <p className="mt-1 text-sm font-medium text-black/70">
+        <p className="mt-1 text-small text-muted-foreground">
           by {trip.host_name}
         </p>
       </div>
 
       {/* Instructions */}
-      <div className="mt-6 rounded-card border border-gold/20 bg-[#1a1a1a] p-4">
-        <p className="text-sm text-ink-secondary">
+      <div className="mt-6 rounded-lg border border-border bg-card p-4">
+        <p className="text-sm text-muted-foreground">
           Mark each stop as{' '}
           <span className="font-semibold text-success">In</span> or{' '}
-          <span className="font-semibold text-danger/80">Skip</span>. You can
+          <span className="font-semibold text-destructive-text">Skip</span>. You can
           pick and choose — come to dinner but skip the morning activity!
         </p>
       </div>
@@ -226,12 +226,12 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
         {days.map((day, dayIdx) => (
           <div key={day.plan.id}>
             <div className="mb-3 flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-gold bg-black text-sm font-bold text-gold">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-border bg-background text-sm font-bold text-foreground">
                 {dayIdx + 1}
               </span>
               <div>
-                <h2 className="font-bold text-white">{day.plan.title}</h2>
-                <p className="text-xs text-ink-secondary">
+                <h2 className="font-bold text-foreground">{day.plan.title}</h2>
+                <p className="text-xs text-muted-foreground">
                   {new Date(day.plan.date).toLocaleDateString('en-AU', {
                     weekday: 'long',
                     day: 'numeric',
@@ -247,18 +247,18 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
                 return (
                   <div
                     key={stop.id}
-                    className="rounded-xl border border-gold/10 bg-black/40 p-3"
+                    className="rounded-xl border border-border bg-background p-3"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <Clock size={12} className="text-gold/50" />
-                          <span className="text-xs text-gold/70">{stop.time}</span>
+                          <Clock size={12} className="text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">{stop.time}</span>
                         </div>
-                        <h3 className="mt-1 truncate text-sm font-semibold text-white">
+                        <h3 className="mt-1 truncate text-sm font-semibold text-foreground">
                           {stop.name}
                         </h3>
-                        <p className="truncate text-xs text-ink-secondary">
+                        <p className="truncate text-xs text-muted-foreground">
                           {stop.address}
                         </p>
                         <CheckItOut link={stop.vibe_link} variant="pill" className="mt-2" />
@@ -268,8 +268,8 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
                           onClick={() => toggleStop(stop.id, 'in')}
                           className={`flex h-9 w-9 items-center justify-center rounded-full transition-all active:scale-90 ${
                             status === 'in'
-                              ? 'bg-success text-white'
-                              : 'border border-success/30 bg-black/40 text-success/50 hover:border-success hover:text-success'
+                              ? 'bg-success text-foreground'
+                              : 'border border-success/30 bg-background text-success hover:border-success hover:text-success'
                           }`}
                           aria-label="I'm in for this stop"
                         >
@@ -279,8 +279,8 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
                           onClick={() => toggleStop(stop.id, 'out')}
                           className={`flex h-9 w-9 items-center justify-center rounded-full transition-all active:scale-90 ${
                             status === 'out'
-                              ? 'bg-danger text-white'
-                              : 'border border-danger/30 bg-black/40 text-danger/50 hover:border-danger hover:text-danger'
+                              ? 'bg-destructive text-destructive-foreground'
+                              : 'border border-destructive-text/30 bg-background text-destructive-text hover:border-destructive-text hover:text-destructive-text'
                           }`}
                           aria-label="Skip this stop"
                         >
@@ -298,19 +298,19 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
 
       {/* Summary */}
       {totalStops > 0 && (
-        <div className="mt-6 rounded-card border border-gold/20 bg-[#1a1a1a] p-4 text-center">
-          <p className="text-sm text-ink-secondary">
+        <div className="mt-6 rounded-lg border border-border bg-card p-4 text-center">
+          <p className="text-sm text-muted-foreground">
             You're in for{' '}
             <span className="font-bold text-success">{inCount}</span> of{' '}
             {totalStops} stops
             {outCount > 0 && (
               <>
-                , skipping <span className="font-bold text-danger/80">{outCount}</span>
+                , skipping <span className="font-bold text-destructive-text">{outCount}</span>
               </>
             )}
             {unmarkedCount > 0 && (
               <>
-                , <span className="text-ink-secondary">{unmarkedCount} undecided</span>
+                , <span className="text-muted-foreground">{unmarkedCount} undecided</span>
               </>
             )}
           </p>
@@ -321,9 +321,9 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
       {trip.status !== 'canceled' && (
         <div className="mt-8">
           {isSignedIn ? (
-            <div className="mb-4 rounded-card border border-gold/20 bg-surface px-4 py-3">
-              <p className="text-sm text-ink-secondary">Responding as</p>
-              <p className="text-lg font-semibold text-white">
+            <div className="mb-4 rounded-md border border-border bg-card px-4 py-3">
+              <p className="text-sm text-muted-foreground">Responding as</p>
+              <p className="text-heading text-foreground">
                 {displayName || name || 'You'}
               </p>
             </div>
@@ -333,12 +333,12 @@ export function TripRsvpPage({ tripId }: { tripId: string }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Your name"
-              className="w-full touch-target rounded-card border border-gold/20 bg-surface px-4 text-white placeholder-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow"
+              className="w-full touch-target rounded-md border border-input bg-card px-4 text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-ring"
             />
           )}
 
           {submitError && (
-            <p className="mt-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <p className="mt-3 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
               {submitError}
             </p>
           )}

@@ -69,12 +69,12 @@ function Shell({
       {/* Hidden while editing an itinerary: leaving would drop unsaved edits. */}
       {!isEditingItinerary && <button
         onClick={onOpenNotifications}
-        className="fixed right-4 top-4 z-50 flex size-11 items-center justify-center rounded-full border border-gold/20 bg-[#0d0d0d]/90 text-gold backdrop-blur-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-90 sm:right-5 sm:top-5"
+        className="fixed right-4 top-4 z-50 flex size-11 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-1 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 sm:right-5 sm:top-5"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
       >
         <Bell size={20} />
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-black">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-bold text-primary-foreground">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -186,7 +186,7 @@ function AppInner() {
   }
   // Blank screen while session loads — avoids flash of login page for returning users
   if (authLoading) {
-    return <div className="min-h-screen bg-black" />;
+    return <div className="min-h-screen bg-background" />;
   }
 
   // Not authenticated — show landing / login screen
@@ -201,7 +201,7 @@ function AppInner() {
 
   // Wait for profile to load before deciding whether to show onboarding
   if (!profileLoaded) {
-    return <div className="min-h-screen bg-black" />;
+    return <div className="min-h-screen bg-background" />;
   }
 
   // Anyone without a username (a first Google sign-in, or an older email
@@ -344,7 +344,7 @@ function App() {
     <div className="app-shell">
       <AuthProvider>
         {/* Shown for the moment a page that loads on demand is downloading. */}
-        <Suspense fallback={<div className="min-h-screen bg-black" />}>
+        <Suspense fallback={<div className="min-h-screen bg-background" />}>
           <AppInner />
         </Suspense>
         {/* Offers a credit for one more AI use once today's free ones are gone. */}

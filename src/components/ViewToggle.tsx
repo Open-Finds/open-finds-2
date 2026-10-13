@@ -59,7 +59,7 @@ export function ViewToggle({
           padded for the home indicator on notched devices. */}
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-gold/20 bg-[#0d0d0d]/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-md lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background pb-[env(safe-area-inset-bottom,0px)] lg:hidden"
       >
         <div className="mx-auto flex max-w-2xl items-stretch justify-around">
           {TABS.map(({ view: tabView, label, icon: Icon }) => {
@@ -73,7 +73,7 @@ export function ViewToggle({
                 className={cn(
                   'flex min-h-[44px] flex-1 flex-col items-center gap-1 py-2.5 transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                  active ? 'text-gold' : 'text-ink-secondary hover:text-white'
+                  active ? 'text-primary-text' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 <Icon
@@ -81,11 +81,11 @@ export function ViewToggle({
                   strokeWidth={active ? 2.5 : 2}
                   className={active ? 'drop-shadow-[0_0_6px_hsl(var(--primary)/0.5)]' : ''}
                 />
-                <span className="whitespace-nowrap text-[11px] font-medium">{label}</span>
+                <span className="whitespace-nowrap text-xs font-medium">{label}</span>
                 <span
                   className={cn(
                     'h-0.5 w-6 rounded-full transition-all',
-                    active ? 'bg-gold' : 'bg-transparent'
+                    active ? 'bg-primary' : 'bg-transparent'
                   )}
                 />
               </button>
@@ -99,11 +99,11 @@ export function ViewToggle({
           whole row on a wide screen, and becomes a labelled rail. */}
       <nav
         aria-label="Primary"
-        className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-gold/20 bg-[#0d0d0d]/95 backdrop-blur-md lg:flex"
+        className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-border bg-card lg:flex"
       >
         <div className="flex items-center gap-2.5 px-6 py-7">
           <img src="/the-unsaved-mark.png" alt="" width={32} height={32} className="shrink-0" />
-          <span className="gold-gradient-text text-lg font-bold tracking-tight">The Unsaved</span>
+          <span className="text-heading tracking-tight">The Unsaved</span>
         </div>
 
         <div className="flex flex-1 flex-col gap-1 px-3">
@@ -116,16 +116,16 @@ export function ViewToggle({
                 onClick={() => handleClick(tabView)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex min-h-[44px] items-center gap-3 rounded-card px-3.5 py-2.5 text-sm font-semibold transition-all',
+                  'flex min-h-[44px] items-center gap-3 rounded-md px-3.5 py-2.5 text-sm font-semibold transition-all',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   active
-                    ? 'bg-gold/10 text-gold'
-                    : 'text-ink-secondary hover:bg-white/5 hover:text-white'
+                    ? 'bg-primary-soft text-primary-text'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
                 <Icon size={19} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                 <span>{label}</span>
-                {active && <span className="ml-auto h-5 w-0.5 rounded-full bg-gold" />}
+                {active && <span className="ml-auto h-5 w-0.5 rounded-full bg-primary" />}
               </button>
             );
           })}

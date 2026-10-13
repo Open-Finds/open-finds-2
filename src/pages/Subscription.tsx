@@ -201,50 +201,50 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
     : null;
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-black px-6 pt-20 pb-24">
+    <div className="min-h-screen overflow-y-auto bg-background px-6 pt-20 pb-24">
       <button
         onClick={onBack}
         aria-label="Back"
-        className="absolute left-5 top-5 flex items-center justify-center rounded-full text-gold transition-all active:scale-90"
+        className="absolute left-3 top-3 flex size-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted active:scale-95"
       >
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
 
       <div className="mx-auto w-full max-w-6xl">
         <div className="mb-2 flex items-center gap-3">
-          <Sparkles size={28} className="text-gold" />
-          <h1 className="text-2xl font-bold text-white">Choose Your Plan</h1>
+          <Sparkles size={28} className="text-muted-foreground" />
+          <h1 className="text-title text-foreground">Choose Your Plan</h1>
         </div>
-        <p className="mb-8 text-sm text-ink-secondary">
-          You're currently on <span className="font-semibold text-gold">{SUBSCRIPTION_PLANS[subscriptionTier].label}</span>.
+        <p className="mb-8 text-sm text-muted-foreground">
+          You're currently on <span className="font-semibold text-foreground">{SUBSCRIPTION_PLANS[subscriptionTier].label}</span>.
           {isSubscriber && renewsOn && (subscriptionStatus === 'canceling'
             ? ` It ends on ${renewsOn} and won't renew.`
             : ` It renews on ${renewsOn}.`)}
         </p>
 
         {premiumUnlocked && subscriptionTier === 'free' && (
-          <p className="mb-4 flex items-center gap-2 rounded-card border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+          <p className="mb-4 flex items-center gap-2 rounded-md border border-border bg-primary-soft px-4 py-3 text-sm text-primary-soft-foreground">
             <Sparkles size={16} className="shrink-0" />
             Everything is unlocked while we test: you have full Premium access for free. Nothing to pay.
           </p>
         )}
         {subscriptionStatus === 'past_due' && (
-          <p className="mb-4 rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+          <p className="mb-4 rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
             Your last payment didn't go through. Update your card under Billing to keep Premium.
           </p>
         )}
         {confirming && (
-          <p className="mb-4 flex items-center gap-2 rounded-card border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+          <p className="mb-4 flex items-center gap-2 rounded-md border border-border bg-primary-soft px-4 py-3 text-sm text-primary-soft-foreground">
             <Loader2 size={16} className="animate-spin" /> Confirming your payment…
           </p>
         )}
         {upgradedTo && subscriptionTier === upgradedTo && (
-          <p className="mb-4 rounded-card border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+          <p className="mb-4 rounded-md border border-border bg-primary-soft px-4 py-3 text-sm text-primary-soft-foreground">
             You're on {SUBSCRIPTION_PLANS[upgradedTo].label}. Thanks for upgrading.
           </p>
         )}
         {error && (
-          <p role="alert" className="mb-4 rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+          <p role="alert" className="mb-4 rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
             {error}
           </p>
         )}
@@ -276,36 +276,36 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
             return (
               <div
                 key={tier}
-                className={`rounded-card border p-5 transition-all ${
+                className={`rounded-md border p-5 transition-all ${
                   isCurrent
-                    ? 'border-gold bg-gold/10 shadow-gold-glow'
+                    ? 'border-primary bg-primary-soft'
                     : isPremium
-                    ? 'border-gold/30 bg-[#0d0d0d] hover:border-gold/60'
-                    : 'border-gold/15 bg-[#0d0d0d]'
+                    ? 'border-border bg-card hover:border-input'
+                    : 'border-border bg-card'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                      isCurrent ? 'bg-gold text-black' : 'bg-gold/10 text-gold'
+                      isCurrent ? 'bg-primary-soft text-primary-soft-foreground' : 'bg-muted text-muted-foreground'
                     }`}>
                       {meta.icon}
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-white">{plan.label}</h3>
-                      <p className="text-xs text-ink-secondary">{meta.tagline}</p>
+                      <h3 className="text-heading text-foreground">{plan.label}</h3>
+                      <p className="text-xs text-muted-foreground">{meta.tagline}</p>
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-2xl font-bold text-gold">{price}</p>
-                    {meta.period && <p className="text-xs text-ink-secondary">{meta.period}</p>}
+                    <p className="text-title text-foreground">{price}</p>
+                    {meta.period && <p className="text-xs text-muted-foreground">{meta.period}</p>}
                   </div>
                 </div>
 
                 <ul className="mt-4 space-y-1.5">
                   {features.map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-ink-secondary">
-                      <Check size={14} className="shrink-0 text-gold" /> {f}
+                    <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Check size={14} className="shrink-0 text-primary-text" /> {f}
                     </li>
                   ))}
                 </ul>
@@ -314,15 +314,15 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
                   <button
                     onClick={action.onClick}
                     disabled={busy || confirming}
-                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
+                    className="btn-primary mt-5 w-full"
                   >
                     {action.label}
                   </button>
                 ) : (
-                  <p className={`mt-5 rounded-card py-3 text-center text-sm font-bold ${
+                  <p className={`mt-5 rounded-md py-3 text-center text-sm font-bold ${
                     isCurrent
-                      ? 'border border-gold/30 bg-gold/10 text-gold'
-                      : 'border border-gold/20 text-ink-secondary'
+                      ? 'border border-border bg-primary-soft text-primary-soft-foreground'
+                      : 'border border-border text-muted-foreground'
                   }`}>
                     {action.label}
                   </p>
@@ -332,7 +332,7 @@ export function SubscriptionPage({ onBack }: { onBack: () => void }) {
           })}
         </div>
 
-        <p className="mt-6 text-center text-sm text-ink-secondary">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           Family is $7.99 a month for 4 people, plus $1 a month for each extra person.
           The yearly family price was quoted two ways, so it is not listed until that is settled.
           Ads for extra credits belong in the phone app, not here.

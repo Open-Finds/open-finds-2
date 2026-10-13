@@ -19,14 +19,14 @@ export function CreatePlanPage() {
   return (
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-44 pt-10">
       <BackButton to="/" />
-      <h1 className="text-2xl font-bold">What's the occasion?</h1>
-      <p className="mt-2 text-sm text-ink-secondary">
+      <h1 className="text-title">What's the occasion?</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
         Give your plan a name and pick a date.
       </p>
 
       <div className="mt-8 space-y-5">
         <div>
-          <label className="mb-2 block text-sm font-medium text-ink-secondary">
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
             Occasion
           </label>
           <input
@@ -34,23 +34,23 @@ export function CreatePlanPage() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Saturday Night Out"
-            className="w-full touch-target rounded-card border border-gold/20 bg-surface px-4 text-white placeholder-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow"
+            className="w-full touch-target rounded-md border border-input bg-card px-4 text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-ring"
           />
         </div>
         <div>
-          <label className="mb-2 block text-sm font-medium text-ink-secondary">
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
             Date
           </label>
           <div className="relative">
             <Calendar
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold"
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-primary-text"
               size={18}
             />
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full touch-target rounded-card border border-gold/20 bg-surface pl-12 pr-4 text-white outline-none transition-all focus:border-gold focus:shadow-gold-glow"
+              className="w-full touch-target rounded-md border border-input bg-card pl-12 pr-4 text-foreground outline-none transition-all focus:border-ring"
             />
           </div>
         </div>
@@ -60,7 +60,7 @@ export function CreatePlanPage() {
         <button
           onClick={handleNext}
           disabled={!canContinue}
-          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card px-6 py-3.5 text-base font-bold shadow-gold-glow transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:border disabled:border-gold/20 disabled:bg-gold/10 disabled:text-gold/40 disabled:shadow-none bg-gold text-black"
+          className="btn-primary btn-lg w-full disabled:border disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
         >
           Curate a Date {!canContinue ? null : <ChevronRight size={20} />}
         </button>

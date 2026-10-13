@@ -129,36 +129,36 @@ export function GuidedTour({
       {rect ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed rounded-2xl ring-2 ring-gold transition-all duration-300"
+          className="pointer-events-none fixed rounded-2xl ring-2 ring-ring transition-all duration-300"
           // Kept inside the screen: the tab bar sits on the bottom edge.
           style={{
             top: Math.max(2, rect.top - PAD),
             left: Math.max(2, rect.left - PAD),
             width: Math.min(window.innerWidth - 2, rect.right + PAD) - Math.max(2, rect.left - PAD),
             height: Math.min(window.innerHeight - 2, rect.bottom + PAD) - Math.max(2, rect.top - PAD),
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.72), 0 0 24px rgba(212, 175, 53, 0.45)',
+            boxShadow: '0 0 0 9999px hsl(var(--scrim) / 0.6)',
           }}
         />
       ) : (
-        <div aria-hidden="true" className="fixed inset-0 bg-black/75" />
+        <div aria-hidden="true" className="fixed inset-0 bg-scrim/60" />
       )}
 
       <div
         ref={cardRef}
-        className="fixed rounded-card border border-gold/40 bg-[#141414] p-5 shadow-2xl transition-[top,left] duration-300"
+        className="fixed rounded-md border border-input bg-card p-5 shadow-3 transition-[top,left] duration-300"
         style={card ? { top: card.top, left: card.left, width: card.width } : { visibility: 'hidden' }}
       >
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-semibold text-gold/80">{index + 1} of {TOUR_STEPS.length}</span>
+          <span className="text-xs font-semibold text-muted-foreground">{index + 1} of {TOUR_STEPS.length}</span>
           <button
             onClick={() => finish(true)}
-            className="flex items-center gap-1 text-xs text-ink-secondary transition-colors hover:text-white"
+            className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             Skip tour <X size={13} />
           </button>
         </div>
-        <h2 id="tour-title" className="text-lg font-bold text-white">{step.title}</h2>
-        <p className="mt-1.5 text-sm leading-relaxed text-ink-secondary">{step.body}</p>
+        <h2 id="tour-title" className="text-heading text-foreground">{step.title}</h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
 
         {step.dietary && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -172,7 +172,7 @@ export function GuidedTour({
                   aria-pressed={on}
                   className={cn(
                     'rounded-full border px-3 py-1 text-xs font-semibold transition-all',
-                    on ? 'border-gold bg-gold text-black' : 'border-gold/30 text-gold hover:bg-gold/10'
+                    on ? 'border-transparent bg-primary-soft text-primary-soft-foreground' : 'border-border bg-muted text-foreground hover:border-input'
                   )}
                 >
                   {o.label}
@@ -185,14 +185,14 @@ export function GuidedTour({
         <div className="mt-4 flex items-center justify-between">
           <div className="flex gap-1.5" aria-hidden="true">
             {TOUR_STEPS.map((_, i) => (
-              <span key={i} className={cn('h-1.5 rounded-full transition-all', i === index ? 'w-5 bg-gold' : 'w-1.5 bg-gold/30')} />
+              <span key={i} className={cn('h-1.5 rounded-full transition-all', i === index ? 'w-5 bg-primary' : 'w-1.5 bg-primary/30')} />
             ))}
           </div>
           <div className="flex gap-2">
             {index > 0 && (
               <button
                 onClick={() => setIndex((i) => i - 1)}
-                className="flex items-center gap-1 rounded-card px-3 py-2 text-sm font-semibold text-ink-secondary transition-colors hover:text-white"
+                className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
               >
                 <ChevronLeft size={16} /> Back
               </button>
@@ -200,7 +200,7 @@ export function GuidedTour({
             <button
               ref={nextRef}
               onClick={() => (last ? finish(false) : setIndex((i) => i + 1))}
-              className="flex items-center gap-1 rounded-card bg-gold px-4 py-2 text-sm font-bold text-black transition-all active:scale-95"
+              className="btn-primary btn-sm"
             >
               {last ? <><Check size={16} /> Done</> : <>Next <ChevronRight size={16} /></>}
             </button>

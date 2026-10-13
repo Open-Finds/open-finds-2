@@ -38,7 +38,7 @@ export function DuplicateVenueDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle size={18} className="text-pending" />
+            <AlertTriangle size={18} className="text-warning" />
             {many ? 'Some of these look like venues you already have' : 'Looks like you already have this one'}
           </DialogTitle>
           <DialogDescription>
@@ -48,24 +48,24 @@ export function DuplicateVenueDialog({
 
         <div className="max-h-[50dvh] space-y-4 overflow-y-auto pr-1">
           {pending?.map((p, i) => (
-            <div key={i} className="rounded-card border border-gold/15 bg-black/30 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">Adding</p>
-              <p className="mt-0.5 font-semibold text-white">{p.candidate.name}</p>
-              <p className="flex items-start gap-1 text-xs text-ink-secondary">
+            <div key={i} className="rounded-lg border border-border bg-background p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Adding</p>
+              <p className="mt-0.5 font-semibold text-foreground">{p.candidate.name}</p>
+              <p className="flex items-start gap-1 text-xs text-muted-foreground">
                 <MapPin size={12} className="mt-0.5 shrink-0" /> {p.candidate.address}
               </p>
 
-              <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Already saved
               </p>
               <ul className="mt-1 space-y-2">
                 {p.matches.slice(0, 3).map((m) => (
-                  <li key={m.venue.id} className="rounded-lg border border-gold/25 bg-surface p-2.5">
+                  <li key={m.venue.id} className="rounded-lg border border-border bg-card p-2.5">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="min-w-0 truncate font-semibold text-gold">{m.venue.name}</p>
+                      <p className="min-w-0 truncate font-semibold text-foreground">{m.venue.name}</p>
                       <Badge variant="outline" className="shrink-0">{describeMatch(m)}</Badge>
                     </div>
-                    <p className="mt-0.5 flex items-start gap-1 text-xs text-ink-secondary">
+                    <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
                       <MapPin size={12} className="mt-0.5 shrink-0" /> {m.venue.address}
                     </p>
                     {m.venue.link && (
@@ -73,13 +73,13 @@ export function DuplicateVenueDialog({
                         href={m.venue.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-xs text-gold/80 underline-offset-2 hover:underline"
+                        className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:underline"
                       >
                         <Link2 size={11} /> Open saved link
                       </a>
                     )}
                     {m.venue.collection && (
-                      <p className="mt-1 text-xs text-ink-secondary">In “{m.venue.collection}”</p>
+                      <p className="mt-1 text-xs text-muted-foreground">In “{m.venue.collection}”</p>
                     )}
                   </li>
                 ))}

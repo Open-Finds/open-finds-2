@@ -25,8 +25,8 @@ export function CheckItOut({
       onClick={(e) => e.stopPropagation()}
       className={cn(
         variant === 'pill'
-          ? 'inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 text-xs font-medium text-gold transition-colors hover:bg-gold/20'
-          : 'inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-card border border-gold/40 bg-gold/10 px-4 py-2 text-sm font-semibold text-gold transition-all hover:bg-gold/20 active:scale-95',
+          ? 'inline-flex min-h-7 items-center gap-1 rounded-full border border-border bg-muted px-2.5 text-xs font-medium text-foreground transition-colors hover:border-input'
+          : 'btn-outline btn-sm',
         className,
       )}
     >

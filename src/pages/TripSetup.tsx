@@ -410,20 +410,20 @@ export function TripSetupPage() {
   if (profileLoaded && !hasPremium(subscriptionTier, premiumUnlocked)) {
     return (
       <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold/30 bg-gold/10">
-          <Crown size={26} className="text-gold" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+          <Crown size={26} className="text-muted-foreground" />
         </div>
-        <h2 className="mt-5 text-2xl font-bold text-white">Trips are a Premium feature</h2>
-        <p className="mt-2 text-sm text-ink-secondary">
+        <h2 className="mt-5 text-title text-foreground">Trips are a Premium feature</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
           Plan every day of a getaway in one go, with venues for each day. Upgrade to Premium to start a trip.
         </p>
         <button
           onClick={() => navigate('/subscription')}
-          className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98]"
+          className="btn-primary mt-6 w-full"
         >
           <Crown size={18} /> See Premium plans
         </button>
-        <button onClick={() => navigate('/')} className="mt-3 text-sm text-ink-secondary hover:text-gold">
+        <button onClick={() => navigate('/')} className="mt-3 text-sm text-muted-foreground hover:text-primary-text">
           Back to home
         </button>
       </div>
@@ -433,17 +433,17 @@ export function TripSetupPage() {
   if (step === 'generating') {
     return (
       <div className="mx-auto flex min-h-screen flex-col items-center justify-center px-6 text-center">
-        <Loader2 size={48} className="animate-spin text-gold" />
-        <h2 className="mt-6 text-xl font-bold text-white">Building your trip itinerary</h2>
-        <p className="mt-2 text-sm text-ink-secondary">
+        <Loader2 size={48} className="animate-spin text-muted-foreground" />
+        <h2 className="mt-6 text-heading text-foreground">Building your trip itinerary</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
           {generatingDay > 0
             ? `Finding venues for Day ${generatingDay} of ${numDays}...`
             : 'Setting up your trip...'}
         </p>
         <div className="mt-6 w-full max-w-xs">
-          <div className="h-2 overflow-hidden rounded-full bg-gold/20">
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-gold transition-all duration-500"
+              className="h-full rounded-full bg-primary transition-all duration-500"
               style={{ width: `${numDays > 0 ? (generatingDay / numDays) * 100 : 0}%` }}
             />
           </div>
@@ -465,7 +465,7 @@ export function TripSetupPage() {
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-24 pt-8">
       <button
         onClick={() => (step === 'details' ? navigate('/') : setStep('details'))}
-        className="mb-6 flex items-center text-gold transition-all active:scale-90"
+        className="mb-6 flex items-center text-primary-text transition-all active:scale-90"
       >
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
@@ -473,78 +473,78 @@ export function TripSetupPage() {
       {step === 'details' && (
         <div className="animate-fade-in">
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border-2 border-gold bg-black">
-              <Compass size={28} className="text-gold" />
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border-2 border-primary bg-background">
+              <Compass size={28} className="text-muted-foreground" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Plan a Trip</h1>
-            <p className="mt-1 text-sm text-ink-secondary">Build a multi-day itinerary with real venues</p>
+            <h1 className="text-title text-foreground">Plan a Trip</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Build a multi-day itinerary with real venues</p>
           </div>
 
           <div className="space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-gold">Trip name</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">Trip name</label>
               <input
                 type="text"
                 value={tripName}
                 onChange={(e) => setTripName(e.target.value)}
                 placeholder="e.g. Sydney Weekend"
-                className="w-full touch-target rounded-card border border-gold/20 bg-surface px-4 text-white placeholder-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow"
+                className="w-full touch-target rounded-md border border-input bg-card px-4 text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-ring"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-gold">Destination city</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">Destination city</label>
               <input
                 type="text"
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 placeholder="e.g. Sydney"
-                className="w-full touch-target rounded-card border border-gold/20 bg-surface px-4 text-white placeholder-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow"
+                className="w-full touch-target rounded-md border border-input bg-card px-4 text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-ring"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-gold">Start date</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">Start date</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full touch-target rounded-card border border-gold/20 bg-surface px-4 text-white outline-none transition-all focus:border-gold focus:shadow-gold-glow [color-scheme:dark]"
+                className="w-full touch-target rounded-md border border-input bg-card px-4 text-foreground outline-none transition-all focus:border-ring [color-scheme:dark]"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-gold">Number of days</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">Number of days</label>
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => adjustDays(-1)}
-                  className="flex h-12 w-12 items-center justify-center rounded-full border border-gold/30 bg-black text-gold transition-all active:scale-90 hover:border-gold hover:bg-gold/10"
+                  className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-primary-text transition-all active:scale-90 hover:border-input hover:bg-muted"
                 >
                   <Minus size={20} />
                 </button>
-                <span className="text-3xl font-bold text-white">{numDays}</span>
+                <span className="text-title text-foreground">{numDays}</span>
                 <button
                   onClick={() => adjustDays(1)}
-                  className="flex h-12 w-12 items-center justify-center rounded-full border border-gold/30 bg-black text-gold transition-all active:scale-90 hover:border-gold hover:bg-gold/10"
+                  className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-primary-text transition-all active:scale-90 hover:border-input hover:bg-muted"
                 >
                   <Plus size={20} />
                 </button>
-                <span className="ml-2 text-sm text-ink-secondary">{numDays === 1 ? 'day' : 'days'}</span>
+                <span className="ml-2 text-sm text-muted-foreground">{numDays === 1 ? 'day' : 'days'}</span>
               </div>
             </div>
 
             {/* Collection picker */}
             {collections.length > 0 && (
-              <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-4">
+              <div className="rounded-lg border border-border bg-card p-4">
                 <div className="mb-2 flex items-center gap-2">
-                  <Folder size={16} className="text-gold/70" />
-                  <label className="text-sm font-medium text-gold">Plan from a collection</label>
+                  <Folder size={16} className="text-muted-foreground" />
+                  <label className="text-sm font-medium text-foreground">Plan from a collection</label>
                 </div>
-                <p className="mb-3 text-xs text-ink-secondary">Pick a folder to default the venue picker to those spots.</p>
+                <p className="mb-3 text-xs text-muted-foreground">Pick a folder to default the venue picker to those spots.</p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => handleSelectCollection(null)}
                     className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-90 ${
                       !selectedCollectionId
-                        ? 'border-gold bg-gold/20 text-gold'
-                        : 'border-gold/20 bg-black/40 text-ink-secondary hover:border-gold/40'
+                        ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                        : 'border-border bg-background text-muted-foreground hover:border-input'
                     }`}
                   >
                     All venues
@@ -555,8 +555,8 @@ export function TripSetupPage() {
                       onClick={() => handleSelectCollection(c.id)}
                       className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-90 ${
                         selectedCollectionId === c.id
-                          ? 'border-gold bg-gold/20 text-gold'
-                          : 'border-gold/20 bg-black/40 text-ink-secondary hover:border-gold/40'
+                          ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:border-input'
                       }`}
                     >
                       <Folder size={11} /> {c.name}
@@ -564,16 +564,16 @@ export function TripSetupPage() {
                   ))}
                 </div>
                 {selectedCollectionId && (
-                  <div className="mt-3 flex items-center justify-between rounded-lg border border-gold/10 bg-black/40 px-3 py-2">
-                    <span className="text-xs text-ink-secondary">Let AI suggest outside venues to fill gaps?</span>
+                  <div className="mt-3 flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Let AI suggest outside venues to fill gaps?</span>
                     <button
                       onClick={() => setAllowAiSuggestions(!allowAiSuggestions)}
                       className={`relative h-6 w-11 rounded-full transition-colors ${
-                        allowAiSuggestions ? 'bg-gold' : 'bg-gold/20'
+                        allowAiSuggestions ? 'bg-primary' : 'bg-primary-soft'
                       }`}
                     >
                       <span
-                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-black transition-transform ${
+                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-background transition-transform ${
                           allowAiSuggestions ? 'translate-x-5' : 'translate-x-0.5'
                         }`}
                       />
@@ -585,7 +585,7 @@ export function TripSetupPage() {
           </div>
 
           {error && (
-            <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
+            <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">{error}</p>
           )}
 
           <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8">
@@ -597,9 +597,7 @@ export function TripSetupPage() {
                 }
               }}
               disabled={!canProceedDetails}
-              className={`flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card px-6 py-3.5 text-base font-bold shadow-gold-glow transition-all duration-200 active:scale-[0.98] ${
-                canProceedDetails ? 'bg-gold text-black' : 'cursor-not-allowed border border-gold/20 bg-gold/10 text-gold/40 shadow-none'
-              }`}
+              className="btn-primary btn-lg w-full"
             >
               Customize Days <ChevronRight size={20} />
             </button>
@@ -610,8 +608,8 @@ export function TripSetupPage() {
       {step === 'days' && (
         <div className="animate-fade-in">
           <div className="mb-4 text-center">
-            <h1 className="text-2xl font-bold text-white">Customize Your Days</h1>
-            <p className="mt-1 text-sm text-ink-secondary">Edit one day at a time. Add stops, AI suggestions, or your saved venues.</p>
+            <h1 className="text-title text-foreground">Customize Your Days</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Edit one day at a time. Add stops, AI suggestions, or your saved venues.</p>
           </div>
 
           {/* Day selector tabs */}
@@ -622,8 +620,8 @@ export function TripSetupPage() {
                 onClick={() => setCurrentDay(dayIdx)}
                 className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-all ${
                   currentDay === dayIdx
-                    ? 'border-gold bg-gold text-black'
-                    : 'border-gold/30 bg-black text-gold'
+                    ? 'border-transparent bg-primary-soft text-primary-soft-foreground'
+                    : 'border-border bg-muted text-foreground'
                 }`}
               >
                 {dayIdx + 1}
@@ -636,38 +634,38 @@ export function TripSetupPage() {
             const dayIdx = currentDay;
             const config = dayConfigs[dayIdx];
             return (
-              <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-4">
+              <div className="rounded-lg border border-border bg-card p-4">
                 <div className="mb-4 flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-gold bg-black text-sm font-bold text-gold">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-border bg-background text-sm font-bold text-foreground">
                     {dayIdx + 1}
                   </span>
                   <div>
-                    <h3 className="font-bold text-white">Day {dayIdx + 1}</h3>
-                    <p className="text-xs text-ink-secondary">
+                    <h3 className="font-bold text-foreground">Day {dayIdx + 1}</h3>
+                    <p className="text-xs text-muted-foreground">
                       {startDate ? formatDate(addDays(startDate, dayIdx)) : `Day ${dayIdx + 1}`}
                     </p>
                   </div>
                 </div>
 
                 {/* Accommodation */}
-                <div className="mb-4 rounded-xl border border-gold/10 bg-black/40 p-3">
+                <div className="mb-4 rounded-xl border border-border bg-background p-3">
                   <div className="mb-2 flex items-center gap-2">
-                    <Home size={14} className="text-gold/70" />
-                    <span className="text-xs font-semibold uppercase tracking-wide text-ink-secondary">Accommodation</span>
+                    <Home size={14} className="text-muted-foreground" />
+                    <span className="text-caption text-muted-foreground">Accommodation</span>
                   </div>
                   <input
                     type="text"
                     value={config.accommodationName}
                     onChange={(e) => updateDayAccommodation(dayIdx, 'accommodationName', e.target.value)}
                     placeholder="Hotel or BnB name (optional)"
-                    className="mb-2 w-full rounded-lg border border-gold/20 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                    className="mb-2 w-full rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                   />
                   <input
                     type="text"
                     value={config.accommodationAddress}
                     onChange={(e) => updateDayAccommodation(dayIdx, 'accommodationAddress', e.target.value)}
                     placeholder="Address (optional)"
-                    className="w-full rounded-lg border border-gold/20 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                    className="w-full rounded-lg border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                   />
                 </div>
 
@@ -675,7 +673,7 @@ export function TripSetupPage() {
                 <button
                   onClick={() => handleAiSuggest(dayIdx)}
                   disabled={aiSuggesting}
-                  className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gold/40 bg-gold/10 py-2.5 text-sm font-bold text-gold transition-all active:scale-[0.98] disabled:opacity-50"
+                  className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-input bg-primary-soft py-2.5 text-sm font-medium text-foreground transition-all active:scale-[0.98] disabled:opacity-50"
                 >
                   {aiSuggesting ? <><Loader2 size={16} className="animate-spin" /> Suggesting...</> : <><Sparkles size={16} /> Suggest with AI</>}
                 </button>
@@ -683,14 +681,14 @@ export function TripSetupPage() {
                 {/* Stops */}
                 <div className="space-y-2">
                   {config.stops.map((stop, i) => (
-                    <div key={stop.id} className="rounded-xl border border-gold/10 bg-black/40 p-3">
+                    <div key={stop.id} className="rounded-xl border border-border bg-background p-3">
                       <div className="flex items-start gap-2">
                         <div className="flex flex-col items-center gap-1">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-gold/30 bg-black text-xs font-bold text-gold">{i + 1}</span>
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-xs font-bold text-foreground">{i + 1}</span>
                           <button
                             onClick={() => moveStop(dayIdx, stop.id, -1)}
                             disabled={i === 0}
-                            className="text-gold/40 transition-all hover:text-gold disabled:opacity-20"
+                            className="text-muted-foreground transition-all hover:text-primary-text disabled:opacity-20"
                             aria-label="Move up"
                           >
                             <ChevronLeft size={14} className="rotate-90" />
@@ -698,7 +696,7 @@ export function TripSetupPage() {
                           <button
                             onClick={() => moveStop(dayIdx, stop.id, 1)}
                             disabled={i === config.stops.length - 1}
-                            className="text-gold/40 transition-all hover:text-gold disabled:opacity-20"
+                            className="text-muted-foreground transition-all hover:text-primary-text disabled:opacity-20"
                             aria-label="Move down"
                           >
                             <ChevronRight size={14} className="rotate-90" />
@@ -709,7 +707,7 @@ export function TripSetupPage() {
                             type="text"
                             value={stop.label}
                             onChange={(e) => updateStopLabel(dayIdx, stop.id, e.target.value)}
-                            className="w-full rounded-lg border border-gold/20 bg-black/50 px-2 py-1.5 text-sm font-medium text-white focus:border-gold focus:outline-none"
+                            className="w-full rounded-lg border border-input bg-card dark:bg-background px-2 py-1.5 text-sm font-medium text-foreground focus:border-ring focus:outline-none"
                           />
                           <div className="mt-2 flex items-center gap-2">
                             <TimeSelect
@@ -723,7 +721,7 @@ export function TripSetupPage() {
                                   key={v.value}
                                   onClick={() => updateStopVibe(dayIdx, stop.id, v.value)}
                                   className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-all ${
-                                    stop.vibe === v.value ? 'bg-gold text-black' : 'border border-gold/20 bg-black/40 text-ink-secondary'
+                                    stop.vibe === v.value ? 'bg-primary-soft text-primary-soft-foreground' : 'border border-border bg-muted text-foreground'
                                   }`}
                                 >
                                   <span>{v.icon}</span>
@@ -732,7 +730,7 @@ export function TripSetupPage() {
                             </div>
                           </div>
                           {stop.savedVenueId && (
-                            <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 text-[10px] font-medium text-gold">
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
                               <Check size={9} /> From your venues
                             </span>
                           )}
@@ -740,7 +738,7 @@ export function TripSetupPage() {
                         <button
                           onClick={() => removeStop(dayIdx, stop.id)}
                           aria-label="Remove stop"
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-danger/70 transition-all hover:bg-danger/10 hover:text-danger active:scale-90"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-destructive-text transition-all hover:bg-destructive-soft hover:text-destructive-text active:scale-90"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -753,13 +751,13 @@ export function TripSetupPage() {
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => addStop(dayIdx)}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed border-gold/30 py-2.5 text-sm font-medium text-gold/70 transition-all hover:border-gold hover:text-gold active:scale-[0.98]"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2.5 text-sm font-medium text-muted-foreground transition-all hover:border-input hover:text-primary-text active:scale-[0.98]"
                   >
                     <Plus size={16} /> Add Stop
                   </button>
                   <button
                     onClick={() => setShowVenuePicker(true)}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed border-gold/30 py-2.5 text-sm font-medium text-gold/70 transition-all hover:border-gold hover:text-gold active:scale-[0.98]"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2.5 text-sm font-medium text-muted-foreground transition-all hover:border-input hover:text-primary-text active:scale-[0.98]"
                   >
                     <MapPin size={16} /> From Saved
                   </button>
@@ -773,27 +771,27 @@ export function TripSetupPage() {
             <button
               onClick={() => setCurrentDay(Math.max(0, currentDay - 1))}
               disabled={currentDay === 0}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-card border border-gold/20 bg-black/40 py-3 text-sm font-medium text-gold transition-all active:scale-[0.98] disabled:opacity-30"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-background py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] disabled:opacity-30"
             >
               <ChevronLeft size={18} /> Prev Day
             </button>
             <button
               onClick={() => setCurrentDay(Math.min(numDays - 1, currentDay + 1))}
               disabled={currentDay === numDays - 1}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-card border border-gold/20 bg-black/40 py-3 text-sm font-medium text-gold transition-all active:scale-[0.98] disabled:opacity-30"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-background py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] disabled:opacity-30"
             >
               Next Day <ChevronRight size={18} />
             </button>
           </div>
 
           {error && (
-            <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
+            <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">{error}</p>
           )}
 
           <div className="fixed bottom-24 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 justify-center px-6 lg:bottom-8">
             <button
               onClick={handleGenerate}
-              className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3.5 text-base font-bold text-black shadow-gold-glow transition-all duration-200 active:scale-[0.98]"
+              className="btn-primary btn-lg w-full"
             >
               <Sparkles size={20} /> Generate Itinerary
             </button>
@@ -803,26 +801,26 @@ export function TripSetupPage() {
 
       {/* Venue Picker Modal */}
       {showVenuePicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setShowVenuePicker(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 px-4" onClick={() => setShowVenuePicker(false)}>
           <div
-            className="flex h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-gold/20 bg-[#0d0d0d]"
+            className="flex h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-border bg-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-gold/10 p-5">
-              <h2 className="text-lg font-bold text-gold">Pick a Saved Venue</h2>
-              <button onClick={() => setShowVenuePicker(false)} className="text-ink-secondary transition-colors hover:text-gold">
+            <div className="flex items-center justify-between border-b border-border p-5">
+              <h2 className="text-heading text-foreground">Pick a Saved Venue</h2>
+              <button onClick={() => setShowVenuePicker(false)} className="text-muted-foreground transition-colors hover:text-primary-text">
                 <X size={22} />
               </button>
             </div>
             <div className="p-4">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gold/50" size={16} />
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
                 <input
                   type="text"
                   value={venueSearch}
                   onChange={(e) => setVenueSearch(e.target.value)}
                   placeholder="Search venues..."
-                  className="w-full rounded-card border border-gold/20 bg-black/40 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                  className="w-full rounded-md border border-input bg-card dark:bg-background py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                 />
               </div>
               {collections.length > 0 && (
@@ -831,8 +829,8 @@ export function TripSetupPage() {
                     onClick={() => setVenuePickerCollection(null)}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                       !venuePickerCollection
-                        ? 'border-gold bg-gold/20 text-gold'
-                        : 'border-gold/20 bg-black/40 text-ink-secondary'
+                        ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                        : 'border-border bg-background text-muted-foreground'
                     }`}
                   >
                     All
@@ -843,8 +841,8 @@ export function TripSetupPage() {
                       onClick={() => setVenuePickerCollection(c.id)}
                       className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                         venuePickerCollection === c.id
-                          ? 'border-gold bg-gold/20 text-gold'
-                          : 'border-gold/20 bg-black/40 text-ink-secondary'
+                          ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                          : 'border-border bg-background text-muted-foreground'
                       }`}
                     >
                       <Folder size={10} /> {c.name}
@@ -855,25 +853,25 @@ export function TripSetupPage() {
             </div>
             <div className="flex-1 overflow-y-auto px-4 pb-4">
               {filteredVenues.length === 0 ? (
-                <p className="py-8 text-center text-sm text-ink-secondary">No saved venues found. Add venues in the Venues tab first.</p>
+                <p className="py-8 text-center text-sm text-muted-foreground">No saved venues found. Add venues in the Venues tab first.</p>
               ) : (
                 <div className="space-y-2">
                   {filteredVenues.map((v) => (
                     <button
                       key={v.id}
                       onClick={() => addSavedVenueAsStop(currentDay, v)}
-                      className="flex w-full items-center gap-3 rounded-xl border border-gold/20 bg-black/40 p-3 text-left transition-all hover:border-gold hover:bg-gold/5 active:scale-[0.98]"
+                      className="flex w-full items-center gap-3 rounded-xl border border-border bg-background p-3 text-left transition-all hover:border-input hover:bg-muted active:scale-[0.98]"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-white">{v.name}</p>
-                        <p className="truncate text-xs text-ink-secondary">{v.address}</p>
+                        <p className="truncate text-sm font-medium text-foreground">{v.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{v.address}</p>
                         {v.collection && (
-                          <span className="mt-1 inline-block rounded-full border border-gold/20 bg-black/40 px-2 py-0.5 text-[10px] text-gold/80">
+                          <span className="mt-1 inline-block rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground">
                             {v.collection}
                           </span>
                         )}
                       </div>
-                      <Plus size={18} className="shrink-0 text-gold" />
+                      <Plus size={18} className="shrink-0 text-muted-foreground" />
                     </button>
                   ))}
                 </div>

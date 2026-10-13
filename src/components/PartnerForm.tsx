@@ -108,13 +108,13 @@ export function PartnerForm({
     }
   };
 
-  const field = 'w-full rounded-card border border-gold/20 bg-black/40 px-4 py-2.5 text-sm text-white placeholder:text-ink-secondary/60 outline-none focus:border-gold';
+  const field = 'w-full rounded-md border border-input bg-card dark:bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-ring';
 
   return (
     <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-white">
+          <DialogTitle className="text-foreground">
             {partner ? `Edit ${partner.business_name}` : canManage ? 'Add venue partner' : 'Submit new venue'}
           </DialogTitle>
           <DialogDescription>
@@ -141,9 +141,9 @@ export function PartnerForm({
           <div className="grid gap-3 sm:grid-cols-2">
             <Labeled label="Website (optional)"><input className={field} value={website} onChange={(e) => setWebsite(e.target.value)} /></Labeled>
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-ink-secondary">Rate per review / visit</span>
-              <p className="rounded-card border border-gold/10 bg-black/20 px-4 py-2.5 text-sm text-white">
-                {rateCents == null ? '…' : `$${(rateCents / 100).toFixed(2)}`} <span className="text-xs text-ink-secondary">· same for every venue</span>
+              <span className="text-xs font-semibold text-muted-foreground">Rate per review / visit</span>
+              <p className="rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground">
+                {rateCents == null ? '…' : `$${(rateCents / 100).toFixed(2)}`} <span className="text-xs text-muted-foreground">· same for every venue</span>
               </p>
             </div>
           </div>
@@ -161,12 +161,12 @@ export function PartnerForm({
             </Labeled>
           )}
           {canApprove && (
-            <label className="flex items-center gap-2 text-sm text-white">
-              <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} className="size-4 accent-[#D4AF35]" />
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} className="size-4 accent-primary" />
               Live in the app (approved)
             </label>
           )}
-          {error && <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-2.5 text-sm text-red-200">{error}</p>}
+          {error && <p role="alert" className="rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-2.5 text-sm text-destructive-text">{error}</p>}
           <div className="mt-2 flex gap-3">
             <Button type="submit" disabled={saving} className="flex-1">
               {saving ? <Loader2 className="animate-spin" /> : <Check />} {partner ? 'Save changes' : canManage ? 'Add partner' : 'Submit venue'}
@@ -182,7 +182,7 @@ export function PartnerForm({
 export function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-ink-secondary">{label}</span>
+      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
       {children}
     </label>
   );

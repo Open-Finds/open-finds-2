@@ -58,14 +58,14 @@ export function DeclinedPage({ id }: { id: string }) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-ink-secondary">Loading...</p>
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
   if (!plan) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger">Plan not found.</p>
+        <p className="text-destructive-text">Plan not found.</p>
       </div>
     );
   }
@@ -100,23 +100,23 @@ export function DeclinedPage({ id }: { id: string }) {
   return (
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-8">
       <div className="text-center animate-fade-in">
-        <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full border-2 border-danger/40 bg-danger/10">
-          <Frown className="text-danger" size={28} />
+        <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full border-2 border-destructive-text/30 bg-destructive-soft">
+          <Frown className="text-destructive-text" size={28} />
         </div>
-        <h1 className="text-2xl font-bold">Can't make it?</h1>
-        <p className="mt-2 text-sm text-ink-secondary">
+        <h1 className="text-title">Can't make it?</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           No worries — let {plan.host_name} know why.
         </p>
       </div>
 
       {done ? (
         <div className="card mt-6 text-center">
-          <p className="text-white">
+          <p className="text-foreground">
             Thanks — {plan.host_name} will know you can't make it.
           </p>
           <button
             onClick={() => navigate(`/plan/${id}`)}
-            className="btn-secondary mt-4 w-full"
+            className="btn-outline mt-4 w-full"
           >
             Back to RSVP
           </button>
@@ -124,7 +124,7 @@ export function DeclinedPage({ id }: { id: string }) {
       ) : (
         <>
           <div className="mt-8">
-            <label className="mb-2 block text-sm font-medium text-ink-secondary">
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
               Reason
             </label>
             <AppSelect
@@ -132,7 +132,7 @@ export function DeclinedPage({ id }: { id: string }) {
               onChange={setReason}
               placeholder="Pick a reason"
               ariaLabel="Reason"
-              className="touch-target bg-surface focus:shadow-gold-glow data-[state=open]:shadow-gold-glow"
+              className="touch-target bg-card"
               options={REASONS.map((r) => ({ value: r, label: r }))}
             />
             {reason === 'Other' && (
@@ -141,13 +141,13 @@ export function DeclinedPage({ id }: { id: string }) {
                 value={otherText}
                 onChange={(e) => setOtherText(e.target.value)}
                 placeholder="Tell us more"
-                className="mt-3 w-full touch-target rounded-card border border-gold/20 bg-surface px-4 text-white placeholder-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow"
+                className="mt-3 w-full touch-target rounded-md border border-input bg-card px-4 text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-ring"
               />
             )}
           </div>
 
           {error && (
-            <p className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <p className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
               {error}
             </p>
           )}
@@ -160,14 +160,14 @@ export function DeclinedPage({ id }: { id: string }) {
             <Send size={18} /> {submitting ? 'Sending...' : 'Send'}
           </button>
 
-          <p className="mt-6 text-center text-sm text-ink-secondary">
+          <p className="mt-6 text-center text-sm text-muted-foreground">
             Changed your mind?{' '}
             <button
               onClick={() => {
                 const rsvpId = getRsvpIdFromHash();
                 navigate(`/plan/${id}/confirmed?rsvp=${rsvpId ?? ''}`);
               }}
-              className="font-semibold text-gold underline transition-colors hover:text-gold-light"
+              className="font-semibold text-primary-text underline transition-colors hover:text-primary-text"
             >
               Actually I'm in!
             </button>
@@ -177,8 +177,8 @@ export function DeclinedPage({ id }: { id: string }) {
 
       <section className="mt-10">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Who's Coming</h2>
-          <span className="text-sm text-ink-secondary">
+          <h2 className="text-heading">Who's Coming</h2>
+          <span className="text-sm text-muted-foreground">
             {confirmedCount}/{rsvps.length} confirmed
           </span>
         </div>

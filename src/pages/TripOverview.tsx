@@ -83,7 +83,7 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 size={32} className="animate-spin text-gold" />
+        <Loader2 size={32} className="animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -91,8 +91,8 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
   if (error || !trip) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger">{error ?? 'Trip not found.'}</p>
-        <button onClick={() => navigate('/')} className="btn-secondary mt-4">
+        <p className="text-destructive-text">{error ?? 'Trip not found.'}</p>
+        <button onClick={() => navigate('/')} className="btn-outline mt-4">
           Back home
         </button>
       </div>
@@ -145,21 +145,21 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-24 pt-8">
       <button
         onClick={() => navigate('/')}
-        className="mb-6 flex items-center text-gold transition-all active:scale-90"
+        className="mb-6 flex items-center text-primary-text transition-all active:scale-90"
       >
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
 
       {/* Trip Header */}
-      <div className="gold-gradient-bg animate-fade-in rounded-card p-6 text-black shadow-gold-glow">
+      <div className="animate-fade-in rounded-lg border border-border bg-card p-6 text-card-foreground shadow-1">
         <div className="flex items-center gap-2">
           <Compass size={20} />
-          <span className="text-xs font-bold uppercase tracking-wide text-black/60">
+          <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
             Trip
           </span>
         </div>
-        <h1 className="mt-1 text-2xl font-bold leading-tight">{trip.name}</h1>
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-black/80">
+        <h1 className="mt-1 text-title leading-tight">{trip.name}</h1>
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <MapPin size={15} /> {trip.destination}
           </span>
@@ -179,23 +179,23 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
             })}
           </span>
         </div>
-        <p className="mt-2 text-sm font-medium text-black/70">
+        <p className="mt-2 text-small text-muted-foreground">
           {trip.num_days} day{trip.num_days === 1 ? '' : 's'} · {totalStops} stop
           {totalStops === 1 ? '' : 's'} · Hosted by {trip.host_name}
         </p>
       </div>
 
       {trip.status === 'canceled' && (
-        <div className="mt-4 rounded-card border border-danger/40 bg-danger/10 px-4 py-3 text-center">
-          <p className="font-bold text-danger">This trip has been canceled.</p>
+        <div className="mt-4 rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-center">
+          <p className="font-bold text-destructive-text">This trip has been canceled.</p>
         </div>
       )}
 
       {/* Day Cards */}
       <div className="mt-8 space-y-4">
         {days.length === 0 ? (
-          <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-8 text-center">
-            <p className="text-sm text-ink-secondary">
+          <div className="rounded-lg border border-border bg-card p-8 text-center">
+            <p className="text-sm text-muted-foreground">
               No days found for this trip.
             </p>
           </div>
@@ -204,15 +204,15 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
             <button
               key={day.id}
               onClick={() => navigate(`/trip/${tripId}/day/${day.id}`)}
-              className="w-full rounded-card border border-gold/20 bg-[#1a1a1a] p-4 text-left transition-all hover:border-gold/50 active:scale-[0.98]"
+              className="w-full rounded-lg border border-border bg-card p-4 text-left transition-all hover:border-input active:scale-[0.98]"
             >
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-gold bg-black text-lg font-bold text-gold">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-border bg-background text-heading text-foreground">
                   {idx + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-bold text-white">{day.title}</h3>
-                  <p className="mt-0.5 text-xs text-ink-secondary">
+                  <h3 className="font-bold text-foreground">{day.title}</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {new Date(day.date).toLocaleDateString('en-AU', {
                       weekday: 'long',
                       day: 'numeric',
@@ -221,7 +221,7 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gold">
+                  <p className="text-sm font-medium text-foreground">
                     {day.stops.length} stop{day.stops.length === 1 ? '' : 's'}
                   </p>
                 </div>
@@ -229,17 +229,17 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
 
               {/* Stop preview */}
               {day.stops.length > 0 && (
-                <div className="mt-3 space-y-1.5 border-t border-gold/10 pt-3">
+                <div className="mt-3 space-y-1.5 border-t border-border pt-3">
                   {day.stops.slice(0, 4).map((s) => (
                     <div
                       key={s.id}
-                      className="flex items-center gap-2 text-xs text-ink-secondary"
+                      className="flex items-center gap-2 text-xs text-muted-foreground"
                     >
-                      <Clock size={12} className="text-gold/50" />
-                      <span className="w-12 shrink-0 text-gold/70">
+                      <Clock size={12} className="text-muted-foreground" />
+                      <span className="w-12 shrink-0 text-muted-foreground">
                         {s.time}
                       </span>
-                      <span className="truncate text-white/80">{s.name}</span>
+                      <span className="truncate text-foreground">{s.name}</span>
                       {day.stopRsvpCounts[s.id] &&
                         (day.stopRsvpCounts[s.id].in > 0 ||
                           day.stopRsvpCounts[s.id].out > 0) && (
@@ -251,7 +251,7 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
                               </span>
                             )}
                             {day.stopRsvpCounts[s.id].out > 0 && (
-                              <span className="flex items-center gap-0.5 text-danger/70">
+                              <span className="flex items-center gap-0.5 text-destructive-text">
                                 <X size={11} />
                                 {day.stopRsvpCounts[s.id].out}
                               </span>
@@ -261,7 +261,7 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
                     </div>
                   ))}
                   {day.stops.length > 4 && (
-                    <p className="text-xs text-ink-secondary/60">
+                    <p className="text-xs text-muted-foreground">
                       +{day.stops.length - 4} more...
                     </p>
                   )}
@@ -279,20 +279,20 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
             href={mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-secondary w-full"
+            className="btn-outline w-full"
           >
             <MapPin size={18} /> View All Stops in Maps
           </a>
           <button onClick={handleInvite} className="btn-primary w-full">
             <UserPlus size={18} /> Invite Friends
           </button>
-          <button onClick={handleShare} className="btn-secondary w-full">
+          <button onClick={handleShare} className="btn-outline w-full">
             <Share2 size={18} />{' '}
             {showShareCopied ? 'Copied!' : 'Copy Trip Link'}
           </button>
           <button
             onClick={() => setShowCancelConfirm(true)}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-card border border-danger/30 bg-danger/5 px-4 py-3 text-sm font-medium text-danger/80 transition-all active:scale-[0.98]"
+            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm font-medium text-destructive-text transition-all active:scale-[0.98]"
           >
             <Trash2 size={18} /> Cancel Trip
           </button>
@@ -302,25 +302,25 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
       {/* Cancel confirmation modal */}
       {showCancelConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 px-6"
           onClick={() => !canceling && setShowCancelConfirm(false)}
         >
           <div
-            className="w-full max-w-sm rounded-card border border-gold/20 bg-[#0d0d0d] p-6"
+            className="w-full max-w-sm rounded-lg border border-border bg-card p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Cancel this trip?</h2>
+              <h2 className="text-heading text-foreground">Cancel this trip?</h2>
               <button
                 onClick={() => setShowCancelConfirm(false)}
                 disabled={canceling}
                 aria-label="Close"
-                className="text-ink-secondary transition-colors hover:text-white disabled:opacity-50"
+                className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
               >
                 <X size={20} />
                 </button>
             </div>
-            <p className="mb-6 text-sm text-ink-secondary">
+            <p className="mb-6 text-sm text-muted-foreground">
               "{trip.name}" will be marked as canceled. Friends with the link will
               see a cancellation notice, but the itinerary stays visible.
             </p>
@@ -328,14 +328,14 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
               <button
                 onClick={handleCancel}
                 disabled={canceling}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-card bg-danger px-4 py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-destructive px-4 py-3 text-sm font-bold text-destructive-foreground transition-all active:scale-[0.98] disabled:opacity-50"
               >
                 {canceling ? 'Canceling...' : 'Yes, Cancel Trip'}
               </button>
               <button
                 onClick={() => setShowCancelConfirm(false)}
                 disabled={canceling}
-                className="flex min-h-[44px] w-full items-center justify-center rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-sm font-medium text-ink-secondary transition-all active:scale-[0.98] disabled:opacity-50"
+                className="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-muted-foreground transition-all active:scale-[0.98] disabled:opacity-50"
               >
                 Never mind
               </button>

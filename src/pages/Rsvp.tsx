@@ -66,22 +66,22 @@ export function RsvpPage({ id }: { id: string }) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-ink-secondary">Loading...</p>
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
   if (fetchError) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger font-semibold">Could not load this plan.</p>
-        <p className="mt-2 text-sm text-ink-secondary">{fetchError}</p>
+        <p className="text-destructive-text font-semibold">Could not load this plan.</p>
+        <p className="mt-2 text-sm text-muted-foreground">{fetchError}</p>
       </div>
     );
   }
   if (!plan) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger">Plan not found.</p>
+        <p className="text-destructive-text">Plan not found.</p>
       </div>
     );
   }
@@ -121,21 +121,21 @@ export function RsvpPage({ id }: { id: string }) {
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-8">
       {celebrating && <Confetti />}
       {plan.canceled && (
-        <div className="mb-6 rounded-card border border-danger/40 bg-danger/10 px-4 py-3 text-center">
-          <p className="font-bold text-danger">This event has been canceled by the host.</p>
+        <div className="mb-6 rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-center">
+          <p className="font-bold text-destructive-text">This event has been canceled by the host.</p>
         </div>
       )}
 
       <div className="mb-6 text-center">
-        <p className="text-sm text-ink-secondary">You are invited to</p>
-        <h1 className="mt-1 text-2xl font-bold text-gold leading-tight">{plan.title}</h1>
-        <p className="mt-1 text-sm text-ink-secondary">
-          by <span className="font-semibold text-white">{plan.host_name}</span>
+        <p className="text-sm text-muted-foreground">You are invited to</p>
+        <h1 className="mt-1 text-title text-foreground leading-tight">{plan.title}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          by <span className="font-semibold text-foreground">{plan.host_name}</span>
         </p>
       </div>
 
-      <div className="gold-gradient-bg animate-fade-in rounded-card p-5 text-black shadow-gold-glow">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-black/80">
+      <div className="animate-fade-in rounded-lg border border-border bg-card p-5 text-card-foreground shadow-1">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <CalendarDays size={15} />
             {parseLocalDate(plan.date).toLocaleDateString('en-AU', {
@@ -153,7 +153,7 @@ export function RsvpPage({ id }: { id: string }) {
       </div>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">The Plan</h2>
+        <h2 className="mb-4 text-heading">The Plan</h2>
         <Timeline stops={stops} />
       </section>
 
@@ -164,7 +164,7 @@ export function RsvpPage({ id }: { id: string }) {
               href={mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-secondary flex items-center justify-center gap-2"
+              className="btn-outline flex items-center justify-center gap-2"
             >
               <Navigation size={18} /> Open in Maps
             </a>
@@ -175,11 +175,11 @@ export function RsvpPage({ id }: { id: string }) {
 
       {!plan.canceled && (
         <section className="mt-8">
-          <h2 className="mb-3 text-lg font-semibold">Are you in?</h2>
+          <h2 className="mb-3 text-heading">Are you in?</h2>
           {isSignedIn ? (
-            <div className="mb-4 rounded-card border border-gold/20 bg-surface px-4 py-3">
-              <p className="text-sm text-ink-secondary">Responding as</p>
-              <p className="text-lg font-semibold text-white">{displayName || name || 'You'}</p>
+            <div className="mb-4 rounded-md border border-border bg-card px-4 py-3">
+              <p className="text-sm text-muted-foreground">Responding as</p>
+              <p className="text-heading text-foreground">{displayName || name || 'You'}</p>
             </div>
           ) : (
             <input
@@ -187,11 +187,11 @@ export function RsvpPage({ id }: { id: string }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Your name"
-              className="w-full touch-target rounded-card border border-gold/20 bg-surface px-4 text-white placeholder-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow"
+              className="w-full touch-target rounded-md border border-input bg-card px-4 text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-ring"
             />
           )}
           {error && (
-            <p className="mt-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <p className="mt-3 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
               {error}
             </p>
           )}
@@ -206,7 +206,7 @@ export function RsvpPage({ id }: { id: string }) {
             <button
               onClick={() => submitRsvp('declined')}
               disabled={submitting}
-              className="btn-secondary disabled:opacity-40"
+              className="btn-outline disabled:opacity-40"
             >
               <X size={18} /> Can't Make It
             </button>
@@ -216,7 +216,7 @@ export function RsvpPage({ id }: { id: string }) {
 
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">
+          <h2 className="text-heading">
             Who's Coming ({confirmedCount}/{rsvps.length})
           </h2>
         </div>

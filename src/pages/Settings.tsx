@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins, Store } from 'lucide-react';
+import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins, Store, SunMoon } from 'lucide-react';
 import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isManagerRole, isTeam, ROLE_LABELS, SUBSCRIPTION_PLANS } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../lib/router';
 import { ScrollHint } from '../components/ScrollHint';
 import { ShareIntoApp } from '../components/ShareIntoApp';
+import { ThemeSwitch } from '../components/ThemeProvider';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
@@ -164,22 +165,31 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <div className="relative min-h-screen overflow-y-auto bg-black px-6 pt-20 pb-24">
+    <div className="relative min-h-screen overflow-y-auto bg-background px-6 pt-20 pb-24">
       <button
         onClick={onBack}
         aria-label="Back"
-        className="absolute left-5 top-5 flex items-center justify-center rounded-full text-gold transition-all active:scale-90"
+        className="absolute left-3 top-3 flex size-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted active:scale-95"
       >
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
 
       <div className="mx-auto w-full">
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="mt-1 mb-8 text-sm text-ink-secondary">{currentEmail}</p>
+        <h1 className="text-title text-foreground">Settings</h1>
+        <p className="mt-1 mb-8 text-sm text-muted-foreground">{currentEmail}</p>
+
+        {/* Appearance */}
+        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-caption text-muted-foreground">
+            <SunMoon size={13} /> Appearance
+          </h2>
+          <ThemeSwitch />
+          <p className="mt-3 text-small text-muted-foreground">System follows your phone or computer's light or dark setting.</p>
+        </section>
 
         {/* Display name */}
-        <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-caption text-muted-foreground">
             <User size={13} /> Display Name
           </h2>
           <input
@@ -187,27 +197,27 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
             placeholder="e.g. Robert Bui"
-            className="mb-3 w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+            className="mb-3 w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
           />
           {nameError && (
-            <p className="mb-3 text-sm text-danger">{nameError}</p>
+            <p className="mb-3 text-sm text-destructive-text">{nameError}</p>
           )}
           <button
             onClick={handleSaveName}
             disabled={nameSaving}
-            className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-50"
+            className="btn-secondary w-full"
           >
             {nameSaved ? <><Check size={15} /> Saved!</> : nameSaving ? 'Saving...' : 'Save Name'}
           </button>
         </section>
 
         {/* Username */}
-        <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-caption text-muted-foreground">
             <AtSign size={13} /> Username
           </h2>
           <div className="relative mb-3">
-            <AtSign size={15} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/50" />
+            <AtSign size={15} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               value={usernameInput}
@@ -216,28 +226,28 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                 setUsernameInput(clean);
               }}
               placeholder="e.g. robbui"
-              className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-11 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+              className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-11 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             />
           </div>
           {usernameError && (
-            <p className="mb-3 text-sm text-danger">{usernameError}</p>
+            <p className="mb-3 text-sm text-destructive-text">{usernameError}</p>
           )}
           <button
             onClick={handleSaveUsername}
             disabled={usernameSaving || !usernameInput.trim()}
-            className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-50"
+            className="btn-secondary w-full"
           >
             {usernameSaved ? <><Check size={15} /> Saved!</> : usernameSaving ? 'Saving...' : 'Save Username'}
           </button>
-          <p className="mt-2 text-xs text-ink-secondary">Friends can find you by searching this username.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Friends can find you by searching this username.</p>
         </section>
 
         {/* Dietary Preferences */}
-        <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-          <h2 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-2 flex items-center gap-2 text-caption text-muted-foreground">
             <Utensils size={13} /> Dietary Preferences
           </h2>
-          <p className="mb-4 text-sm text-ink-secondary">
+          <p className="mb-4 text-sm text-muted-foreground">
             We use these to filter AI venue recommendations so they always work for you.
           </p>
           <div className="mb-4 flex flex-wrap gap-2">
@@ -257,8 +267,8 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                   }}
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-semibold transition-all duration-200 active:scale-95 ${
                     selected
-                      ? 'border-gold bg-gold text-black'
-                      : 'border-gold/30 bg-black/40 text-gold hover:border-gold/60'
+                      ? 'border-transparent bg-primary-soft text-primary-soft-foreground'
+                      : 'border-border bg-muted text-foreground hover:border-input'
                   }`}
                 >
                   {selected && <Check size={14} strokeWidth={3} />}
@@ -282,15 +292,15 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
               }
             }}
             disabled={dietarySaving}
-            className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-50"
+            className="btn-secondary w-full"
           >
             {dietarySaved ? <><Check size={15} /> Saved!</> : dietarySaving ? 'Saving...' : 'Save Preferences'}
           </button>
         </section>
 
         {/* Email */}
-        <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-caption text-muted-foreground">
             <Mail size={13} /> Email Address
           </h2>
           <input
@@ -298,10 +308,10 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             value={emailInput}
             onChange={(e) => setEmailInput(e.target.value)}
             autoComplete="email"
-            className="mb-3 w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+            className="mb-3 w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
           />
           {emailError && (
-            <p className="mb-3 text-sm text-danger">{emailError}</p>
+            <p className="mb-3 text-sm text-destructive-text">{emailError}</p>
           )}
           {emailSaved && (
             <p className="mb-3 text-sm text-success">
@@ -311,15 +321,15 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           <button
             onClick={handleSaveEmail}
             disabled={emailSaving}
-            className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-50"
+            className="btn-secondary w-full"
           >
             {emailSaving ? 'Saving...' : 'Save Email'}
           </button>
         </section>
 
         {/* Password */}
-        <section className="mb-8 rounded-card border border-gold/20 bg-[#111] p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+        <section className="mb-8 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-caption text-muted-foreground">
             <Lock size={13} /> Change Password
           </h2>
           <input
@@ -328,15 +338,15 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             onChange={(e) => setPasswordInput(e.target.value)}
             placeholder="New password (min. 6 characters)"
             autoComplete="new-password"
-            className="mb-3 w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+            className="mb-3 w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
           />
           {passwordError && (
-            <p className="mb-3 text-sm text-danger">{passwordError}</p>
+            <p className="mb-3 text-sm text-destructive-text">{passwordError}</p>
           )}
           <button
             onClick={handleSavePassword}
             disabled={passwordSaving}
-            className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-50"
+            className="btn-secondary w-full"
           >
             {passwordSaved ? <><Check size={15} /> Updated!</> : passwordSaving ? 'Saving...' : 'Save Password'}
           </button>
@@ -344,28 +354,28 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
 
         {/* Credits: earned by reviewing sponsored venues */}
         {credits != null && (
-          <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+          <section className="mb-6 rounded-lg border border-border bg-card p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
               <Coins size={13} /> Credits
             </h2>
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm text-ink-secondary">Your credits</span>
-              <span className="text-2xl font-bold text-gold" aria-label={`${credits} credits`}>{credits}</span>
+              <span className="text-sm text-muted-foreground">Your credits</span>
+              <span className="text-title text-foreground" aria-label={`${credits} credits`}>{credits}</span>
             </div>
-            <p className="text-sm text-ink-secondary">
+            <p className="text-sm text-muted-foreground">
               Review a sponsored venue to earn 1 credit. When you've used today's free AI extractions or Something New searches, spend a credit for one more. Credits never expire.
             </p>
           </section>
         )}
 
         {/* Subscription */}
-        <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-          <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
             <Crown size={13} /> Subscription
           </h2>
           <div className="mb-4 flex items-center justify-between">
-            <span className="text-sm text-ink-secondary">Current plan</span>
-            <span className="text-sm font-bold text-gold">
+            <span className="text-sm text-muted-foreground">Current plan</span>
+            <span className="text-sm font-bold text-foreground">
               {premiumUnlocked && subscriptionTier === 'free'
                 ? 'Premium (free while testing)'
                 : SUBSCRIPTION_PLANS[subscriptionTier].label}
@@ -373,7 +383,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           </div>
           <button
             onClick={() => navigate('/subscription')}
-            className="flex w-full items-center justify-between rounded-card border border-gold/40 bg-black/40 px-4 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] hover:bg-gold/10"
+            className="flex w-full items-center justify-between rounded-md border border-input bg-background px-4 py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] hover:bg-muted"
           >
             <span className="flex items-center gap-2"><Crown size={16} /> Manage Subscription</span>
             <ChevronRight size={18} />
@@ -381,16 +391,16 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         </section>
 
         {/* Venue Partner Portal */}
-        <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-          <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
             <Building2 size={13} /> Venue Partner
           </h2>
-          <p className="mb-4 text-sm text-ink-secondary">
+          <p className="mb-4 text-sm text-muted-foreground">
             {isVenuePartner ? 'Manage your venue promotion and billing.' : 'Are you a venue business? Promote your spot and pay only for confirmed visits.'}
           </p>
           <button
             onClick={() => navigate('/venue-portal')}
-            className="flex w-full items-center justify-between rounded-card border border-gold/40 bg-black/40 px-4 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] hover:bg-gold/10"
+            className="flex w-full items-center justify-between rounded-md border border-input bg-background px-4 py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] hover:bg-muted"
           >
             <span className="flex items-center gap-2"><Building2 size={16} /> {isVenuePartner ? 'Venue Dashboard' : 'Become a Venue Partner'}</span>
             <ChevronRight size={18} />
@@ -399,14 +409,14 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
 
         {/* Team: My Venues for workers, managers and the super admin */}
         {isTeam(role) && (
-          <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+          <section className="mb-6 rounded-lg border border-border bg-card p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
               <Store size={13} /> {ROLE_LABELS[role]}
             </h2>
-            <p className="mb-4 text-sm text-ink-secondary">Submit venues, see how they're doing, and track your commission.</p>
+            <p className="mb-4 text-sm text-muted-foreground">Submit venues, see how they're doing, and track your commission.</p>
             <button
               onClick={() => navigate('/my-venues')}
-              className="flex w-full items-center justify-between rounded-card border border-gold/40 bg-black/40 px-4 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] hover:bg-gold/10"
+              className="flex w-full items-center justify-between rounded-md border border-input bg-background px-4 py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] hover:bg-muted"
             >
               <span className="flex items-center gap-2"><Store size={16} /> Open My Venues</span>
               <ChevronRight size={18} />
@@ -416,16 +426,16 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
 
         {/* Admin dashboard: managers and the super admin (workers have My Venues) */}
         {isManagerRole(role) && (
-          <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+          <section className="mb-6 rounded-lg border border-border bg-card p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
               <ShieldCheck size={13} /> Admin
             </h2>
-            <p className="mb-4 text-sm text-ink-secondary">
+            <p className="mb-4 text-sm text-muted-foreground">
               {role === 'admin' ? 'Venue partners, approvals, revenue, and your team and their commission.' : 'Venue partners, approvals, revenue and the team.'}
             </p>
             <button
               onClick={() => navigate('/admin')}
-              className="flex w-full items-center justify-between rounded-card border border-gold/40 bg-black/40 px-4 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] hover:bg-gold/10"
+              className="flex w-full items-center justify-between rounded-md border border-input bg-background px-4 py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] hover:bg-muted"
             >
               <span className="flex items-center gap-2"><ShieldCheck size={16} /> Open Admin</span>
               <ChevronRight size={18} />
@@ -436,11 +446,11 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         <ShareIntoApp />
 
         {/* Replay onboarding */}
-        <section className="mb-6 rounded-card border border-gold/20 bg-[#111] p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold/70">
+        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-caption text-muted-foreground">
             <HelpCircle size={13} /> How to Use
           </h2>
-          <p className="mb-3 text-sm text-ink-secondary">
+          <p className="mb-3 text-sm text-muted-foreground">
             New here or need a refresher? Replay the quick walkthrough.
           </p>
           <button
@@ -450,7 +460,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                 setOnboardingCompleted(false);
               } catch { /* ignore */ }
             }}
-            className="flex w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/40 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] hover:bg-gold/10"
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] hover:bg-muted"
           >
             Replay Walkthrough
           </button>
@@ -459,14 +469,14 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         {/* Logout */}
         <button
           onClick={() => setConfirmSignOut(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-card border border-danger/30 bg-danger/10 py-3.5 text-base font-bold text-danger transition-all active:scale-[0.98] hover:bg-danger/20"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-destructive-text/30 bg-destructive-soft py-3.5 text-base font-bold text-destructive-text transition-all active:scale-[0.98] hover:bg-destructive-soft"
         >
           <LogOut size={18} /> Sign Out
         </button>
         <Dialog open={confirmSignOut} onOpenChange={(open) => !signingOut && setConfirmSignOut(open)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-white">Sign out?</DialogTitle>
+              <DialogTitle className="text-foreground">Sign out?</DialogTitle>
               <DialogDescription>You'll need your email and password, or Google, to sign back in.</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

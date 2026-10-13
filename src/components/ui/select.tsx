@@ -10,17 +10,17 @@ export type AppSelectOption = {
 };
 
 const triggerBase =
-  'flex w-full items-center justify-between gap-2 rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-left text-white outline-none transition-colors focus:border-gold data-[state=open]:border-gold data-[placeholder]:text-ink-secondary';
+  'flex h-12 w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-left text-base text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:border-ring data-[placeholder]:text-muted-foreground dark:bg-background';
 
 const contentBase =
-  'z-[80] max-h-72 overflow-hidden rounded-card border border-gold/40 bg-[#111] p-1 shadow-gold-glow';
+  'z-[80] max-h-72 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-2';
 
 const itemBase =
-  'flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm text-white outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-gold/20 data-[highlighted]:text-gold data-[state=checked]:text-gold';
+  'flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-sm px-3 py-2 text-base text-foreground outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-muted data-[state=checked]:text-primary-text';
 
 /**
  * App-styled select. Native &lt;select&gt; / OS pickers paint light-blue system chrome;
- * this menu stays on the black + gold surface used by the rest of the app.
+ * this menu uses the app's own surfaces in light and dark.
  */
 export function AppSelect({
   value,
@@ -50,7 +50,7 @@ export function AppSelect({
       >
         <SelectPrimitive.Value placeholder={placeholder} />
         <SelectPrimitive.Icon asChild>
-          <ChevronDown size={16} className="shrink-0 text-gold/70" />
+          <ChevronDown size={16} className="shrink-0 text-muted-foreground" />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
@@ -69,7 +69,7 @@ export function AppSelect({
               >
                 <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
                 <SelectPrimitive.ItemIndicator>
-                  <Check size={14} className="text-gold" />
+                  <Check size={14} className="text-primary-text" />
                 </SelectPrimitive.ItemIndicator>
               </SelectPrimitive.Item>
             ))}
@@ -140,7 +140,7 @@ function toTime24(hour12: number, minute: string, period: 'AM' | 'PM'): string {
 }
 
 const compactTrigger =
-  'min-w-0 flex-1 rounded-lg border border-gold/40 bg-black/60 px-2 py-1.5 text-sm text-gold focus:border-gold data-[state=open]:border-gold';
+  'min-w-0 flex-1 rounded-sm border border-input bg-card px-2 py-1.5 text-sm text-foreground focus:border-ring data-[state=open]:border-ring dark:bg-background';
 
 /**
  * Time picker (HH:MM stored 24h) with the same black/gold menu as AppSelect.
@@ -177,7 +177,7 @@ export function TimeSelect({
         className={compactTrigger}
         contentClassName="min-w-[4.5rem]"
       />
-      <span className="shrink-0 text-sm font-semibold text-gold/70" aria-hidden>
+      <span className="shrink-0 text-sm font-semibold text-muted-foreground" aria-hidden>
         :
       </span>
       <AppSelect

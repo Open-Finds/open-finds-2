@@ -187,18 +187,20 @@ export function FriendsPage() {
     friends.find((f) => f.user_id === userId && (f.status === 'accepted' || f.status === 'pending'));
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-black px-6 pt-8 pb-24">
+    <div className="min-h-screen overflow-y-auto bg-background px-6 pt-8 pb-24">
       <div className="mx-auto w-full">
-        <h1 className="mb-6 text-2xl font-bold text-white">Friends</h1>
+        <h1 className="mb-6 text-title text-foreground">Friends</h1>
 
         {/* Tab switcher */}
-        <div className="mb-6 flex rounded-card border border-gold/20 bg-white/5 p-1">
+        <div className="mb-6 flex min-h-11 gap-1 rounded-md bg-muted p-1" role="tablist">
           {(['friends', 'collections'] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 rounded-[10px] py-2 text-sm font-semibold transition-all ${
-                tab === t ? 'bg-gold text-black shadow-gold-glow' : 'text-ink-secondary hover:text-white'
+              role="tab"
+              aria-selected={tab === t}
+              className={`text-small flex-1 rounded-sm border px-4 transition-colors ${
+                tab === t ? 'border-border bg-card text-foreground shadow-1' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               {TAB_LABELS[t]}
@@ -212,46 +214,46 @@ export function FriendsPage() {
             {/* Search */}
             <div>
               <div className="relative">
-                <AtSign size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/70" />
+                <AtSign size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by name or username..."
-                  className="w-full rounded-card border border-gold/20 bg-black/40 py-3.5 pl-11 pr-4 text-white placeholder:text-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow"
+                  className="w-full rounded-md border border-input bg-card dark:bg-background py-3.5 pl-11 pr-4 text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-ring"
                 />
                 {searching && (
-                  <Loader2 size={17} className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-gold/50" />
+                  <Loader2 size={17} className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
                 )}
               </div>
 
               {searchError && (
-                <p className="mt-2 text-sm text-danger">{searchError}</p>
+                <p className="mt-2 text-sm text-destructive-text">{searchError}</p>
               )}
 
               {searchResults.length > 0 && (
-                <ul className="mt-3 divide-y divide-gold/10 overflow-hidden rounded-card border border-gold/30 bg-[#1a1a1a]">
+                <ul className="mt-3 divide-y divide-border overflow-hidden rounded-md border border-border bg-card">
                   {searchResults.map((person) => {
                     const friendship = friendshipWith(person.id);
                     return (
                       <li key={person.id} className="flex items-center justify-between gap-3 px-4 py-3">
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-white">{person.display_name}</p>
+                          <p className="truncate font-semibold text-foreground">{person.display_name}</p>
                           {person.username && (
-                            <p className="truncate text-sm text-ink-secondary">@{person.username}</p>
+                            <p className="truncate text-sm text-muted-foreground">@{person.username}</p>
                           )}
                         </div>
                         {person.id === currentUserId ? (
-                          <span className="shrink-0 text-sm text-ink-secondary">That's you!</span>
+                          <span className="shrink-0 text-sm text-muted-foreground">That's you!</span>
                         ) : friendship?.status === 'accepted' ? (
                           <span className="shrink-0 text-sm text-success">Friends</span>
                         ) : friendship ? (
-                          <span className="shrink-0 text-sm text-ink-secondary">Pending</span>
+                          <span className="shrink-0 text-sm text-muted-foreground">Pending</span>
                         ) : (
                           <button
                             onClick={() => handleSendRequest(person.id)}
                             disabled={actionLoading === person.id}
-                            className="flex shrink-0 items-center gap-1.5 rounded-card bg-gold px-4 py-2 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
+                            className="btn-secondary btn-sm shrink-0"
                           >
                             <UserPlus size={15} /> Add
                           </button>
@@ -263,28 +265,28 @@ export function FriendsPage() {
               )}
 
               {searchResults.length === 0 && !searching && !searchError && searchQuery.trim().replace(/^@/, '') && (
-                <p className="mt-3 text-sm text-ink-secondary">No users match "{searchQuery.trim()}".</p>
+                <p className="mt-3 text-sm text-muted-foreground">No users match "{searchQuery.trim()}".</p>
               )}
             </div>
 
             {/* Pending incoming */}
             {pendingIncoming.length > 0 && (
               <div>
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gold/70">
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Friend Requests ({pendingIncoming.length})
                 </h2>
                 <div className="listing-grid">
                   {pendingIncoming.map((f) => (
-                    <div key={f.friendship_id} className="flex items-center justify-between rounded-card border border-gold/30 bg-[#1a1a1a] p-4">
+                    <div key={f.friendship_id} className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
                       <div>
-                        <p className="font-semibold text-white">{f.display_name}</p>
-                        <p className="text-sm text-ink-secondary">@{f.username}</p>
+                        <p className="font-semibold text-foreground">{f.display_name}</p>
+                        <p className="text-sm text-muted-foreground">@{f.username}</p>
                       </div>
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleAccept(f.friendship_id)}
                           disabled={actionLoading === f.friendship_id}
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-gold text-black transition-all active:scale-90 disabled:opacity-50"
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all active:scale-90 disabled:opacity-50"
                           aria-label="Accept"
                         >
                           <Check size={17} />
@@ -292,7 +294,7 @@ export function FriendsPage() {
                         <button
                           onClick={() => handleDecline(f.friendship_id)}
                           disabled={actionLoading === f.friendship_id}
-                          className="flex h-9 w-9 items-center justify-center rounded-full border border-danger/40 text-danger transition-all active:scale-90 hover:bg-danger/10 disabled:opacity-50"
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-destructive-text/30 text-destructive-text transition-all active:scale-90 hover:bg-destructive-soft disabled:opacity-50"
                           aria-label="Decline"
                         >
                           <X size={17} />
@@ -306,30 +308,30 @@ export function FriendsPage() {
 
             {/* Accepted friends */}
             <div>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gold/70">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Your Friends ({acceptedFriends.length})
               </h2>
               {friendsLoading ? (
-                <p className="text-sm text-ink-secondary">Loading...</p>
+                <p className="text-sm text-muted-foreground">Loading...</p>
               ) : friendsFailed && friends.length === 0 ? (
                 <LoadError onRetry={loadFriends} />
               ) : acceptedFriends.length === 0 ? (
-                <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-8 text-center">
-                  <Users size={32} className="mx-auto mb-3 text-gold/30" />
-                  <p className="text-sm text-ink-secondary">No friends yet. Search by username to add someone!</p>
+                <div className="rounded-lg border border-border bg-card p-8 text-center">
+                  <Users size={32} className="mx-auto mb-3 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">No friends yet. Search by username to add someone!</p>
                 </div>
               ) : (
                 <div className="listing-grid">
                   {acceptedFriends.map((f) => (
-                    <div key={f.friendship_id} className="flex items-center justify-between rounded-card border border-gold/20 bg-[#1a1a1a] p-4">
+                    <div key={f.friendship_id} className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
                       <div>
-                        <p className="font-semibold text-white">{f.display_name}</p>
-                        <p className="text-sm text-ink-secondary">@{f.username}</p>
+                        <p className="font-semibold text-foreground">{f.display_name}</p>
+                        <p className="text-sm text-muted-foreground">@{f.username}</p>
                       </div>
                       <button
                         onClick={() => handleRemoveFriend(f.friendship_id)}
                         disabled={actionLoading === f.friendship_id}
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-danger/60 transition-all active:scale-90 hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-destructive-text transition-all active:scale-90 hover:bg-destructive-soft hover:text-destructive-text disabled:opacity-50"
                         aria-label="Remove friend"
                       >
                         <UserMinus size={17} />
@@ -343,17 +345,17 @@ export function FriendsPage() {
             {/* Pending outgoing */}
             {pendingOutgoing.length > 0 && (
               <div>
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gold/70">
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Pending Requests ({pendingOutgoing.length})
                 </h2>
                 <div className="listing-grid">
                   {pendingOutgoing.map((f) => (
-                    <div key={f.friendship_id} className="flex items-center justify-between rounded-card border border-gold/10 bg-[#1a1a1a] p-4 opacity-70">
+                    <div key={f.friendship_id} className="flex items-center justify-between rounded-lg border border-border bg-card p-4 opacity-70">
                       <div>
-                        <p className="font-semibold text-white">{f.display_name}</p>
-                        <p className="text-sm text-ink-secondary">@{f.username}</p>
+                        <p className="font-semibold text-foreground">{f.display_name}</p>
+                        <p className="text-sm text-muted-foreground">@{f.username}</p>
                       </div>
-                      <span className="text-sm text-pending">Waiting...</span>
+                      <span className="text-sm text-warning">Waiting...</span>
                     </div>
                   ))}
                 </div>
@@ -365,7 +367,7 @@ export function FriendsPage() {
         {/* ── GROUP COLLECTIONS TAB ── */}
         {tab === 'collections' && (
           <div className="space-y-6">
-            <p className="text-sm text-ink-secondary">
+            <p className="text-sm text-muted-foreground">
               Collect places together. Everyone in a group collection can add venues to it and save any of them to their own venues.
             </p>
 
@@ -377,23 +379,23 @@ export function FriendsPage() {
                   onChange={(e) => setNewCollectionName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') void handleCreateCollection(); }}
                   placeholder="New group collection (e.g. Sydney eats)"
-                  className="min-w-0 flex-1 rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary/60 outline-none focus:border-gold"
+                  className="min-w-0 flex-1 rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground outline-none focus:border-ring"
                 />
                 <button
                   onClick={handleCreateCollection}
                   disabled={creatingCollection || !newCollectionName.trim()}
-                  className="flex shrink-0 items-center gap-1.5 rounded-card bg-gold px-4 py-3 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50"
+                  className="btn-primary shrink-0"
                 >
                   {creatingCollection ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                   Create
                 </button>
               </div>
-              {collectionError && <p className="mt-2 text-sm text-danger">{collectionError}</p>}
+              {collectionError && <p className="mt-2 text-sm text-destructive-text">{collectionError}</p>}
             </div>
 
             {collectionsLoading ? (
               <div className="flex justify-center py-10">
-                <Loader2 size={24} className="animate-spin text-gold" />
+                <Loader2 size={24} className="animate-spin text-muted-foreground" />
               </div>
             ) : collectionsFailed && mine.length === 0 && sharedWithMe.length === 0 ? (
               <LoadError onRetry={loadCollections} />
@@ -405,9 +407,9 @@ export function FriendsPage() {
                     ...sharedWithMe.map((c) => ({ c, owned: false, count: 0 })),
                   ];
                   return groupCollections.length === 0 ? (
-                    <div className="rounded-card border border-gold/20 bg-surface p-6 text-center">
-                      <FolderOpen size={28} className="mx-auto mb-2 text-gold/60" />
-                      <p className="text-sm text-ink-secondary">No group collections yet. Create one above and add your friends.</p>
+                    <div className="rounded-lg border border-border bg-card p-6 text-center">
+                      <FolderOpen size={28} className="mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">No group collections yet. Create one above and add your friends.</p>
                     </div>
                   ) : (
                     <div className="listing-grid">
@@ -417,20 +419,20 @@ export function FriendsPage() {
                             onClick={() => navigate(`/venues?collection=${c.id}`)}
                             className="flex min-w-0 flex-1 items-center gap-3 text-left"
                           >
-                            <FolderOpen size={20} className="shrink-0 text-gold" />
+                            <FolderOpen size={20} className="shrink-0 text-muted-foreground" />
                             <span className="min-w-0">
-                              <span className="block truncate font-semibold text-white">{c.name}</span>
-                              <span className="block text-xs text-ink-secondary">
+                              <span className="block truncate font-semibold text-foreground">{c.name}</span>
+                              <span className="block text-xs text-muted-foreground">
                                 {owned ? `Yours · ${count} people` : 'Shared with you'}
                               </span>
                             </span>
-                            <ChevronRight size={16} className="ml-auto shrink-0 text-ink-secondary" />
+                            <ChevronRight size={16} className="ml-auto shrink-0 text-muted-foreground" />
                           </button>
                           {owned ? (
                             <button
                               onClick={() => setSharing(c)}
                               aria-label={`Add friends to ${c.name}`}
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gold transition-colors hover:bg-gold/10"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary-text transition-colors hover:bg-muted"
                             >
                               <UserPlus size={16} />
                             </button>
@@ -438,7 +440,7 @@ export function FriendsPage() {
                             <button
                               onClick={() => handleLeaveCollection(c.id)}
                               aria-label={`Leave ${c.name}`}
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-danger/10 hover:text-danger"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive-soft hover:text-destructive-text"
                             >
                               <UserMinus size={16} />
                             </button>
@@ -452,16 +454,16 @@ export function FriendsPage() {
                 {/* My collections nobody else is in yet: one tap makes them a group collection. */}
                 {mine.some((c) => c.memberCount === 0) && (
                   <div>
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gold/70">
+                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                       Your other collections
                     </h2>
                     <div className="listing-grid">
                       {mine.filter((c) => c.memberCount === 0).map((c) => (
-                        <div key={c.id} className="flex items-center justify-between gap-3 rounded-card border border-gold/10 bg-[#1a1a1a] p-4">
-                          <span className="truncate text-sm text-white">{c.name}</span>
+                        <div key={c.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+                          <span className="truncate text-sm text-foreground">{c.name}</span>
                           <button
                             onClick={() => setSharing(c)}
-                            className="flex shrink-0 items-center gap-1.5 rounded-card border border-gold/40 px-3 py-1.5 text-xs font-bold text-gold transition-all hover:bg-gold/10 active:scale-95"
+                            className="flex shrink-0 items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-muted active:scale-95"
                           >
                             <UserPlus size={13} /> Add friends
                           </button>

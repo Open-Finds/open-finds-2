@@ -3,55 +3,124 @@
 @tailwind utilities;
 
 /* ──────────────────────────────────────────────────────────────
-   Design tokens — shadcn/ui variable contract, carrying the
-   The Unsaved gold-on-black identity. The app commits to a single
-   dark world by design, so :root holds the dark palette outright.
+   The Unsaved design system (see CLAUDE.md). Tokens are the ones
+   published in the design library: neutral surfaces, amber for the
+   main action and selected state, violet only for AI features.
+   Light is :root; .dark is set on <html> by the theme provider
+   (light, dark or the system's setting).
    ────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('./assets/fonts/bricolage-grotesque.woff2') format('woff2-variations');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
+    color-scheme: light;
+
+    --background: 36 33% 97%;
+    --foreground: 216 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 216 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 216 10% 10%;
+    --muted: 38 22% 93%;
+    --muted-foreground: 212 7% 38%;
+    --secondary: 38 22% 93%;
+    --secondary-foreground: 216 10% 10%;
+    --accent: 38 22% 93%;
+    --accent-foreground: 216 10% 10%;
+    --border: 37 19% 86%;
+    --input: 37 7% 53%;
+    --ring: 24 100% 35%;
+
+    /* Amber: the main action and the selected state */
+    --primary: 29 100% 56%;
+    --primary-foreground: 31 74% 6%;
+    --primary-hover: 29 92% 49%;
+    --primary-active: 29 100% 43%;
+    --primary-text: 24 100% 35%;
+    --primary-soft: 31 100% 94%;
+    --primary-soft-foreground: 24 100% 27%;
+
+    /* Violet: AI actions and AI results only */
+    --ai: 263 70% 50%;
+    --ai-foreground: 0 0% 100%;
+    --ai-soft: 258 100% 96%;
+    --ai-soft-foreground: 263 69% 42%;
+
+    /* Status, always paired with an icon and text */
+    --success: 142 72% 29%;
+    --success-soft: 143 47% 93%;
+    --warning: 32 81% 29%;
+    --warning-soft: 47 84% 90%;
+    --destructive: 4 76% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-text: 4 76% 40%;
+    --destructive-soft: 5 85% 95%;
+    --info: 193 82% 31%;
+    --info-soft: 190 63% 93%;
+
+    --scrim: 216 10% 10%;
+    --shadow-1: 0 1px 2px 0 #17191c0f;
+    --shadow-2: 0 4px 12px -2px #17191c14;
+    --shadow-3: 0 16px 40px -8px #17191c29;
+
+    /* The logo's colours, for the two approved gradients only */
+    --brand-orange: 18 100% 63%;
+    --brand-yellow: 45 96% 68%;
+    --brand-violet: 276 100% 40%;
+    --brand-cyan: 186 81% 49%;
+    --brand-ring-gradient: linear-gradient(105deg, hsl(var(--brand-violet)), hsl(var(--brand-orange)) 50%, hsl(var(--brand-cyan)));
+    --primary-gradient: linear-gradient(120deg, hsl(var(--brand-orange)), hsl(var(--brand-yellow)));
+    --primary-gradient-hover: linear-gradient(120deg, #ff6d2e, #fbce46);
+    --primary-gradient-active: linear-gradient(120deg, #ff5e1a, #fbc932);
+  }
+
+  .dark {
     color-scheme: dark;
 
-    --background: 0 0% 0%;
-    --foreground: 0 0% 100%;
+    --background: 204 14% 7%;
+    --foreground: 210 18% 96%;
+    --card: 210 15% 10%;
+    --card-foreground: 210 18% 96%;
+    --popover: 213 16% 13%;
+    --popover-foreground: 210 18% 96%;
+    --muted: 210 17% 14%;
+    --muted-foreground: 210 12% 68%;
+    --secondary: 210 17% 14%;
+    --secondary-foreground: 210 18% 96%;
+    --accent: 210 17% 14%;
+    --accent-foreground: 210 18% 96%;
+    --border: 210 15% 18%;
+    --input: 210 11% 45%;
+    --ring: 30 100% 70%;
 
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 100%;
+    --primary-text: 30 100% 70%;
+    --primary-soft: 28 50% 11%;
+    --primary-soft-foreground: 30 100% 77%;
 
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 100%;
+    --ai: 262 83% 58%;
+    --ai-soft: 255 38% 16%;
+    --ai-soft-foreground: 257 100% 86%;
 
-    /* Brand gold */
-    --primary: 46 65% 52%;
-    --primary-foreground: 0 0% 0%;
-    --primary-light: 47 87% 70%;
-    --primary-dark: 44 59% 41%;
+    --success: 142 69% 58%;
+    --success-soft: 146 38% 11%;
+    --warning: 48 96% 53%;
+    --warning-soft: 46 45% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-text: 0 91% 71%;
+    --destructive-soft: 3 37% 12%;
+    --info: 188 86% 53%;
+    --info-soft: 193 52% 11%;
 
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 100%;
-
-    --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 63%;
-
-    --accent: 46 65% 52%;
-    --accent-foreground: 0 0% 0%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 46 95% 47%;
-    --warning-foreground: 0 0% 0%;
-
-    /* Gold-tinted chrome rather than neutral grey */
-    --border: 46 30% 20%;
-    --input: 46 30% 20%;
-    --ring: 46 65% 52%;
-
-    --surface: 0 0% 10%;
-
-    --radius: 1rem;
+    --scrim: 0 0% 0%;
+    --shadow-1: none;
+    --shadow-2: none;
+    --shadow-3: 0 16px 40px -8px #0009;
   }
 
   html {
@@ -59,10 +128,22 @@
     scroll-behavior: smooth;
   }
 
+  html {
+    background: hsl(var(--background));
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    font-size: 1rem;
+    line-height: 1.5rem;
     min-height: 100vh;
     min-height: 100dvh;
+  }
+  @media (min-width: 48rem) {
+    body {
+      font-size: 0.9375rem;
+      line-height: 1.375rem;
+    }
   }
 
   * {
@@ -70,7 +151,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Visible keyboard focus everywhere, brand-coloured */
+  /* Visible keyboard focus everywhere */
   :focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
@@ -153,28 +234,47 @@
   }
 
   .card {
-    @apply rounded-card border border-gold/20 bg-surface p-4 sm:p-5;
+    @apply rounded-lg border border-border bg-card p-4 text-card-foreground shadow-1 md:p-5;
+  }
+  /*
+    The design system's buttons for plain <button>s; the same looks as
+    ui/button. One filled .btn-primary per view; .btn-ai only for AI actions.
+  */
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-ai,
+  .btn-destructive {
+    @apply inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-md px-5 text-base transition-[background-color,color,border-color,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:active:scale-100;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-card bg-gold px-5 py-3 font-semibold text-black transition-all duration-200 active:scale-[0.98] active:shadow-gold-press sm:px-6;
-    min-height: 44px;
+    @apply bg-primary-gradient text-primary-foreground hover:bg-primary-gradient-hover active:bg-primary-gradient-active;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-card border border-gold bg-transparent px-5 py-3 font-semibold text-white transition-all duration-200 active:scale-[0.98] active:shadow-gold-press sm:px-6;
-    min-height: 44px;
+    @apply bg-muted text-foreground hover:bg-accent;
+  }
+  .btn-outline {
+    @apply border border-input bg-transparent text-foreground hover:bg-muted;
+  }
+  .btn-ghost {
+    @apply text-foreground hover:bg-muted;
+  }
+  .btn-ai {
+    @apply bg-ai text-ai-foreground hover:bg-ai/90;
+  }
+  .btn-destructive {
+    @apply bg-destructive text-destructive-foreground hover:bg-destructive/90;
+  }
+  .btn-sm {
+    @apply h-9 px-3 text-sm;
+  }
+  .btn-lg {
+    @apply h-[52px] px-6;
   }
   .touch-target {
     min-height: 44px;
     min-width: 44px;
-  }
-  .gold-gradient-text {
-    background: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary)));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .gold-gradient-bg {
-    background: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary)));
   }
 
   /* Responsive grid used by venue / event / trip listings.
@@ -220,24 +320,26 @@
   }
 }
 
-/* Date input picker indicator, tinted to the brand */
+/* The date picker's calendar icon follows the theme */
 input[type='date']::-webkit-calendar-picker-indicator {
-  filter: invert(0.7) sepia(1) saturate(5) hue-rotate(15deg);
   cursor: pointer;
+  opacity: 0.7;
+}
+.dark input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }
 
-/* Gold range slider */
-.slider-gold {
+/* Range slider: neutral track, amber thumb */
+.slider-primary {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 6px;
   border-radius: 3px;
-  background: linear-gradient(to right, hsl(var(--primary)), hsl(var(--primary))) no-repeat,
-    hsl(var(--primary) / 0.2);
+  background: hsl(var(--muted));
   outline: none;
 }
-.slider-gold::-webkit-slider-thumb {
+.slider-primary::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 22px;
@@ -246,20 +348,18 @@ input[type='date']::-webkit-calendar-picker-indicator {
   background: hsl(var(--primary));
   border: 2px solid hsl(var(--background));
   cursor: pointer;
-  box-shadow: 0 0 10px hsl(var(--primary) / 0.5);
   transition: transform 0.15s;
 }
-.slider-gold::-webkit-slider-thumb:active {
+.slider-primary::-webkit-slider-thumb:active {
   transform: scale(1.2);
 }
-.slider-gold::-moz-range-thumb {
+.slider-primary::-moz-range-thumb {
   width: 22px;
   height: 22px;
   border-radius: 50%;
   background: hsl(var(--primary));
   border: 2px solid hsl(var(--background));
   cursor: pointer;
-  box-shadow: 0 0 10px hsl(var(--primary) / 0.5);
 }
 
 /* Confetti celebration */

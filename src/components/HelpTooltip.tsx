@@ -24,17 +24,17 @@ export function HelpTooltip({ text }: { text: string }) {
           setOpen((v) => !v);
         }}
         aria-label="What does this do?"
-        className="flex h-4 w-4 items-center justify-center rounded-full text-gold/50 transition-colors hover:text-gold active:scale-90"
+        className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary-text active:scale-90"
       >
         <HelpCircle size={14} />
       </button>
       {open && (
         <div
-          className="absolute bottom-full left-1/2 z-50 mb-2 w-48 -translate-x-1/2 rounded-card border border-gold/30 bg-[#1a1a1a] px-3 py-2.5 text-xs leading-relaxed text-ink-secondary shadow-lg"
+          className="absolute bottom-full left-1/2 z-50 mb-2 w-48 -translate-x-1/2 rounded-md border border-border bg-card px-3 py-2.5 text-xs leading-relaxed text-muted-foreground shadow-lg"
           onClick={(e) => e.stopPropagation()}
         >
           {text}
-          <div className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-4 border-transparent border-t-gold/30" />
+          <div className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-4 border-transparent border-t-border" />
         </div>
       )}
     </div>

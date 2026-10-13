@@ -14,7 +14,7 @@ function Checkbox({ checked }: { checked: boolean }) {
     <span
       aria-hidden="true"
       className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all ${
-        checked ? 'border-gold bg-gold text-black' : 'border-gold/40 bg-transparent'
+        checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-transparent'
       }`}
     >
       {checked && <Check size={14} strokeWidth={3} />}
@@ -111,25 +111,25 @@ export function InviteFriendsModal({
   return (
     <div
       // Above the bottom tab bar (z-50), which otherwise covers the Send button on phones.
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-scrim/60 sm:items-center"
       onClick={onClose}
     >
       <div
-        className="flex h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-gold/20 bg-[#0d0d0d] pb-[env(safe-area-inset-bottom,0px)] sm:h-[85vh] sm:max-h-[85vh] sm:w-[480px] sm:max-w-[90vw] sm:rounded-3xl sm:pb-0"
+        className="flex h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-border bg-card pb-[env(safe-area-inset-bottom,0px)] sm:h-[85vh] sm:max-h-[85vh] sm:w-[480px] sm:max-w-[90vw] sm:rounded-3xl sm:pb-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gold/10 p-5">
+        <div className="flex items-center justify-between border-b border-border p-5">
           <div>
-            <h2 className="text-xl font-bold text-gold">Invite Friends</h2>
-            <p className="mt-0.5 text-xs text-ink-secondary">
+            <h2 className="text-heading text-foreground">Invite Friends</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Send in-app invitations with notifications
             </p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-ink-secondary transition-colors hover:text-gold"
+            className="text-muted-foreground transition-colors hover:text-primary-text"
           >
             <X size={24} />
           </button>
@@ -139,29 +139,29 @@ export function InviteFriendsModal({
         <div className="flex-1 overflow-y-auto p-5">
           {!session ? (
             <div className="py-10 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-gold/30 bg-gold/10">
-                <Lock size={20} className="text-gold" />
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <Lock size={20} className="text-muted-foreground" />
               </div>
-              <p className="text-sm font-medium text-white">
+              <p className="text-sm font-medium text-foreground">
                 Sign in to invite friends
               </p>
-              <p className="mt-2 text-xs text-ink-secondary">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Create an account or log in to use in-app invitations.
               </p>
             </div>
           ) : loading ? (
-            <p className="py-8 text-center text-sm text-ink-secondary">
+            <p className="py-8 text-center text-sm text-muted-foreground">
               Loading...
             </p>
           ) : (
             <>
               {error && (
-                <p className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+                <p className="mb-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
                   {error}
                 </p>
               )}
               {success && (
-                <p className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+                <p className="mb-4 rounded-xl border border-success/30 bg-success-soft px-4 py-3 text-sm text-success">
                   {success}
                 </p>
               )}
@@ -169,21 +169,21 @@ export function InviteFriendsModal({
               {/* Friends section */}
               <div>
                 <div className="mb-3 flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-                    <User size={16} className="text-gold" /> Friends
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <User size={16} className="text-muted-foreground" /> Friends
                   </h3>
                   {invitable.length > 1 && (
                     <button
                       type="button"
                       onClick={() => setSelectedFriends(allSelected ? new Set() : new Set(invitable.map((f) => f.user_id)))}
-                      className="text-xs font-semibold text-gold underline-offset-2 hover:underline"
+                      className="text-xs font-semibold text-primary-text underline-offset-2 hover:underline"
                     >
                       {allSelected ? 'Clear' : 'Select all'}
                     </button>
                   )}
                 </div>
                 {friends.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-ink-secondary">
+                  <p className="py-4 text-center text-sm text-muted-foreground">
                     No friends yet. Add friends from the Friends tab first.
                   </p>
                 ) : (
@@ -197,27 +197,27 @@ export function InviteFriendsModal({
                           onClick={() => toggleFriend(f.user_id)}
                           disabled={isInvited}
                           aria-pressed={isSelected}
-                          className={`flex w-full items-center gap-3 rounded-card border p-3 text-left transition-all disabled:opacity-40 ${
+                          className={`flex w-full items-center gap-3 rounded-md border p-3 text-left transition-all disabled:opacity-40 ${
                             isSelected
-                              ? 'border-gold bg-gold/10'
-                              : 'border-gold/10 bg-[#1a1a1a] hover:border-gold/30'
+                              ? 'border-primary bg-primary-soft'
+                              : 'border-border bg-card hover:border-input'
                           }`}
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gold/15 text-sm font-bold text-gold">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-soft text-sm font-bold text-primary-soft-foreground">
                             {f.display_name.charAt(0).toUpperCase()}
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-white">
+                            <p className="text-sm font-medium text-foreground">
                               {f.display_name}
                             </p>
                             {f.username && (
-                              <p className="text-xs text-ink-secondary">
+                              <p className="text-xs text-muted-foreground">
                                 @{f.username}
                               </p>
                             )}
                           </div>
                           {isInvited ? (
-                            <span className="text-xs font-medium text-emerald-400">
+                            <span className="text-xs font-medium text-success">
                               Invited
                             </span>
                           ) : (
@@ -235,11 +235,11 @@ export function InviteFriendsModal({
 
         {/* Footer */}
         {session && !loading && (
-          <div className="border-t border-gold/10 p-5">
+          <div className="border-t border-border p-5">
             <button
               onClick={handleSend}
               disabled={!hasSelection || sending}
-              className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black transition-all active:scale-[0.98] disabled:opacity-40"
+              className="btn-primary w-full"
             >
               <Send size={18} />
               {sending

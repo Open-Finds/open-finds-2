@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
-const GOLD_TONES = ['#D4AF37', '#F4E4BC', '#C5A028', '#E8C44C', '#B8860B'];
+// The logo's own colours, from the design tokens.
+const BRAND_TONES = ['--brand-orange', '--brand-yellow', '--brand-violet', '--brand-cyan', '--primary'].map((t) => `hsl(var(${t}))`);
 
 export function Confetti() {
   const particles = useMemo(
@@ -10,7 +11,7 @@ export function Confetti() {
         left: Math.random() * 100,
         delay: Math.random() * 0.3,
         duration: 1.2 + Math.random() * 0.6,
-        color: GOLD_TONES[i % GOLD_TONES.length],
+        color: BRAND_TONES[i % BRAND_TONES.length],
         size: 6 + Math.random() * 8,
         rotate: Math.random() * 360,
       })),

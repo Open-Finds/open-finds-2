@@ -53,20 +53,20 @@ export function ChooseUsernamePage() {
     }
   };
 
-  const iconClass = 'pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/70';
+  const iconClass = 'pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground';
 
   return (
-    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-black px-5 py-10 sm:px-6">
+    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-10 sm:px-6">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
           <img src="/the-unsaved-mark.png" alt="" width={72} height={72} />
-          <h1 className="mt-3 text-2xl font-bold text-white">One last thing</h1>
-          <p className="mt-2 text-sm text-ink-secondary">Pick a username so friends can find you.</p>
+          <h1 className="mt-3 text-title text-foreground">One last thing</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Pick a username so friends can find you.</p>
         </div>
 
-        <form onSubmit={submit} className="mt-8 flex flex-col gap-4 rounded-card border border-gold/20 bg-surface p-5 sm:p-7" noValidate>
+        <form onSubmit={submit} className="mt-8 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 sm:p-7" noValidate>
           {error && (
-            <div role="alert" className="rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <div role="alert" className="rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
               {error}
             </div>
           )}
@@ -104,12 +104,12 @@ export function ChooseUsernamePage() {
               />
               {username.trim() && available !== null && (
                 <span className="absolute right-4 top-1/2 -translate-y-1/2">
-                  {available ? <Check size={17} className="text-success" /> : <X size={17} className="text-danger" />}
+                  {available ? <Check size={17} className="text-success" /> : <X size={17} className="text-destructive-text" />}
                 </span>
               )}
             </div>
           </div>
-          <Button type="submit" size="lg" full disabled={saving} className="mt-2 shadow-gold-glow">
+          <Button type="submit" size="lg" full disabled={saving} className="mt-2">
             {saving ? <><Loader2 className="animate-spin" /> Saving…</> : 'Continue'}
           </Button>
         </form>

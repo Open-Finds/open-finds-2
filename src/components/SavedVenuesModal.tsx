@@ -176,7 +176,7 @@ export function SavedVenuesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim/60 sm:items-center"
       onClick={onClose}
     >
       <DuplicateVenueDialog
@@ -185,17 +185,17 @@ export function SavedVenuesModal({
         onCancel={closeDup}
       />
       <div
-        className="flex h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-gold/20 bg-[#0d0d0d] pb-[env(safe-area-inset-bottom,0px)] sm:h-[85vh] sm:max-h-[85vh] sm:w-[640px] sm:max-w-[90vw] sm:rounded-3xl sm:pb-0"
+        className="flex h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-border bg-card pb-[env(safe-area-inset-bottom,0px)] sm:h-[85vh] sm:max-h-[85vh] sm:w-[640px] sm:max-w-[90vw] sm:rounded-3xl sm:pb-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gold/10 p-5">
+        <div className="flex items-center justify-between border-b border-border p-5">
           <div>
-            <h2 className="text-xl font-bold text-gold">Saved Venues</h2>
+            <h2 className="text-heading text-foreground">Saved Venues</h2>
             {session && venues.length > 0 && !showAddForm && (
-              <p className="mt-0.5 text-xs font-medium text-ink-secondary">
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground">
                 Selected:{' '}
-                <span className={selected.size > 0 ? 'text-gold' : ''}>
+                <span className={selected.size > 0 ? 'text-foreground' : ''}>
                   {selected.size}/3
                 </span>
               </p>
@@ -204,7 +204,7 @@ export function SavedVenuesModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-ink-secondary transition-colors hover:text-gold"
+            className="text-muted-foreground transition-colors hover:text-primary-text"
           >
             <X size={24} />
           </button>
@@ -214,30 +214,30 @@ export function SavedVenuesModal({
         <div className="flex-1 overflow-y-auto p-5">
           {!session ? (
             <div className="py-10 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-gold/30 bg-gold/10">
-                <Lock size={20} className="text-gold" />
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <Lock size={20} className="text-muted-foreground" />
               </div>
-              <p className="text-sm font-medium text-white">Sign in to use saved venues</p>
-              <p className="mt-2 text-xs text-ink-secondary">
+              <p className="text-sm font-medium text-foreground">Sign in to use saved venues</p>
+              <p className="mt-2 text-xs text-muted-foreground">
                 Open the Add Venue tab to create your account.
               </p>
             </div>
           ) : (
             <>
               {error && (
-                <p className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+                <p className="mb-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
                   {error}
                 </p>
               )}
 
               {loading ? (
-                <p className="py-8 text-center text-sm text-ink-secondary">Loading...</p>
+                <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>
               ) : venues.length === 0 && !showAddForm ? (
                 <div className="py-8 text-center">
-                  <p className="mb-4 text-sm text-ink-secondary">No saved venues yet.</p>
+                  <p className="mb-4 text-sm text-muted-foreground">No saved venues yet.</p>
                   <button
                     onClick={() => setShowAddForm(true)}
-                    className="inline-flex items-center gap-2 rounded-card bg-gold px-5 py-2.5 text-sm font-bold text-black transition-all active:scale-95"
+                    className="btn-primary btn-sm"
                   >
                     <Plus size={18} /> Add a Venue
                   </button>
@@ -270,7 +270,7 @@ export function SavedVenuesModal({
                   {!showAddForm && (
                     <button
                       onClick={() => setShowAddForm(true)}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/40 py-3 text-sm font-medium text-gold transition-all active:scale-[0.98]"
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98]"
                     >
                       <Plus size={18} /> Add another venue
                     </button>
@@ -280,14 +280,14 @@ export function SavedVenuesModal({
 
               {/* Add venue form */}
               {showAddForm && (
-                <div className="mt-4 space-y-4 border-t border-gold/10 pt-5">
+                <div className="mt-4 space-y-4 border-t border-border pt-5">
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-ink-secondary">
+                    <label className="mb-2 block text-sm font-medium text-muted-foreground">
                       Paste Instagram or TikTok link
                     </label>
                     <div className="relative">
                       <Link2
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold"
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-primary-text"
                         size={18}
                       />
                       <input
@@ -295,19 +295,19 @@ export function SavedVenuesModal({
                         value={linkInput}
                         onChange={(e) => setLinkInput(e.target.value)}
                         placeholder="https://instagram.com/..."
-                        className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                        className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-12 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                       />
                     </div>
                   </div>
                   <button
                     onClick={handleExtract}
                     disabled={extracting || !linkInput.trim()}
-                    className="flex w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/40 py-3 text-sm font-medium text-gold transition-all active:scale-[0.98] disabled:opacity-40"
+                    className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] disabled:opacity-40"
                   >
                     {extracting ? 'Extracting...' : 'Extract Venue'}
                   </button>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-ink-secondary">
+                    <label className="mb-2 block text-sm font-medium text-muted-foreground">
                       Venue name
                     </label>
                     <input
@@ -315,11 +315,11 @@ export function SavedVenuesModal({
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="e.g. Brazico Churrasco"
-                      className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                      className="w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-ink-secondary">
+                    <label className="mb-2 block text-sm font-medium text-muted-foreground">
                       Venue address
                     </label>
                     <input
@@ -327,23 +327,23 @@ export function SavedVenuesModal({
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
                       placeholder="Suburb or full address"
-                      className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                      className="w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-ink-secondary">
-                      Collection <span className="text-ink-secondary/60">(optional)</span>
+                    <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                      Collection <span className="text-muted-foreground">(optional)</span>
                     </label>
                     <input
                       type="text"
                       value={collection}
                       onChange={(e) => setCollection(e.target.value)}
                       placeholder="e.g. Bali, Sydney, Activities"
-                      className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                      className="w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-ink-secondary">
+                    <label className="mb-2 block text-sm font-medium text-muted-foreground">
                       Type
                     </label>
                     <VenueTypeSelect value={type} onChange={setType} />
@@ -351,13 +351,13 @@ export function SavedVenuesModal({
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black transition-all active:scale-[0.98] disabled:opacity-40"
+                    className="btn-primary w-full"
                   >
                     {saving ? 'Saving...' : 'Save Venue'}
                   </button>
                   <button
                     onClick={() => setShowAddForm(false)}
-                    className="w-full text-center text-sm text-ink-secondary transition-colors hover:text-gold"
+                    className="w-full text-center text-sm text-muted-foreground transition-colors hover:text-primary-text"
                   >
                     Cancel
                   </button>
@@ -367,11 +367,11 @@ export function SavedVenuesModal({
           )}
         </div>
 
-        <div className="border-t border-gold/10 p-5">
+        <div className="border-t border-border p-5">
           <button
             onClick={handleNext}
             disabled={selected.size === 0}
-            className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3.5 text-sm font-bold text-black transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+            className="btn-primary btn-lg w-full"
           >
             Next <ChevronRight size={18} />
           </button>

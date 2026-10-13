@@ -98,7 +98,7 @@ export function CheckoutDialog({
           pay button stays pinned at the bottom, however short the screen. */}
       <DialogContent className="overflow-hidden sm:max-h-[90dvh] sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-white">
+          <DialogTitle className="text-foreground">
             {tier === 'lifetime' ? 'Buy Lifetime' : `Upgrade to ${SUBSCRIPTION_PLANS[tier].label}`}
           </DialogTitle>
           <DialogDescription>Pay securely without leaving The Unsaved.</DialogDescription>
@@ -106,14 +106,14 @@ export function CheckoutDialog({
         {error ? (
           <LoadError message={error} onRetry={retry} />
         ) : !clientSecret || !stripe ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-ink-secondary">
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" /> Loading secure checkout…
           </div>
         ) : (
           <CheckoutElementsProvider
             key={attempt}
             stripe={stripe}
-            options={{ clientSecret, elementsOptions: { appearance: stripeAppearance } }}
+            options={{ clientSecret, elementsOptions: { appearance: stripeAppearance() } }}
           >
             <CheckoutForm
               tier={tier}
@@ -125,7 +125,7 @@ export function CheckoutDialog({
           </CheckoutElementsProvider>
         )}
         {slow && !ready && !error && (
-          <div className="flex flex-col items-center gap-3 text-center text-sm text-ink-secondary">
+          <div className="flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
             <p>This is taking longer than usual. A slow connection or an ad blocker can stop Stripe, our payment provider, from loading.</p>
             <Button size="sm" variant="outline" onClick={retry}>Try again</Button>
           </div>
@@ -145,7 +145,7 @@ const PLAN_BLURB: Record<PaidTier, string> = {
 function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center gap-3">
-      <p role="alert" className="w-full rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+      <p role="alert" className="w-full rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
         {message}
       </p>
       <Button size="sm" variant="outline" onClick={onRetry}>Try again</Button>
@@ -180,7 +180,7 @@ function CheckoutForm({
 
   if (state.type === 'loading') {
     return (
-      <div className="flex items-center justify-center gap-2 py-16 text-sm text-ink-secondary">
+      <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
         <Loader2 size={16} className="animate-spin" /> Loading secure checkout…
       </div>
     );
@@ -224,19 +224,19 @@ function CheckoutForm({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1 pb-1">
-      <div className="shrink-0 rounded-card border border-gold/25 bg-black/40 p-4">
+      <div className="shrink-0 rounded-lg border border-border bg-background p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-semibold text-white">{SUBSCRIPTION_PLANS[tier].label}</p>
-            <p className="mt-0.5 text-xs text-ink-secondary">{PLAN_BLURB[tier]}</p>
+            <p className="font-semibold text-foreground">{SUBSCRIPTION_PLANS[tier].label}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{PLAN_BLURB[tier]}</p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-2xl font-bold text-gold">{total}</p>
-            <p className="text-xs text-ink-secondary">{interval ? `per ${interval}` : 'one payment'}</p>
+            <p className="text-title text-foreground">{total}</p>
+            <p className="text-xs text-muted-foreground">{interval ? `per ${interval}` : 'one payment'}</p>
           </div>
         </div>
         {discount && (
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-gold/15 pt-3 text-sm">
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">
             <span className="flex items-center gap-1.5 text-success">
               <Tag size={14} /> {discount.displayName}
             </span>
@@ -245,7 +245,7 @@ function CheckoutForm({
               <button
                 type="button"
                 onClick={() => { void checkout.removePromotionCode(); }}
-                className="text-xs text-ink-secondary underline-offset-2 hover:text-gold hover:underline"
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-primary-text hover:underline"
               >
                 Remove
               </button>
@@ -255,8 +255,8 @@ function CheckoutForm({
       </div>
 
       {checkout.email && (
-        <p className="text-sm text-ink-secondary">
-          Receipt goes to <span className="text-white">{checkout.email}</span>
+        <p className="text-sm text-muted-foreground">
+          Receipt goes to <span className="text-foreground">{checkout.email}</span>
         </p>
       )}
 
@@ -273,19 +273,19 @@ function CheckoutForm({
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void applyPromo(); } }}
                 placeholder="Promo code"
                 aria-label="Promo code"
-                className="min-w-0 flex-1 rounded-card border border-gold/25 bg-black/40 px-4 py-2.5 text-sm text-white outline-none placeholder:text-ink-secondary/60 focus:border-gold"
+                className="min-w-0 flex-1 rounded-md border border-input bg-card dark:bg-background px-4 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
               />
               <Button type="button" size="sm" variant="outline" onClick={applyPromo} disabled={promoBusy || !promo.trim()}>
                 {promoBusy ? <Loader2 className="animate-spin" /> : <Check />} Apply
               </Button>
             </div>
-            {promoError && <p className="mt-1.5 text-xs text-red-300">{promoError}</p>}
+            {promoError && <p className="mt-1.5 text-xs text-destructive-text">{promoError}</p>}
           </div>
         ) : (
           <button
             type="button"
             onClick={() => setPromoOpen(true)}
-            className="flex w-fit items-center gap-1.5 text-sm text-gold underline-offset-2 hover:underline"
+            className="flex w-fit items-center gap-1.5 text-sm text-primary-text underline-offset-2 hover:underline"
           >
             <Tag size={14} /> Add a promo code
           </button>
@@ -294,17 +294,17 @@ function CheckoutForm({
 
       </div>
 
-      <div className="flex shrink-0 flex-col gap-2 border-t border-gold/15 pt-4">
+      <div className="flex shrink-0 flex-col gap-2 border-t border-border pt-4">
         {error && (
-          <p role="alert" className="rounded-card border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+          <p role="alert" className="rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
             {error}
           </p>
         )}
-        <Button size="lg" full onClick={pay} disabled={paying || !checkout.canConfirm} className="shadow-gold-glow">
+        <Button size="lg" full onClick={pay} disabled={paying || !checkout.canConfirm} className="">
           {paying ? <Loader2 className="animate-spin" /> : <Lock />}
           {paying ? 'Processing…' : interval ? `Subscribe · ${total}/${interval}` : `Pay ${total}`}
         </Button>
-        <p className="text-center text-xs text-ink-secondary">
+        <p className="text-center text-xs text-muted-foreground">
           {interval ? 'Cancel anytime from Billing. ' : ''}Payments are processed securely by Stripe.
         </p>
       </div>
@@ -331,7 +331,7 @@ export function ConfirmDialog({
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-white">{title}</DialogTitle>
+          <DialogTitle className="text-foreground">{title}</DialogTitle>
           <DialogDescription>{body}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -367,16 +367,16 @@ function CardForm({ onSaved, onCancel }: { onSaved: (s: BillingSummary) => void;
     return () => { live = false; };
   }, []);
 
-  if (error) return <p role="alert" className="text-sm text-red-300">{error}</p>;
+  if (error) return <p role="alert" className="text-sm text-destructive-text">{error}</p>;
   if (!clientSecret || !stripe) {
     return (
-      <div className="flex items-center gap-2 py-6 text-sm text-ink-secondary">
+      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
         <Loader2 size={14} className="animate-spin" /> Loading card form…
       </div>
     );
   }
   return (
-    <Elements stripe={stripe} options={{ clientSecret, appearance: stripeAppearance }}>
+    <Elements stripe={stripe} options={{ clientSecret, appearance: stripeAppearance() }}>
       <CardFormInner onSaved={onSaved} onCancel={onCancel} />
     </Elements>
   );
@@ -415,7 +415,7 @@ function CardFormInner({ onSaved, onCancel }: { onSaved: (s: BillingSummary) => 
     <form onSubmit={submit} className="flex flex-col gap-4">
       {/* Same as checkout: no Link sign-up block (email, phone) under the card fields. */}
       <PaymentElement options={{ layout: 'tabs', wallets: { link: 'never' } }} />
-      {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive-text">{error}</p>}
       <div className="flex gap-3">
         <Button type="submit" disabled={!stripe || saving}>
           {saving && <Loader2 className="animate-spin" />} Save card
@@ -453,28 +453,28 @@ export function BillingPanel({
   const otherTier = sub?.tier === 'premium_yearly' ? 'premium_monthly' : 'premium_yearly';
 
   return (
-    <section aria-labelledby="billing-heading" className="mb-8 rounded-card border border-gold/20 bg-[#0d0d0d] p-5 sm:p-6">
-      <h2 id="billing-heading" className="mb-4 text-lg font-bold text-white">Billing</h2>
+    <section aria-labelledby="billing-heading" className="mb-8 rounded-lg border border-border bg-card p-5 sm:p-6">
+      <h2 id="billing-heading" className="mb-4 text-heading text-foreground">Billing</h2>
 
       {loading && !summary ? (
-        <div className="flex items-center gap-2 text-sm text-ink-secondary">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 size={14} className="animate-spin" /> Loading billing…
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gold/80">Plan</p>
+            <p className="text-caption text-muted-foreground">Plan</p>
             {tier === 'lifetime' ? (
-              <p className="mt-1 text-white">Lifetime <span className="text-ink-secondary">· paid once, never renews</span></p>
+              <p className="mt-1 text-foreground">Lifetime <span className="text-muted-foreground">· paid once, never renews</span></p>
             ) : sub ? (
               <>
-                <p className="mt-1 text-white">
+                <p className="mt-1 text-foreground">
                   {SUBSCRIPTION_PLANS[sub.tier ?? tier].label}
                   {sub.amount != null && (
-                    <span className="text-ink-secondary"> · {formatMoney(sub.amount, sub.currency)}/{sub.interval}</span>
+                    <span className="text-muted-foreground"> · {formatMoney(sub.amount, sub.currency)}/{sub.interval}</span>
                   )}
                 </p>
-                <p className="mt-1 text-sm text-ink-secondary">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {sub.status === 'past_due'
                     ? 'Your last payment failed. Update your card to keep Premium.'
                     : sub.cancelAtPeriodEnd
@@ -493,12 +493,12 @@ export function BillingPanel({
                 </div>
               </>
             ) : (
-              <p className="mt-1 text-sm text-ink-secondary">No active subscription.</p>
+              <p className="mt-1 text-sm text-muted-foreground">No active subscription.</p>
             )}
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gold/80">Payment method</p>
+            <p className="text-caption text-muted-foreground">Payment method</p>
             {editingCard ? (
               <div className="mt-3">
                 <CardForm
@@ -508,8 +508,8 @@ export function BillingPanel({
               </div>
             ) : (
               <div className="mt-1 flex flex-wrap items-center gap-3">
-                <span className="flex items-center gap-2 text-white">
-                  <CreditCard size={16} className="text-gold" />
+                <span className="flex items-center gap-2 text-foreground">
+                  <CreditCard size={16} className="text-muted-foreground" />
                   {card
                     ? `${card.brand.charAt(0).toUpperCase()}${card.brand.slice(1)} •••• ${card.last4} · ${String(card.expMonth).padStart(2, '0')}/${String(card.expYear).slice(-2)}`
                     : 'No card on file'}
@@ -525,20 +525,20 @@ export function BillingPanel({
 
           {summary && summary.invoices.length > 0 && (
             <div className="md:col-span-2">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gold/80">Receipts</p>
-              <ul className="divide-y divide-gold/10">
+              <p className="mb-2 text-caption text-muted-foreground">Receipts</p>
+              <ul className="divide-y divide-border">
                 {summary.invoices.map((inv) => (
                   <li key={inv.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-sm">
-                    <Receipt size={14} className="text-gold/60" />
-                    <span className="w-36 text-white">{formatDate(inv.date)}</span>
-                    <span className="w-20 text-white">{formatMoney(inv.amount, inv.currency)}</span>
-                    <span className="capitalize text-ink-secondary">{inv.status}</span>
+                    <Receipt size={14} className="text-muted-foreground" />
+                    <span className="w-36 text-foreground">{formatDate(inv.date)}</span>
+                    <span className="w-20 text-foreground">{formatMoney(inv.amount, inv.currency)}</span>
+                    <span className="capitalize text-muted-foreground">{inv.status}</span>
                     {inv.pdf && (
                       <a
                         href={inv.pdf}
                         target="_blank"
                         rel="noreferrer"
-                        className="ml-auto flex items-center gap-1 text-gold hover:underline"
+                        className="ml-auto flex items-center gap-1 text-primary-text hover:underline"
                       >
                         <Download size={14} /> Receipt
                       </a>

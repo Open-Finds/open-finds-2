@@ -1,5 +1,19 @@
 import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { extendTailwindMerge } from 'tailwind-merge';
+
+/*
+  The design system's type roles (text-title, text-label, …) set a size, not a
+  colour. Without this, merging "text-title text-foreground" would treat both
+  as colours and drop one of them.
+*/
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      'font-size': [{ text: ['display', 'title', 'heading', 'subheading', 'body', 'small', 'label', 'caption'] }],
+      shadow: [{ shadow: ['1', '2', '3'] }],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

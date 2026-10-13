@@ -172,7 +172,7 @@ export function EventsPage({
   const renderPlanCard = (p: PlanWithMeta) => (
     <div
       key={p.id}
-      className="relative flex items-center gap-3 rounded-card border border-gold/20 bg-[#1a1a1a] p-4 transition-all hover:border-gold/50"
+      className="relative flex items-center gap-3 rounded-lg border border-border bg-card p-4 transition-all hover:border-input"
     >
       <button
         // Guests get the plan as their invite link shows it (RSVP, map,
@@ -182,16 +182,16 @@ export function EventsPage({
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate font-bold text-white">{p.title}</h3>
+            <h3 className="truncate font-bold text-foreground">{p.title}</h3>
             {p.isGuest && (
-              <span className="shrink-0 rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold">
+              <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-primary-soft-foreground">
                 Guest
               </span>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-secondary">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1">
-              <CalendarDays size={14} className="text-gold/70" />
+              <CalendarDays size={14} className="text-muted-foreground" />
               {parseLocalDate(p.date).toLocaleDateString('en-AU', {
                 day: 'numeric',
                 month: 'short',
@@ -199,25 +199,25 @@ export function EventsPage({
               })}
             </span>
             <span className="inline-flex items-center gap-1">
-              <MapPin size={14} className="text-gold/70" /> {p.stopCount} stop{p.stopCount === 1 ? '' : 's'}
+              <MapPin size={14} className="text-muted-foreground" /> {p.stopCount} stop{p.stopCount === 1 ? '' : 's'}
             </span>
             <span className="inline-flex items-center gap-1">
-              <Users size={14} className="text-gold/70" />
+              <Users size={14} className="text-muted-foreground" />
               {p.confirmedCount}/{p.rsvpTotal} confirmed
             </span>
           </div>
         </div>
-        <ChevronRight size={20} className="shrink-0 text-gold/60" />
+        <ChevronRight size={20} className="shrink-0 text-muted-foreground" />
       </button>
       {p.isGuest ? (
         <div className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center">
-          <Users size={15} className="text-gold/40" />
+          <Users size={15} className="text-muted-foreground" />
         </div>
       ) : (
         <button
           onClick={() => setConfirmId(p.id)}
           aria-label="Cancel event"
-          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-danger/70 transition-all hover:bg-danger/10 hover:text-danger active:scale-90"
+          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-destructive-text transition-all hover:bg-destructive-soft hover:text-destructive-text active:scale-90"
         >
           <Trash2 size={15} />
         </button>
@@ -228,28 +228,28 @@ export function EventsPage({
   const renderTripCard = (t: TripWithMeta) => (
     <div
       key={t.id}
-      className="relative flex items-center gap-3 rounded-card border-2 border-gold/30 bg-[#1a1a1a] p-4 transition-all hover:border-gold/50"
+      className="relative flex items-center gap-3 rounded-lg border-2 border-border bg-card p-4 transition-all hover:border-input"
     >
       <button
         onClick={() => navigate(`/trip/${t.id}`)}
         className="flex min-w-0 flex-1 items-center gap-3 text-left active:scale-[0.98]"
       >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-gold bg-black">
-          <Compass size={18} className="text-gold" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-background">
+          <Compass size={18} className="text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate font-bold text-white">{t.name}</h3>
-            <span className="shrink-0 rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold">
+            <h3 className="truncate font-bold text-foreground">{t.name}</h3>
+            <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-primary-soft-foreground">
               Trip
             </span>
           </div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-secondary">
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1">
-              <MapPin size={14} className="text-gold/70" /> {t.destination}
+              <MapPin size={14} className="text-muted-foreground" /> {t.destination}
             </span>
             <span className="inline-flex items-center gap-1">
-              <CalendarDays size={14} className="text-gold/70" />
+              <CalendarDays size={14} className="text-muted-foreground" />
               {parseLocalDate(t.start_date).toLocaleDateString('en-AU', {
                 day: 'numeric',
                 month: 'short',
@@ -259,29 +259,29 @@ export function EventsPage({
               )}
             </span>
             <span className="inline-flex items-center gap-1">
-              <Compass size={14} className="text-gold/70" /> {t.dayCount} day{t.dayCount === 1 ? '' : 's'} · {t.totalStops} stop{t.totalStops === 1 ? '' : 's'}
+              <Compass size={14} className="text-muted-foreground" /> {t.dayCount} day{t.dayCount === 1 ? '' : 's'} · {t.totalStops} stop{t.totalStops === 1 ? '' : 's'}
             </span>
           </div>
         </div>
-        <ChevronRight size={20} className="shrink-0 text-gold/60" />
+        <ChevronRight size={20} className="shrink-0 text-muted-foreground" />
       </button>
     </div>
   );
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-black px-6 pt-8 pb-24">
+    <div className="min-h-screen overflow-y-auto bg-background px-6 pt-8 pb-24">
       <div className="mx-auto w-full">
-        <h1 className="mb-6 text-2xl font-bold text-white">Upcoming Events</h1>
+        <h1 className="mb-6 text-title text-foreground">Upcoming Events</h1>
 
         {loading ? (
-          <p className="text-sm text-ink-secondary">Loading...</p>
+          <p className="text-sm text-muted-foreground">Loading...</p>
         ) : failed && upcoming.length === 0 && canceled.length === 0 ? (
           <LoadError onRetry={load} />
         ) : (
           <>
             {upcoming.length === 0 && canceled.length === 0 && trips.length === 0 ? (
-              <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-8 text-center">
-                <p className="text-sm text-ink-secondary">
+              <div className="rounded-lg border border-border bg-card p-8 text-center">
+                <p className="text-sm text-muted-foreground">
                   No events yet. Start planning from the Home tab.
                 </p>
               </div>
@@ -289,7 +289,7 @@ export function EventsPage({
               <>
                 {trips.length > 0 && (
                   <div className="listing-grid mb-6">
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-secondary">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                       Trips
                     </h2>
                     {trips.map(renderTripCard)}
@@ -299,7 +299,7 @@ export function EventsPage({
                 {upcoming.length > 0 && (
                   <div className="listing-grid">
                     {trips.length > 0 && (
-                      <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-secondary">
+                      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                         Single Events
                       </h2>
                     )}
@@ -308,8 +308,8 @@ export function EventsPage({
                 )}
 
                 {upcoming.length === 0 && canceled.length > 0 && trips.length === 0 && (
-                  <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-8 text-center">
-                    <p className="text-sm text-ink-secondary">
+                  <div className="rounded-lg border border-border bg-card p-8 text-center">
+                    <p className="text-sm text-muted-foreground">
                       No upcoming events. Canceled events shown below.
                     </p>
                   </div>
@@ -317,7 +317,7 @@ export function EventsPage({
 
                 {canceled.length > 0 && (
                   <div className="mt-8">
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-secondary">
+                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                       Canceled
                     </h2>
                     <div className="space-y-3 opacity-60">
@@ -333,37 +333,37 @@ export function EventsPage({
 
       {/* Confirmation modal */}
       {confirmPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6" onClick={() => !canceling && setConfirmId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 px-6" onClick={() => !canceling && setConfirmId(null)}>
           <div
-            className="w-full max-w-sm rounded-card border border-gold/20 bg-[#0d0d0d] p-6"
+            className="w-full max-w-sm rounded-lg border border-border bg-card p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Cancel this event?</h2>
+              <h2 className="text-heading text-foreground">Cancel this event?</h2>
               <button
                 onClick={() => setConfirmId(null)}
                 disabled={canceling}
                 aria-label="Close"
-                className="text-ink-secondary transition-colors hover:text-white disabled:opacity-50"
+                className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
               >
                 <X size={20} />
               </button>
             </div>
-            <p className="mb-6 text-sm text-ink-secondary">
+            <p className="mb-6 text-sm text-muted-foreground">
               "{confirmPlan.title}" will be marked as canceled. Attendees with the share link will see a cancellation notice, but the itinerary stays visible.
             </p>
             <div className="listing-grid">
               <button
                 onClick={handleCancel}
                 disabled={canceling}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-card bg-danger px-4 py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-destructive px-4 py-3 text-sm font-bold text-destructive-foreground transition-all active:scale-[0.98] disabled:opacity-50"
               >
                 {canceling ? 'Canceling...' : 'Yes, Cancel'}
               </button>
               <button
                 onClick={() => setConfirmId(null)}
                 disabled={canceling}
-                className="flex min-h-[44px] w-full items-center justify-center rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-sm font-medium text-ink-secondary transition-all active:scale-[0.98] disabled:opacity-50"
+                className="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-muted-foreground transition-all active:scale-[0.98] disabled:opacity-50"
               >
                 Never mind
               </button>

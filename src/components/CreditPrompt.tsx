@@ -41,7 +41,7 @@ export function CreditPrompt() {
     <Dialog open={!!ask} onOpenChange={(open) => !open && answer(false)}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-white"><Coins size={18} className="text-gold" /> Use a credit?</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-foreground"><Coins size={18} className="text-muted-foreground" /> Use a credit?</DialogTitle>
           <DialogDescription>
             You've used today's 3 free {ask ? USES[ask.purpose] : ''}. Spend 1 credit for one more? You have {ask?.credits ?? 0}.
           </DialogDescription>

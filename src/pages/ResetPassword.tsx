@@ -46,30 +46,30 @@ export function ResetPasswordPage() {
     }
   };
 
-  const iconClass = 'pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/70';
+  const iconClass = 'pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground';
 
   return (
-    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-black px-5 py-10 sm:px-6">
+    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-10 sm:px-6">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold/30 bg-gold/10">
-            <KeyRound size={26} className="text-gold" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+            <KeyRound size={26} className="text-muted-foreground" />
           </div>
-          <h1 className="mt-4 text-2xl font-bold text-white">{done ? 'Password updated' : 'Set a new password'}</h1>
-          <p className="mt-2 text-sm text-ink-secondary">
+          <h1 className="mt-4 text-title text-foreground">{done ? 'Password updated' : 'Set a new password'}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             {done ? "You're signed in. Use the new password next time." : 'Choose the password you’ll sign in with from now on.'}
           </p>
         </div>
 
-        <div className="mt-8 rounded-card border border-gold/20 bg-surface p-5 sm:p-7">
+        <div className="mt-8 rounded-lg border border-border bg-card p-5 sm:p-7">
           {done ? (
-            <Button size="lg" full onClick={endPasswordRecovery} className="shadow-gold-glow">
+            <Button size="lg" full onClick={endPasswordRecovery} className="">
               <Check size={18} /> Continue
             </Button>
           ) : (
             <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
               {error && (
-                <div role="alert" className="rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+                <div role="alert" className="rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
                   {error}
                 </div>
               )}
@@ -89,7 +89,7 @@ export function ResetPasswordPage() {
                   <button
                     type="button"
                     onClick={() => setShow((v) => !v)}
-                    className="absolute right-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full text-ink-secondary transition-colors hover:text-gold"
+                    className="absolute right-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary-text"
                     aria-label={show ? 'Hide password' : 'Show password'}
                   >
                     {show ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -110,7 +110,7 @@ export function ResetPasswordPage() {
                   />
                 </div>
               </div>
-              <Button type="submit" size="lg" full disabled={saving} className="mt-2 shadow-gold-glow">
+              <Button type="submit" size="lg" full disabled={saving} className="mt-2">
                 {saving ? <><Loader2 className="animate-spin" /> Saving…</> : 'Save new password'}
               </Button>
               <Button type="button" variant="ghost" full onClick={endPasswordRecovery} disabled={saving}>

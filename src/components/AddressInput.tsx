@@ -103,7 +103,7 @@ export function AddressInput({
         <ul
           id={listId}
           role="listbox"
-          className="absolute inset-x-0 top-full z-[60] mt-1 overflow-hidden rounded-card border border-gold/40 bg-[#111] py-1 shadow-gold-glow"
+          className="absolute inset-x-0 top-full z-[60] mt-1 overflow-hidden rounded-md border border-input bg-card py-1"
         >
           {suggestions.map((s, i) => (
             <li
@@ -114,13 +114,13 @@ export function AddressInput({
               onMouseDown={(e) => { e.preventDefault(); pick(s); }}
               className={cn(
                 'flex cursor-pointer items-start gap-2 px-3 py-2.5 text-sm',
-                i === active ? 'bg-gold/20 text-gold' : 'text-white hover:bg-gold/10'
+                i === active ? 'bg-primary-soft text-primary-soft-foreground' : 'text-foreground hover:bg-muted'
               )}
             >
-              <MapPin size={15} className="mt-0.5 shrink-0 text-gold/70" />
+              <MapPin size={15} className="mt-0.5 shrink-0 text-muted-foreground" />
               <span className="min-w-0">
                 <span className="block truncate font-medium">{s.main}</span>
-                {s.secondary && <span className="block truncate text-xs text-ink-secondary">{s.secondary}</span>}
+                {s.secondary && <span className="block truncate text-xs text-muted-foreground">{s.secondary}</span>}
               </span>
             </li>
           ))}

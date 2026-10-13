@@ -112,7 +112,7 @@ export function ShareCollectionModal({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Share2 size={18} className="text-gold" /> Share “{collection.name}”
+            <Share2 size={18} className="text-muted-foreground" /> Share “{collection.name}”
           </DialogTitle>
           <DialogDescription>
             Everyone you add can see every venue in it, add their own, and save any of them to their own venues.
@@ -121,7 +121,7 @@ export function ShareCollectionModal({
 
         {loading ? (
           <div className="flex justify-center py-8">
-            <Loader2 size={22} className="animate-spin text-gold" />
+            <Loader2 size={22} className="animate-spin text-muted-foreground" />
           </div>
         ) : (
           <Tabs defaultValue="friends">
@@ -132,7 +132,7 @@ export function ShareCollectionModal({
 
             <TabsContent value="friends">
               {shareable.length === 0 ? (
-                <p className="py-4 text-center text-sm text-ink-secondary">
+                <p className="py-4 text-center text-sm text-muted-foreground">
                   {friends.length === 0
                     ? 'Add some friends first, then add them to your group collections.'
                     : 'All your friends already have this collection.'}
@@ -148,19 +148,19 @@ export function ShareCollectionModal({
                             type="button"
                             onClick={() => toggle(f.user_id)}
                             className={cn(
-                              'flex w-full items-center gap-3 rounded-card border px-3 py-2.5 text-left transition-colors',
-                              on ? 'border-gold bg-gold/10' : 'border-gold/15 hover:bg-white/5'
+                              'flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
+                              on ? 'border-primary bg-primary-soft' : 'border-border hover:bg-muted'
                             )}
                           >
                             <span className={cn(
                               'flex size-5 shrink-0 items-center justify-center rounded-full border',
-                              on ? 'border-gold bg-gold text-black' : 'border-gold/40'
+                              on ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-transparent'
                             )}>
                               {on && <Check size={12} strokeWidth={3} />}
                             </span>
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-semibold text-white">{f.display_name ?? 'Friend'}</span>
-                              {f.username && <span className="block truncate text-xs text-ink-secondary">@{f.username}</span>}
+                              <span className="block truncate text-sm font-semibold text-foreground">{f.display_name ?? 'Friend'}</span>
+                              {f.username && <span className="block truncate text-xs text-muted-foreground">@{f.username}</span>}
                             </span>
                           </button>
                         </li>
@@ -177,21 +177,21 @@ export function ShareCollectionModal({
 
             <TabsContent value="members">
               {members.length === 0 ? (
-                <p className="py-4 text-center text-sm text-ink-secondary">Only you, so far.</p>
+                <p className="py-4 text-center text-sm text-muted-foreground">Only you, so far.</p>
               ) : (
                 <ul className="max-h-64 space-y-1 overflow-y-auto">
                   {members.map((m) => (
-                    <li key={m.user_id} className="flex items-center gap-3 rounded-card border border-gold/15 px-3 py-2.5">
+                    <li key={m.user_id} className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-white">{m.display_name ?? 'Friend'}</span>
-                        {m.username && <span className="block truncate text-xs text-ink-secondary">@{m.username}</span>}
+                        <span className="block truncate text-sm font-semibold text-foreground">{m.display_name ?? 'Friend'}</span>
+                        {m.username && <span className="block truncate text-xs text-muted-foreground">@{m.username}</span>}
                       </span>
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => remove(m.user_id)}
                         aria-label={`Remove ${m.display_name ?? 'member'}`}
-                        className="flex size-9 shrink-0 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+                        className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive-soft hover:text-destructive-text disabled:opacity-50"
                       >
                         <UserMinus size={16} />
                       </button>
@@ -204,7 +204,7 @@ export function ShareCollectionModal({
         )}
 
         {notice && (
-          <p role="status" className="text-center text-sm text-gold">{notice}</p>
+          <p role="status" className="text-center text-sm text-foreground">{notice}</p>
         )}
       </DialogContent>
     </Dialog>

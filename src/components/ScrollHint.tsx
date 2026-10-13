@@ -27,8 +27,8 @@ export function ScrollHint() {
       className="pointer-events-none fixed left-1/2 z-30 flex -translate-x-1/2 justify-center transition-opacity duration-300"
       style={{ bottom: '72px', opacity: visible ? 1 : 0 }}
     >
-      <div className="animate-bounce-arrow rounded-full bg-gold/10 p-1.5 backdrop-blur-sm">
-        <ChevronDown size={20} className="text-gold" />
+      <div className="rounded-full bg-muted p-1.5">
+        <ChevronDown size={20} className="text-muted-foreground" />
       </div>
     </div>
   );

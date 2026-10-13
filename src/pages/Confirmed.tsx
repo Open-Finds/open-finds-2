@@ -65,14 +65,14 @@ export function ConfirmedPage({ id }: { id: string }) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-ink-secondary">Loading...</p>
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
   if (!plan) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger">Plan not found.</p>
+        <p className="text-destructive-text">Plan not found.</p>
       </div>
     );
   }
@@ -90,13 +90,13 @@ export function ConfirmedPage({ id }: { id: string }) {
   return (
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-8">
       <div className="text-center animate-fade-in">
-        <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full gold-gradient-bg shadow-gold-glow">
-          <PartyPopper className="text-black" size={28} />
+        <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success-soft">
+          <PartyPopper className="text-success" size={28} />
         </div>
-        <h1 className="text-2xl font-bold">
+        <h1 className="text-title">
           You're in{guestName ? `, ${guestName}` : ''}!
         </h1>
-        <p className="mt-2 text-sm text-ink-secondary">
+        <p className="mt-2 text-sm text-muted-foreground">
           See you there. Here's everything you need.
         </p>
       </div>
@@ -107,7 +107,7 @@ export function ConfirmedPage({ id }: { id: string }) {
           href={multiStopMapsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-secondary flex items-center justify-center gap-2"
+          className="btn-outline flex items-center justify-center gap-2"
         >
           <MapPin size={18} /> Open in Maps
         </a>
@@ -121,10 +121,10 @@ export function ConfirmedPage({ id }: { id: string }) {
 
       {/* Countdown */}
       <div className="card mt-6 text-center">
-        <p className="flex items-center justify-center gap-1 text-sm text-ink-secondary">
+        <p className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
           <Clock size={14} /> Time to go
         </p>
-        <p className="mt-2 text-xl font-bold text-gold">
+        <p className="mt-2 text-heading text-foreground">
           {countdown.isPast
             ? "It's happening now!"
             : formatCountdown(countdown)}
@@ -138,12 +138,12 @@ export function ConfirmedPage({ id }: { id: string }) {
           ].map((u) => (
             <div
               key={u.label}
-              className="rounded-xl border border-gold/20 bg-black/40 py-2"
+              className="rounded-xl border border-border bg-background py-2"
             >
-              <p className="text-lg font-bold text-white">
+              <p className="text-heading text-foreground">
                 {String(u.value).padStart(2, '0')}
               </p>
-              <p className="text-[10px] uppercase tracking-wide text-ink-secondary">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
                 {u.label}
               </p>
             </div>
@@ -153,15 +153,15 @@ export function ConfirmedPage({ id }: { id: string }) {
 
       {/* Itinerary */}
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">Your Itinerary</h2>
+        <h2 className="mb-4 text-heading">Your Itinerary</h2>
         <Timeline stops={stops} />
       </section>
 
       {/* RSVP list */}
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Who's Coming</h2>
-          <span className="text-sm text-ink-secondary">
+          <h2 className="text-heading">Who's Coming</h2>
+          <span className="text-sm text-muted-foreground">
             {confirmedCount}/{rsvps.length} confirmed
           </span>
         </div>

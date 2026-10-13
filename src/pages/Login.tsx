@@ -164,33 +164,30 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
     }
   };
 
-  const iconClass = 'pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/70';
+  const iconClass = 'pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground';
 
   return (
     // Phones fill the viewport; larger screens centre a bounded card instead
     // of stretching the form across the width of a monitor.
-    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-black px-5 py-10 sm:px-6">
+    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-10 sm:px-6">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
           <img src="/the-unsaved-mark.png" alt="" width={88} height={88} className="mb-1" />
-          <div className="mb-3 flex items-baseline gap-2">
-            <span className="text-4xl font-black tracking-tight text-gold sm:text-5xl">The</span>
-            <span className="text-4xl font-black tracking-tight text-white sm:text-5xl">Unsaved</span>
-          </div>
-          <p className="text-sm text-ink-secondary">Turn reels into real life!</p>
+          <h1 className="mb-2 text-display text-foreground">The Unsaved</h1>
+          <p className="text-body text-muted-foreground">Turn reels into real life!</p>
         </div>
 
         {resetting ? (
-          <div className="mt-8 rounded-card border border-gold/20 bg-surface p-5 sm:p-7">
-            <h2 className="text-lg font-bold text-white">Reset your password</h2>
-            <p className="mt-1 text-sm text-ink-secondary">We'll email you a link to set a new one.</p>
+          <div className="mt-8 rounded-lg border border-border bg-card p-5 sm:p-7">
+            <h2 className="text-heading text-foreground">Reset your password</h2>
+            <p className="mt-1 text-sm text-muted-foreground">We'll email you a link to set a new one.</p>
             {error && (
-              <div role="alert" className="mt-5 rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+              <div role="alert" className="mt-5 rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
                 {error}
               </div>
             )}
             {resetSent ? (
-              <p role="status" className="mt-5 rounded-card border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+              <p role="status" className="mt-5 rounded-md border border-border bg-primary-soft px-4 py-3 text-sm text-primary-soft-foreground">
                 If there's an account for {email.trim()}, a reset link is on its way. Check your inbox (and spam).
               </p>
             ) : (
@@ -198,7 +195,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="reset-email">Email</Label>
                   <div className="relative">
-                    <Mail size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/70" />
+                    <Mail size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="reset-email"
                       type="email"
@@ -210,7 +207,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                     />
                   </div>
                 </div>
-                <Button type="submit" size="lg" full disabled={loading} className="shadow-gold-glow">
+                <Button type="submit" size="lg" full disabled={loading} className="">
                   {loading ? <><Loader2 className="animate-spin" /> Sending…</> : 'Send reset link'}
                 </Button>
               </form>
@@ -225,7 +222,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
             </Button>
           </div>
         ) : (
-        <div className="mt-8 rounded-card border border-gold/20 bg-surface p-5 sm:p-7">
+        <div className="mt-8 rounded-lg border border-border bg-card p-5 sm:p-7">
           <Tabs value={mode} onValueChange={(v) => switchMode(v as 'signin' | 'signup')}>
             {/* Full width at every size (the shared list shrinks to fit from sm up). */}
             <TabsList className="w-full sm:w-full">
@@ -237,7 +234,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
           {error && (
             <div
               role="alert"
-              className="mt-5 rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger"
+              className="mt-5 rounded-md border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text"
             >
               {error}
             </div>
@@ -250,8 +247,8 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                   {p.id === 'google' && <GoogleMark />} {p.label}
                 </Button>
               ))}
-              <div className="flex items-center gap-3 text-xs text-ink-secondary">
-                <span className="h-px flex-1 bg-gold/15" /> or with email <span className="h-px flex-1 bg-gold/15" />
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-primary-soft" /> or with email <span className="h-px flex-1 bg-primary-soft" />
               </div>
             </div>
           )}
@@ -310,13 +307,13 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                         {usernameAvailable ? (
                           <Check size={17} className="text-success" />
                         ) : (
-                          <X size={17} className="text-danger" />
+                          <X size={17} className="text-destructive-text" />
                         )}
                       </span>
                     )}
                   </div>
                   {username.trim() && usernameAvailable === false && (
-                    <p className="text-xs text-danger">That username is taken.</p>
+                    <p className="text-xs text-destructive-text">That username is taken.</p>
                   )}
                   {username.trim() && usernameAvailable === true && (
                     <p className="text-xs text-success">Available!</p>
@@ -359,7 +356,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                   onClick={() => setShowPassword((v) => !v)}
                   className={cn(
                     'absolute right-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full',
-                    'text-ink-secondary transition-colors hover:text-gold',
+                    'text-muted-foreground transition-colors hover:text-primary-text',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                   )}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
@@ -371,14 +368,14 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                 <button
                   type="button"
                   onClick={() => { setResetting(true); setError(null); }}
-                  className="self-end text-xs font-medium text-gold underline-offset-2 hover:underline"
+                  className="self-end text-xs font-medium text-primary-text underline-offset-2 hover:underline"
                 >
                   Forgot password?
                 </button>
               )}
             </div>
 
-            <Button type="submit" size="lg" full disabled={loading} className="mt-2 shadow-gold-glow">
+            <Button type="submit" size="lg" full disabled={loading} className="mt-2">
               {loading ? (
                 <><Loader2 className="animate-spin" /> Loading…</>
               ) : mode === 'signin' ? (
@@ -397,7 +394,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
         </div>
         )}
 
-        <p className="mt-6 text-center text-xs text-ink-secondary/60">
+        <p className="mt-6 text-center text-xs text-muted-foreground">
           Your saved venues are private to your account.
         </p>
       </div>

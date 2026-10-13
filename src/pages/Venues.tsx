@@ -434,7 +434,7 @@ export function VenuesPage() {
   };
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-black px-6 pt-8 pb-24">
+    <div className="min-h-screen overflow-y-auto bg-background px-6 pt-8 pb-24">
       <DuplicateVenueDialog
         pending={dupPending}
         onAddAnyway={() => dupProceed?.all()}
@@ -447,17 +447,17 @@ export function VenuesPage() {
           <>
             <button
               onClick={() => setOpenCollectionId(null)}
-              className="mb-4 flex items-center gap-1 text-gold transition-all active:scale-90"
+              className="mb-4 flex items-center gap-1 text-primary-text transition-all active:scale-90"
             >
               <ChevronLeft size={24} strokeWidth={2.5} /> All venues
             </button>
             <div className="mb-4 flex items-center justify-between">
               <div className="flex min-w-0 items-center gap-2">
-                <Folder size={22} className="shrink-0 text-gold" />
-                <h1 className="truncate text-2xl font-bold text-gold">{openCollection.name}</h1>
-                <span className="text-sm text-ink-secondary">{filtered.length}</span>
+                <Folder size={22} className="shrink-0 text-muted-foreground" />
+                <h1 className="truncate text-title text-foreground">{openCollection.name}</h1>
+                <span className="text-sm text-muted-foreground">{filtered.length}</span>
                 {memberCount > 0 && (
-                  <span className="flex items-center gap-1 rounded-full border border-gold/30 px-2 py-0.5 text-xs text-gold" title="Shared collection">
+                  <span className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-foreground" title="Shared collection">
                     <Users size={12} /> {memberCount + 1}
                   </span>
                 )}
@@ -465,7 +465,7 @@ export function VenuesPage() {
               {openCollection.user_id === myId ? (
                 <button
                   onClick={() => setShowShare(true)}
-                  className="flex items-center gap-2 rounded-card border border-gold px-4 py-2.5 text-sm font-bold text-gold transition-all active:scale-95"
+                  className="flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-bold text-primary-text transition-all active:scale-95"
                 >
                   <Share2 size={16} /> Share
                 </button>
@@ -479,26 +479,26 @@ export function VenuesPage() {
                       setCollections((prev) => prev.filter((c) => c.id !== openCollectionId));
                     } catch { /* ignore */ }
                   }}
-                  className="flex items-center gap-2 rounded-card border border-ink-secondary/40 px-4 py-2.5 text-sm font-medium text-ink-secondary transition-all active:scale-95"
+                  className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground transition-all active:scale-95"
                 >
                   <UserMinus size={16} /> Leave
                 </button>
               )}
               {TRIPS_ENABLED && <button
                 onClick={() => navigate(hasPremium(subscriptionTier, premiumUnlocked) ? `/trip-setup?collection=${openCollectionId}` : '/subscription')}
-                className="flex items-center gap-2 rounded-card bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-95"
+                className="btn-secondary btn-sm"
               >
                 <MapPin size={16} /> Plan a Trip <Crown size={13} aria-label="Premium" />
               </button>}
             </div>
             <div className="relative mb-4">
-              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/50" size={18} />
+              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search in this collection..."
-                className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-12 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
               />
             </div>
             <ShareCollectionModal
@@ -510,11 +510,11 @@ export function VenuesPage() {
             <div className="listing-grid">
               {loading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 size={24} className="animate-spin text-gold/50" />
+                  <Loader2 size={24} className="animate-spin text-muted-foreground" />
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="rounded-card border border-gold/10 bg-black/40 py-12 text-center">
-                  <p className="text-sm text-ink-secondary">No venues in this collection yet.</p>
+                <div className="rounded-md border border-border bg-background py-12 text-center">
+                  <p className="text-sm text-muted-foreground">No venues in this collection yet.</p>
                 </div>
               ) : (
                 filtered.map((v) => (
@@ -546,8 +546,8 @@ export function VenuesPage() {
           <>
             <div className="flex items-center justify-between gap-3 pr-14">
               <div>
-                <h1 className="text-3xl font-bold text-gold">Venues</h1>
-                <p className="mt-1 text-sm text-ink-secondary">
+                <h1 className="text-title text-foreground">Venues</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Your saved spots, searchable and filterable.
                 </p>
               </div>
@@ -556,7 +556,7 @@ export function VenuesPage() {
                   setShowAddForm(!showAddForm);
                   if (!showAddForm) resetForm();
                 }}
-                className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-card bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-95"
+                className={`${showAddForm ? 'btn-outline' : 'btn-primary'} btn-sm shrink-0`}
               >
                 {showAddForm ? <X size={18} /> : <Plus size={18} />}
                 {showAddForm ? 'Close' : 'Add Venue'}
@@ -564,39 +564,39 @@ export function VenuesPage() {
             </div>
 
             {saved && (
-              <div className="mt-4 flex items-center gap-2 rounded-card border border-success/30 bg-success/10 px-4 py-3 text-sm font-medium text-success">
+              <div className="mt-4 flex items-center gap-2 rounded-md border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
                 <Check size={18} /> Venue saved!
               </div>
             )}
 
             {/* Add Venue Form */}
             {showAddForm && (
-              <div className="mt-4 rounded-card border border-gold/20 bg-[#0d0d0d] p-5 animate-fade-in">
+              <div className="mt-4 rounded-lg border border-border bg-card p-5 animate-fade-in">
                 {error && (
-                  <p className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+                  <p className="mb-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-text">
                     {error}
                   </p>
                 )}
 
                 {/* Link extraction */}
                 <div className="mb-4">
-                  <label className="mb-2 block text-sm font-medium text-ink-secondary">
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">
                     Paste a link to extract details
                   </label>
                   <div className="relative">
-                    <Link2 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold" size={18} />
+                    <Link2 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                     <input
                       type="url"
                       value={linkInput}
                       onChange={(e) => setLinkInput(e.target.value)}
                       placeholder="https://instagram.com/..."
-                      className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                      className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-12 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                     />
                   </div>
                   <button
                     onClick={handleExtract}
                     disabled={extracting}
-                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/40 py-2.5 text-sm font-bold text-gold transition-all active:scale-[0.98] disabled:opacity-50"
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background py-2.5 text-sm font-medium text-foreground transition-all active:scale-[0.98] disabled:opacity-50"
                   >
                     {extracting ? (
                       <><Loader2 size={18} className="animate-spin" /> Extracting...</>
@@ -608,12 +608,12 @@ export function VenuesPage() {
 
                 {/* Multi-venue extraction results */}
                 {extractedItems.length > 1 && (
-                  <div className="mb-4 rounded-card border border-gold/20 bg-black/40 p-4">
+                  <div className="mb-4 rounded-lg border border-border bg-background p-4">
                     <div className="mb-3 flex items-center justify-between">
-                      <p className="text-sm font-semibold text-gold">
+                      <p className="text-sm font-semibold text-foreground">
                         {extractedItems.length} venues found
                       </p>
-                      <span className="text-xs text-ink-secondary">Tap to select</span>
+                      <span className="text-xs text-muted-foreground">Tap to select</span>
                     </div>
                     <div className="space-y-2">
                       {extractedItems.map((item, idx) => {
@@ -623,15 +623,15 @@ export function VenuesPage() {
                             key={idx}
                             onClick={() => toggleItem(idx)}
                             className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all active:scale-[0.98] ${
-                              isSelected ? 'border-gold bg-gold/10' : 'border-gold/10 bg-black/20 opacity-60'
+                              isSelected ? 'border-primary bg-primary-soft' : 'border-border bg-background opacity-60'
                             }`}
                           >
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-white">{item.name}</p>
-                              <p className="truncate text-xs text-ink-secondary">{item.address}</p>
+                              <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">{item.address}</p>
                             </div>
                             <div className={`flex h-5 w-5 items-center justify-center rounded border transition-all ${
-                              isSelected ? 'border-gold bg-gold text-black' : 'border-gold/30 bg-transparent'
+                              isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-transparent'
                             }`}>
                               {isSelected && <Check size={14} strokeWidth={3} />}
                             </div>
@@ -642,7 +642,7 @@ export function VenuesPage() {
                     <button
                       onClick={handleSaveMulti}
                       disabled={savingMulti || selectedItems.size === 0}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-40"
+                      className="btn-primary mt-4 w-full"
                     >
                       {savingMulti ? (
                         <><Loader2 size={18} className="animate-spin" /> Saving...</>
@@ -655,34 +655,34 @@ export function VenuesPage() {
 
                 {/* Manual entry — only show when not showing multi-venue results */}
                 {extractedItems.length <= 1 && (
-                  <div className="border-t border-gold/10 pt-4">
+                  <div className="border-t border-border pt-4">
                     <div className="mb-3">
-                      <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Venue name</label>
+                      <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Venue name</label>
                       <input
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="e.g. Brazico Churrasco"
-                        className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                        className="w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                       />
                     </div>
                     <div className="mb-3">
-                      <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Venue address</label>
+                      <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Venue address</label>
                       <AddressInput
                         value={address}
                         onChange={setAddress}
                         placeholder="Start typing an address or venue"
                         ariaLabel="Venue address"
-                        className="w-full rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                        className="w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                       />
                     </div>
                     <div className="mb-3">
-                      <label className="mb-1.5 block text-sm font-medium text-ink-secondary">Type</label>
+                      <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Type</label>
                       <VenueTypeSelect value={type} onChange={setType} />
                     </div>
                     <div className="mb-4">
-                      <label className="mb-1.5 block text-sm font-medium text-ink-secondary">
-                        Tags <span className="text-ink-secondary/60">(optional)</span>
+                      <label className="mb-1.5 block text-sm font-medium text-muted-foreground">
+                        Tags <span className="text-muted-foreground">(optional)</span>
                       </label>
                       <div className="flex gap-2">
                         <input
@@ -696,12 +696,12 @@ export function VenuesPage() {
                             }
                           }}
                           placeholder="Add a tag (e.g. pho, pizza)"
-                          className="flex-1 rounded-card border border-gold/20 bg-black/40 px-4 py-3 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                          className="flex-1 rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                         />
                         <button
                           onClick={addTag}
                           type="button"
-                          className="flex shrink-0 items-center justify-center rounded-card border border-gold/30 bg-gold/10 px-4 text-gold transition-all active:scale-90"
+                          className="flex shrink-0 items-center justify-center rounded-md border border-border bg-primary-soft px-4 text-foreground transition-all active:scale-90"
                         >
                           <Plus size={18} />
                         </button>
@@ -711,13 +711,13 @@ export function VenuesPage() {
                           {tags.map((tag) => (
                             <span
                               key={tag}
-                              className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 text-xs font-medium text-gold"
+                              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                             >
                               {tag}
                               <button
                                 onClick={() => removeTag(tag)}
                                 type="button"
-                                className="text-gold/60 transition-colors hover:text-danger"
+                                className="text-muted-foreground transition-colors hover:text-destructive-text"
                               >
                                 <X size={11} />
                               </button>
@@ -729,7 +729,7 @@ export function VenuesPage() {
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="flex w-full items-center justify-center gap-2 rounded-card bg-gold py-3.5 text-base font-bold text-black shadow-gold-glow transition-all active:scale-[0.98] disabled:opacity-40"
+                      className="btn-primary btn-lg w-full"
                     >
                       {saving ? 'Saving...' : 'Save Venue'}
                     </button>
@@ -742,12 +742,12 @@ export function VenuesPage() {
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Folder size={16} className="text-gold/70" />
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gold/80">Collections</h2>
+                  <Folder size={16} className="text-muted-foreground" />
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Collections</h2>
                 </div>
                 <button
                   onClick={() => setShowNewCollection(!showNewCollection)}
-                  className="flex items-center gap-1 text-xs font-medium text-gold transition-all active:scale-90"
+                  className="flex items-center gap-1 text-xs font-medium text-primary-text transition-all active:scale-90"
                 >
                   <FolderPlus size={14} /> New
                 </button>
@@ -767,18 +767,18 @@ export function VenuesPage() {
                     }}
                     placeholder="Collection name (e.g. Bali dinners)"
                     autoFocus
-                    className="flex-1 rounded-card border border-gold/20 bg-black/40 px-4 py-2.5 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                    className="flex-1 rounded-md border border-input bg-card dark:bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                   />
                   <button
                     onClick={handleCreateCollection}
                     disabled={!newCollectionName.trim()}
-                    className="flex items-center justify-center rounded-card bg-gold px-4 py-2.5 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-40"
+                    className="btn-secondary btn-sm"
                   >
                     Create
                   </button>
                   <button
                     onClick={() => { setShowNewCollection(false); setNewCollectionName(''); }}
-                    className="flex items-center justify-center rounded-card border border-gold/30 px-3 py-2.5 text-sm text-ink-secondary transition-all active:scale-90"
+                    className="flex items-center justify-center rounded-md border border-border px-3 py-2.5 text-sm text-muted-foreground transition-all active:scale-90"
                   >
                     <X size={16} />
                   </button>
@@ -786,7 +786,7 @@ export function VenuesPage() {
               )}
 
               {collections.length === 0 && !showNewCollection ? (
-                <p className="text-xs text-ink-secondary">No collections yet. Tap New to start one.</p>
+                <p className="text-xs text-muted-foreground">No collections yet. Tap New to start one.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {collections.map((c) => {
@@ -795,7 +795,7 @@ export function VenuesPage() {
                     return (
                       <div
                         key={c.id}
-                        className="group relative inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-black/40 px-3 py-1.5 text-xs font-medium text-gold transition-all hover:border-gold/60"
+                        className="group relative inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:border-input"
                       >
                         {isRenaming ? (
                           <>
@@ -810,17 +810,17 @@ export function VenuesPage() {
                                 }
                               }}
                               autoFocus
-                              className="w-24 rounded border border-gold/30 bg-black/50 px-1.5 py-0.5 text-xs text-white focus:border-gold focus:outline-none"
+                              className="w-24 rounded border border-input bg-card dark:bg-background px-1.5 py-0.5 text-xs text-foreground focus:border-ring focus:outline-none"
                             />
                             <button
                               onClick={() => handleRenameCollection(c.id)}
-                              className="text-gold/60 hover:text-gold"
+                              className="text-muted-foreground hover:text-primary-text"
                             >
                               <Check size={12} />
                             </button>
                             <button
                               onClick={() => setRenamingId(null)}
-                              className="text-ink-secondary hover:text-danger"
+                              className="text-muted-foreground hover:text-destructive-text"
                             >
                               <X size={12} />
                             </button>
@@ -833,21 +833,21 @@ export function VenuesPage() {
                             >
                               {c.user_id === myId ? <Folder size={11} /> : <Users size={11} />}
                               {c.name}
-                              <span className="text-ink-secondary/60">{count}</span>
+                              <span className="text-muted-foreground">{count}</span>
                             </button>
                             {/* Rename and delete are owner-only; members see the shared icon instead. */}
                             {c.user_id === myId && (
                               <>
                                 <button
                                   onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }}
-                                  className="ml-0.5 text-gold/40 transition-opacity hover:text-gold sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                  className="ml-0.5 text-muted-foreground transition-opacity hover:text-primary-text sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                   aria-label="Rename collection"
                                 >
                                   <Pencil size={10} />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteCollection(c.id)}
-                                  className="text-gold/40 transition-opacity hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                  className="text-muted-foreground transition-opacity hover:text-destructive-text sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                   aria-label="Delete collection"
                                 >
                                   <Trash2 size={10} />
@@ -863,40 +863,40 @@ export function VenuesPage() {
               )}
             </div>
 
-            <p className="mt-4 text-xs text-ink-secondary">Use tags such as vegan, halal, vegetarian, or gluten-free to narrow your saved spots.</p>
+            <p className="mt-4 text-xs text-muted-foreground">Use tags such as vegan, halal, vegetarian, or gluten-free to narrow your saved spots.</p>
 
             {/* Search bar */}
             <div className="mt-6 relative">
-              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold/50" size={18} />
+              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by name, address, or tag..."
-                className="w-full rounded-card border border-gold/20 bg-black/40 py-3 pl-12 pr-4 text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-12 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
               />
             </div>
             <div className="mt-3 flex items-center gap-3">
-              <label htmlFor="dietary-filter" className="text-sm text-ink-secondary">Dietary tag</label>
+              <label htmlFor="dietary-filter" className="text-sm text-muted-foreground">Dietary tag</label>
               <input
                 id="dietary-filter"
                 type="text"
                 value={dietaryFilter}
                 onChange={(e) => setDietaryFilter(e.target.value.trim().toLowerCase())}
                 placeholder="e.g. vegan, halal, gluten-free"
-                className="min-w-0 flex-1 rounded-card border border-gold/20 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-ink-secondary focus:border-gold focus:outline-none"
+                className="min-w-0 flex-1 rounded-md border border-input bg-card dark:bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
               />
             </div>
 
             {/* Results count */}
             <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-ink-secondary">
+              <p className="text-sm text-muted-foreground">
                 {loading ? 'Loading...' : `${filtered.length} venue${filtered.length === 1 ? '' : 's'}`}
               </p>
               {hasFilters && !loading && filtered.length === 0 && (
                 <button
                   onClick={clearFilters}
-                  className="text-sm font-medium text-gold underline-offset-2 hover:underline"
+                  className="text-sm font-medium text-primary-text underline-offset-2 hover:underline"
                 >
                   Clear filters
                 </button>
@@ -907,28 +907,28 @@ export function VenuesPage() {
             <div className="listing-grid mt-3">
               {loading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 size={24} className="animate-spin text-gold/50" />
+                  <Loader2 size={24} className="animate-spin text-muted-foreground" />
                 </div>
               ) : loadFailed && venues.length === 0 ? (
                 <LoadError onRetry={loadAll} />
               ) : filtered.length === 0 ? (
-                <div className="rounded-card border border-gold/10 bg-black/40 py-12 text-center">
+                <div className="rounded-md border border-border bg-background py-12 text-center">
                   {hasFilters ? (
                     <>
-                      <p className="text-sm text-ink-secondary">No venues match your filters.</p>
+                      <p className="text-sm text-muted-foreground">No venues match your filters.</p>
                       <button
                         onClick={clearFilters}
-                        className="mt-2 text-sm font-medium text-gold underline-offset-2 hover:underline"
+                        className="mt-2 text-sm font-medium text-primary-text underline-offset-2 hover:underline"
                       >
                         Clear filters
                       </button>
                     </>
                   ) : (
                     <>
-                      <p className="text-sm text-ink-secondary">No saved venues yet.</p>
+                      <p className="text-sm text-muted-foreground">No saved venues yet.</p>
                       <button
                         onClick={() => setShowAddForm(true)}
-                        className="mt-2 text-sm font-medium text-gold underline-offset-2 hover:underline"
+                        className="mt-2 text-sm font-medium text-primary-text underline-offset-2 hover:underline"
                       >
                         Add your first venue
                       </button>

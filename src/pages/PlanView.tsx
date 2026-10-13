@@ -52,15 +52,15 @@ export function PlanViewPage({ id }: { id: string }) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-ink-secondary">Loading plan...</p>
+        <p className="text-muted-foreground">Loading plan...</p>
       </div>
     );
   }
   if (error || !plan) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger">{error ?? 'Plan not found.'}</p>
-        <button onClick={() => navigate('/')} className="btn-secondary mt-4">
+        <p className="text-destructive-text">{error ?? 'Plan not found.'}</p>
+        <button onClick={() => navigate('/')} className="btn-outline mt-4">
           Back home
         </button>
       </div>
@@ -82,9 +82,9 @@ export function PlanViewPage({ id }: { id: string }) {
   return (
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-8">
       {/* Hero */}
-      <div className="gold-gradient-bg animate-fade-in rounded-card p-6 text-black shadow-gold-glow">
-        <h1 className="text-2xl font-bold leading-tight">{plan.title}</h1>
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-black/80">
+      <div className="animate-fade-in rounded-lg border border-border bg-card p-6 text-card-foreground shadow-1">
+        <h1 className="text-title leading-tight">{plan.title}</h1>
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <CalendarDays size={15} />
             {parseLocalDate(plan.date).toLocaleDateString('en-AU', {
@@ -98,22 +98,22 @@ export function PlanViewPage({ id }: { id: string }) {
             <MapPin size={15} /> {plan.location}
           </span>
         </div>
-        <p className="mt-2 text-sm font-medium text-black/70">
+        <p className="mt-2 text-small text-muted-foreground">
           Hosted by {plan.host_name}
         </p>
       </div>
 
       {/* Timeline */}
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">The Itinerary</h2>
+        <h2 className="mb-4 text-heading">The Itinerary</h2>
         <Timeline stops={stops} />
       </section>
 
       {/* Who's coming */}
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Who's Coming</h2>
-          <span className="text-sm text-ink-secondary">
+          <h2 className="text-heading">Who's Coming</h2>
+          <span className="text-sm text-muted-foreground">
             {confirmedCount}/{rsvps.length} confirmed
           </span>
         </div>
@@ -126,7 +126,7 @@ export function PlanViewPage({ id }: { id: string }) {
           href={mapsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-secondary w-full"
+          className="btn-outline w-full"
         >
           <MapPin size={18} /> Open in Google Maps
         </a>
@@ -138,19 +138,19 @@ export function PlanViewPage({ id }: { id: string }) {
         </button>
         <button
           onClick={handleInviteFriend}
-          className="btn-secondary w-full"
+          className="btn-outline w-full"
         >
           <Smartphone size={18} /> {inviteCopied ? 'Copied!' : 'Copy Invite Link'}
         </button>
         <button
           onClick={() => navigate(`/plan/${id}/share`)}
-          className="btn-secondary w-full"
+          className="btn-outline w-full"
         >
           <Send size={18} /> Send RSVPs
         </button>
         <button
           onClick={() => navigate(`/plan/${id}/dashboard`)}
-          className="btn-secondary w-full"
+          className="btn-outline w-full"
         >
           <LayoutDashboard size={18} /> Host Dashboard
         </button>
@@ -191,14 +191,14 @@ export function SharePage({ id }: { id: string }) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-ink-secondary">Loading...</p>
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
   if (!plan) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10 text-center">
-        <p className="text-danger">Plan not found.</p>
+        <p className="text-destructive-text">Plan not found.</p>
       </div>
     );
   }
@@ -232,19 +232,19 @@ export function SharePage({ id }: { id: string }) {
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-8">
       <BackButton to={`/plan/${id}`} />
 
-      <h1 className="text-2xl font-bold">Share your plan</h1>
-      <p className="mt-2 text-sm text-ink-secondary">
+      <h1 className="text-title">Share your plan</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
         Send this link to your friends so they can RSVP.
       </p>
 
-      <div className="card mt-6 break-all text-sm text-ink-secondary">
+      <div className="card mt-6 break-all text-sm text-muted-foreground">
         {shareMessage}
       </div>
 
       <button onClick={handleCopy} className="btn-primary mt-4 w-full">
         <Share2 size={18} /> {copied ? 'Copied!' : 'Copy Link'}
       </button>
-      <p className="mt-2 text-center text-xs text-ink-secondary">
+      <p className="mt-2 text-center text-xs text-muted-foreground">
         {typeof navigator.share === 'function'
           ? 'Opens share sheet for WhatsApp, Telegram, Instagram...'
           : 'Link copied to clipboard'}
@@ -252,8 +252,8 @@ export function SharePage({ id }: { id: string }) {
 
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">RSVP Responses</h2>
-          <span className="text-sm text-ink-secondary">
+          <h2 className="text-heading">RSVP Responses</h2>
+          <span className="text-sm text-muted-foreground">
             {confirmedCount}/{rsvps.length} confirmed
           </span>
         </div>

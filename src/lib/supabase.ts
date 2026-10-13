@@ -1727,10 +1727,10 @@ function showIOSHomeScreenPrompt(): void {
 
   const banner = document.createElement('div');
   banner.id = 'ios-a2hs-prompt';
-  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:16px 20px;background:#0d0d0d;border-top:1px solid rgba(212,175,55,0.3);color:#f5f5f0;font-family:system-ui,sans-serif;font-size:14px;display:flex;align-items:center;gap:12px;';
+  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:16px 20px;background:hsl(var(--card));border-top:1px solid hsl(var(--border));color:hsl(var(--foreground));font-family:inherit;font-size:14px;display:flex;align-items:center;gap:12px;';
 
   const icon = document.createElement('div');
-  icon.style.cssText = 'flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#d4af37,#b8941f);display:flex;align-items:center;justify-content:center;font-size:22px;';
+  icon.style.cssText = 'flex-shrink:0;width:40px;height:40px;border-radius:10px;background:hsl(var(--muted));display:flex;align-items:center;justify-content:center;font-size:22px;';
   icon.textContent = '+';
 
   const text = document.createElement('div');
@@ -1739,7 +1739,7 @@ function showIOSHomeScreenPrompt(): void {
 
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '×';
-  closeBtn.style.cssText = 'flex-shrink:0;background:none;border:none;color:#f5f5f0;font-size:24px;cursor:pointer;padding:0 4px;line-height:1;';
+  closeBtn.style.cssText = 'flex-shrink:0;background:none;border:none;color:hsl(var(--foreground));font-size:24px;cursor:pointer;padding:0 4px;line-height:1;';
   closeBtn.onclick = () => banner.remove();
 
   banner.appendChild(icon);

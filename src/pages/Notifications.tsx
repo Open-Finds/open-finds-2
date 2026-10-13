@@ -89,22 +89,22 @@ export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => voi
   };
 
   return (
-    <div className="relative min-h-screen overflow-y-auto bg-black px-6 pt-20 pb-24">
+    <div className="relative min-h-screen overflow-y-auto bg-background px-6 pt-20 pb-24">
       <button
         onClick={onBack}
         aria-label="Back"
-        className="absolute left-5 top-5 flex items-center justify-center rounded-full text-gold transition-all active:scale-90"
+        className="absolute left-3 top-3 flex size-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted active:scale-95"
       >
         <ChevronLeft size={28} strokeWidth={2.5} />
       </button>
 
       <div className="mx-auto w-full">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">Notifications</h1>
+          <h1 className="text-title text-foreground">Notifications</h1>
           {notifications.some((n) => !n.read) && (
             <button
               onClick={handleMarkAll}
-              className="flex items-center gap-1.5 text-sm font-medium text-gold transition-colors hover:text-white"
+              className="flex items-center gap-1.5 text-sm font-medium text-primary-text transition-colors hover:text-foreground"
             >
               <CheckCheck size={16} /> Mark all read
             </button>
@@ -112,13 +112,13 @@ export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => voi
         </div>
 
         {loading ? (
-          <p className="text-sm text-ink-secondary">Loading...</p>
+          <p className="text-sm text-muted-foreground">Loading...</p>
         ) : failed && notifications.length === 0 ? (
           <LoadError onRetry={load} />
         ) : notifications.length === 0 ? (
-          <div className="rounded-card border border-gold/20 bg-[#1a1a1a] p-8 text-center">
-            <Bell size={32} className="mx-auto mb-3 text-gold/30" />
-            <p className="text-sm text-ink-secondary">No notifications yet.</p>
+          <div className="rounded-lg border border-border bg-card p-8 text-center">
+            <Bell size={32} className="mx-auto mb-3 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No notifications yet.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -126,21 +126,21 @@ export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => voi
               <button
                 key={n.id}
                 onClick={() => handleClick(n)}
-                className={`flex w-full items-start gap-3 rounded-card border p-4 text-left transition-all ${
+                className={`flex w-full items-start gap-3 rounded-md border p-4 text-left transition-all ${
                   n.read
-                    ? 'border-gold/10 bg-[#1a1a1a] opacity-60'
-                    : 'border-gold/30 bg-[#1a1a1a] hover:border-gold/50'
+                    ? 'border-border bg-card opacity-60'
+                    : 'border-border bg-card hover:border-input'
                 }`}
               >
-                <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-transparent' : 'bg-gold'}`} />
+                <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-transparent' : 'bg-primary'}`} />
                 <div className="min-w-0 flex-1">
-                  <p className={`text-sm ${n.read ? 'font-medium text-white' : 'font-bold text-white'}`}>
+                  <p className={`text-sm ${n.read ? 'font-medium text-foreground' : 'font-bold text-foreground'}`}>
                     {n.title}
                   </p>
                   {n.body && (
-                    <p className="mt-0.5 text-sm text-ink-secondary">{n.body}</p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{n.body}</p>
                   )}
-                  <p className="mt-1 text-xs text-ink-secondary/60">{formatTime(n.created_at)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{formatTime(n.created_at)}</p>
                 </div>
               </button>
             ))}

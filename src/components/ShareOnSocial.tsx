@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { copyToClipboard } from '../lib/invite';
 
 const OPTION =
-  'flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card border border-gold/40 bg-black/60 px-6 py-3 text-sm font-bold text-gold transition-all active:scale-[0.98] hover:bg-gold/10';
+  'flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-sm font-bold text-primary-text transition-all active:scale-[0.98] hover:bg-muted';
 
 /**
  * Sharing for everyone, with or without the app: the link opens the plan and
@@ -46,16 +46,16 @@ export function ShareOnSocialDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-white">Share on Social</DialogTitle>
+          <DialogTitle className="text-foreground">Share on Social</DialogTitle>
           <DialogDescription>Anyone with the link can see the plan and RSVP, no app needed.</DialogDescription>
         </DialogHeader>
-        <p className="break-words rounded-lg border border-gold/20 bg-black/40 px-3 py-2.5 text-xs leading-relaxed text-ink-secondary">
-          {message} <span className="text-gold/80">{url}</span>
+        <p className="break-words rounded-lg border border-border bg-background px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+          {message} <span className="text-muted-foreground">{url}</span>
         </p>
         <div className="grid gap-3">
           <button
             onClick={copy}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-card bg-gold px-6 py-3 text-sm font-bold text-black shadow-gold-glow transition-all active:scale-[0.98]"
+            className="btn-primary w-full"
           >
             {copied ? <Check size={18} /> : <Copy size={18} />} {copied ? 'Copied!' : 'Copy link'}
           </button>

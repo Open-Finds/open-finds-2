@@ -155,7 +155,7 @@ export function PlanBuilderPage() {
   if (!title || !date) {
     return (
       <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-20 pt-10">
-        <p className="text-ink-secondary">Start by creating a plan first.</p>
+        <p className="text-muted-foreground">Start by creating a plan first.</p>
         <button
           onClick={() => navigate('/create')}
           className="btn-primary mt-4 w-full"
@@ -325,13 +325,13 @@ export function PlanBuilderPage() {
     <div className="mx-auto min-h-screen overflow-y-auto px-6 pb-44 pt-10">
       <BackButton to="/create" />
 
-      <h1 className="text-2xl font-bold">Build your plan</h1>
-      <p className="mt-2 text-sm text-ink-secondary">
+      <h1 className="text-title">Build your plan</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
         Pick 1–3 vibes to build your night. Add a location or saved venues — either works.
       </p>
 
       <div className="mt-8">
-        <label className="mb-3 block text-sm font-medium text-ink-secondary">
+        <label className="mb-3 block text-sm font-medium text-muted-foreground">
           What's the vibe? (pick 1–3)
         </label>
         <div className="grid grid-cols-3 gap-3">
@@ -342,10 +342,10 @@ export function PlanBuilderPage() {
               <button
                 key={t.key}
                 onClick={() => toggleType(t.key)}
-                className={`touch-target flex flex-col items-center justify-center gap-1 rounded-card border px-2 py-4 text-sm font-medium transition-all duration-200 active:scale-[0.98] ${
+                className={`touch-target flex flex-col items-center justify-center gap-1 rounded-md border px-2 py-4 text-sm font-medium transition-all duration-200 active:scale-[0.98] ${
                   active
-                    ? 'border-gold bg-gold/10 text-gold shadow-gold-glow'
-                    : 'border-gold/20 bg-surface text-ink-secondary'
+                    ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                    : 'border-border bg-card text-muted-foreground'
                 }`}
               >
                 <Icon size={20} />
@@ -358,7 +358,7 @@ export function PlanBuilderPage() {
           <button
             onClick={handleSurprise}
             disabled={distancesLoading || savedVenues.length === 0}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-card border border-gold/30 bg-gold/5 py-3 text-sm font-semibold text-gold transition-all active:scale-[0.98] hover:bg-gold/15 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-primary-soft py-3 text-sm font-semibold text-foreground transition-all active:scale-[0.98] hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Shuffle size={16} />
             {savedVenues.length === 0
@@ -373,25 +373,25 @@ export function PlanBuilderPage() {
       {/* Saved venues quick-select */}
       <div className="mt-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-ink-secondary">
+          <h2 className="text-sm font-medium text-muted-foreground">
             or pick from saved venues
           </h2>
           <button
             onClick={() => navigate('/saved')}
-            className="inline-flex items-center text-xs font-medium text-gold transition-colors hover:text-gold-light"
+            className="inline-flex items-center text-xs font-medium text-primary-text transition-colors hover:text-primary-text"
           >
             See all <Chevron size={14} />
           </button>
         </div>
         {savedVenues.length === 0 ? (
           venuesError ? (
-            <p className="card px-4 py-3 text-center text-sm text-ink-secondary">
+            <p className="card px-4 py-3 text-center text-sm text-muted-foreground">
               Couldn't load saved venues. Try again in a moment.
             </p>
           ) : (
             <button
               onClick={() => navigate('/saved')}
-              className="card flex w-full items-center justify-center gap-2 text-sm text-ink-secondary transition-colors hover:text-gold"
+              className="card flex w-full items-center justify-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary-text"
             >
               <Plus size={16} /> Add from Saved
             </button>
@@ -399,12 +399,12 @@ export function PlanBuilderPage() {
         ) : (
           <>
             {location.trim() && (
-              <div className="mb-3 rounded-card border border-gold/20 bg-[#111] p-4">
+              <div className="mb-3 rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold uppercase tracking-widest text-gold/70">
+                  <label className="text-caption text-muted-foreground">
                     Max driving time
                   </label>
-                  <span className="text-sm font-bold text-gold">
+                  <span className="text-sm font-bold text-foreground">
                     {maxTravelMin} min
                   </span>
                 </div>
@@ -415,15 +415,15 @@ export function PlanBuilderPage() {
                   step={5}
                   value={maxTravelMin}
                   onChange={(e) => setMaxTravelMin(Number(e.target.value))}
-                  className="mt-3 w-full accent-gold"
+                  className="mt-3 w-full accent-primary"
                 />
                 {distancesLoading && (
-                  <p className="mt-2 text-xs text-ink-secondary">
+                  <p className="mt-2 text-xs text-muted-foreground">
                     Calculating driving times...
                   </p>
                 )}
                 {distancesError && !distancesLoading && (
-                  <p className="mt-2 text-xs text-ink-secondary">
+                  <p className="mt-2 text-xs text-muted-foreground">
                     Couldn't load driving times — showing all venues.
                   </p>
                 )}
@@ -431,7 +431,7 @@ export function PlanBuilderPage() {
             )}
             <div className="grid grid-cols-1 gap-2">
               {filteredVenues.length === 0 ? (
-                <p className="px-2 py-4 text-center text-sm text-ink-secondary">
+                <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                   No saved venues within {maxTravelMin} min drive.
                 </p>
               ) : (
@@ -447,28 +447,28 @@ export function PlanBuilderPage() {
                       onClick={() => pickVenue(v)}
                       className={`card flex items-center gap-3 py-3 text-left transition-all active:scale-[0.98] ${
                         isPicked
-                          ? 'border-gold bg-gold/10 shadow-gold-glow'
-                          : 'hover:border-gold/40'
+                          ? 'border-primary bg-primary-soft'
+                          : 'hover:border-input'
                       }`}
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-black/40 text-gold">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground">
                         <Icon size={16} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-white">
+                        <p className="truncate text-sm font-medium text-foreground">
                           {v.name}
                         </p>
-                        <p className="truncate text-xs text-ink-secondary">
+                        <p className="truncate text-xs text-muted-foreground">
                           {v.address}
                         </p>
                         {d?.durationText && !d.error && (
-                          <p className="mt-0.5 flex items-center gap-1 text-xs text-ink-secondary/70">
+                          <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock size={11} /> {d.durationText} away
                           </p>
                         )}
                       </div>
                       {v.link && (
-                        <ExternalLink size={14} className="shrink-0 text-gold/60" />
+                        <ExternalLink size={14} className="shrink-0 text-muted-foreground" />
                       )}
                     </button>
                   );
@@ -482,7 +482,7 @@ export function PlanBuilderPage() {
       {/* Picked venues as stop slots */}
       {picked.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-3 text-sm font-medium text-ink-secondary">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">
             Stops from saved venues
           </h2>
           <div className="space-y-2">
@@ -492,16 +492,16 @@ export function PlanBuilderPage() {
                 className="card flex items-center justify-between gap-2 py-3"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-white">
+                  <p className="truncate text-sm font-medium text-foreground">
                     {p.name}
                   </p>
-                  <p className="truncate text-xs text-ink-secondary">
+                  <p className="truncate text-xs text-muted-foreground">
                     {p.address}
                   </p>
                 </div>
                 <button
                   onClick={() => removePicked(i)}
-                  className="text-xs text-danger transition-colors hover:text-danger/80"
+                  className="text-xs text-destructive-text transition-colors hover:text-destructive-text"
                 >
                   Remove
                 </button>
@@ -512,8 +512,8 @@ export function PlanBuilderPage() {
       )}
 
       <div className="mt-6">
-        <label className="mb-2 block text-sm font-medium text-ink-secondary">
-          Where from? <span className="text-ink-secondary/60">(optional)</span>
+        <label className="mb-2 block text-sm font-medium text-muted-foreground">
+          Where from? <span className="text-muted-foreground">(optional)</span>
         </label>
         <div className="flex gap-2">
           <input
@@ -524,18 +524,18 @@ export function PlanBuilderPage() {
               if (e.target.value.trim()) setOriginCoord(null);
             }}
             placeholder={originCoord ? 'Using your location' : 'Suburb or postcode'}
-            className={`flex-1 touch-target rounded-card border bg-surface px-4 text-white placeholder-ink-secondary/60 outline-none transition-all focus:border-gold focus:shadow-gold-glow ${
-              originCoord ? 'border-gold/50' : 'border-gold/20'
+            className={`flex-1 touch-target rounded-md border bg-card px-4 text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-ring ${
+              originCoord ? 'border-input' : 'border-border'
             }`}
           />
           <button
             onClick={handleUseMyLocation}
             disabled={locating}
             aria-label="Use my location"
-            className={`flex shrink-0 items-center justify-center gap-2 rounded-card border px-4 py-3 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 ${
+            className={`flex shrink-0 items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 ${
               originCoord
-                ? 'border-gold bg-gold/15 text-gold'
-                : 'border-gold/30 bg-surface text-gold hover:bg-gold/10'
+                ? 'border-primary bg-primary-soft text-primary-soft-foreground'
+                : 'border-border bg-card text-primary-text hover:bg-muted'
             }`}
           >
             {locating ? (
@@ -546,20 +546,20 @@ export function PlanBuilderPage() {
           </button>
         </div>
         {originCoord && (
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-gold/70">
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             <MapPin size={12} /> Location set to your current position
           </p>
         )}
         {locationError && (
-          <p className="mt-2 text-xs text-danger">{locationError}</p>
+          <p className="mt-2 text-xs text-destructive-text">{locationError}</p>
         )}
       </div>
 
       {error && (
-        <div className="mt-4 rounded-xl border border-danger/40 bg-danger/15 px-4 py-4 text-sm font-medium text-danger">
+        <div className="mt-4 rounded-xl border border-destructive-text/30 bg-destructive-soft px-4 py-4 text-sm font-medium text-destructive-text">
           <p className="font-semibold">Couldn't create your plan</p>
-          <p className="mt-1 text-danger/80">{error}</p>
-          <p className="mt-2 text-xs text-danger/60">Check your connection and try again.</p>
+          <p className="mt-1 text-destructive-text">{error}</p>
+          <p className="mt-2 text-xs text-destructive-text">Check your connection and try again.</p>
         </div>
       )}
 
@@ -567,7 +567,7 @@ export function PlanBuilderPage() {
         <button
           onClick={handleCurate}
           disabled={!canSubmit || submitting}
-          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card px-6 py-3.5 text-base font-bold shadow-gold-glow transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:border disabled:border-gold/20 disabled:bg-gold/10 disabled:text-gold/40 disabled:shadow-none bg-gold text-black"
+          className="btn-primary btn-lg w-full disabled:border disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
         >
           {submitting ? 'Curating...' : 'Curate a Date'}{' '}
           {!submitting && <ChevronRight size={20} />}

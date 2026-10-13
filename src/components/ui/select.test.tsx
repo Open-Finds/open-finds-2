@@ -20,8 +20,8 @@ describe('VenueTypeSelect', () => {
 
     const dessert = await screen.findByRole('option', { name: 'Dessert' });
     expect(screen.getByRole('option', { name: 'Bar' })).toBeInTheDocument();
-    expect(dessert.closest('[data-radix-select-viewport]')?.parentElement?.className).toMatch(/bg-\[#111\]/);
-    expect(dessert.className).toMatch(/data-\[highlighted\]:bg-gold\/20/);
+    expect(dessert.closest('[data-radix-select-viewport]')?.parentElement?.className).toMatch(/bg-popover/);
+    expect(dessert.className).toMatch(/data-\[highlighted\]:bg-muted/);
 
     await userEvent.click(dessert);
     expect(onChange).toHaveBeenCalledWith('dessert');
@@ -29,7 +29,7 @@ describe('VenueTypeSelect', () => {
 });
 
 describe('AppSelect', () => {
-  it('renders placeholder and selects an option with gold menu chrome', async () => {
+  it('renders placeholder and selects an option from the app-styled menu', async () => {
     const onChange = vi.fn();
     render(
       <AppSelect
@@ -46,7 +46,7 @@ describe('AppSelect', () => {
 
     await userEvent.click(screen.getByRole('combobox', { name: 'Add a friend to group' }));
     const alex = await screen.findByRole('option', { name: 'Alex (@alex)' });
-    expect(alex.closest('[data-radix-select-viewport]')?.parentElement?.className).toMatch(/bg-\[#111\]/);
+    expect(alex.closest('[data-radix-select-viewport]')?.parentElement?.className).toMatch(/bg-popover/);
     await userEvent.click(alex);
     expect(onChange).toHaveBeenCalledWith('1');
   });

@@ -9,7 +9,7 @@ export function BackButton({ to }: { to: string }) {
     <button
       onClick={() => navigate(to)}
       aria-label="Back"
-      className="touch-target -ml-2 mb-6 flex items-center justify-center rounded-xl text-gold transition-all duration-200 active:scale-90 active:shadow-gold-press"
+      className="touch-target -ml-2 mb-6 flex items-center justify-center rounded-xl text-primary-text transition-all duration-200 active:scale-90"
     >
       <ChevronLeft size={28} strokeWidth={2.5} />
     </button>
@@ -26,13 +26,13 @@ export function StatusBadge({ status }: { status: RsvpStatus }) {
   }
   if (status === 'declined') {
     return (
-      <span className="inline-flex items-center gap-1 text-danger text-sm font-medium">
+      <span className="inline-flex items-center gap-1 text-destructive-text text-sm font-medium">
         <X size={16} /> Can't make it
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-pending text-sm font-medium">
+    <span className="inline-flex items-center gap-1 text-warning text-sm font-medium">
       <Clock3 size={16} /> Pending
     </span>
   );
@@ -49,22 +49,22 @@ export function Timeline({
         <div key={stop.id} className="relative flex gap-4 pb-6 last:pb-0">
           {/* connector line */}
           {i < stops.length - 1 && (
-            <div className="absolute left-[19px] top-10 bottom-0 w-px bg-gold/40" />
+            <div className="absolute left-[19px] top-10 bottom-0 w-px bg-primary/40" />
           )}
           {/* numbered dot */}
-          <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-gold bg-black font-bold text-gold">
+          <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-border bg-background font-bold text-foreground">
             {i + 1}
           </div>
           {/* stop card */}
           <div className="card flex-1 animate-fade-in">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="text-lg font-semibold text-white">{stop.name}</h3>
-              <span className="inline-flex items-center gap-1 text-gold text-sm font-medium">
+              <h3 className="text-heading text-foreground">{stop.name}</h3>
+              <span className="inline-flex items-center gap-1 text-foreground text-sm font-medium">
                 <Clock size={14} /> {formatTime(stop.time)}
               </span>
             </div>
-            <p className="mt-1 flex items-center gap-1 text-sm text-ink-secondary">
-              <MapPin size={14} className="text-gold/70" /> {stop.address}
+            <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+              <MapPin size={14} className="text-muted-foreground" /> {stop.address}
             </p>
             <CheckItOut link={stop.vibe_link} className="mt-3 w-full" />
           </div>
@@ -77,7 +77,7 @@ export function Timeline({
 /** Marks the host's own row in an RSVP list. */
 export function HostBadge() {
   return (
-    <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold">
+    <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary-soft-foreground">
       <span aria-hidden="true">👑</span> Host
     </span>
   );
@@ -90,7 +90,7 @@ export function RsvpList({
 }) {
   if (rsvps.length === 0) {
     return (
-      <p className="text-sm text-ink-secondary">No responses yet.</p>
+      <p className="text-sm text-muted-foreground">No responses yet.</p>
     );
   }
   return (
@@ -98,15 +98,15 @@ export function RsvpList({
       {rsvps.map((r) => (
         <li
           key={r.id}
-          className="flex items-center justify-between gap-2 rounded-xl border border-gold/10 bg-black/40 px-4 py-3"
+          className="flex items-center justify-between gap-2 rounded-xl border border-border bg-background px-4 py-3"
         >
           <div className="min-w-0">
-            <p className="flex min-w-0 items-center font-medium text-white">
+            <p className="flex min-w-0 items-center font-medium text-foreground">
               <span className="truncate">{r.name}</span>
               {r.is_host && <HostBadge />}
             </p>
             {r.status === 'declined' && r.decline_reason && (
-              <p className="truncate text-xs text-ink-secondary">
+              <p className="truncate text-xs text-muted-foreground">
                 "{r.decline_reason}"
               </p>
             )}
