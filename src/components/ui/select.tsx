@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -39,12 +40,29 @@ export function AppSelect({
   className?: string;
   contentClassName?: string;
 }) {
+  /*
+    A second tap on the box closes the menu, as it does elsewhere. On touch
+    screens Radix closed it on the touch and the tap's click opened it again
+    straight away, so it only ever closed by picking something.
+  */
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closedByTrigger = useRef(false);
   return (
     <SelectPrimitive.Root
       value={value || undefined}
       onValueChange={onChange}
+      open={open}
+      onOpenChange={(next) => {
+        if (next && closedByTrigger.current) {
+          closedByTrigger.current = false;
+          return;
+        }
+        setOpen(next);
+      }}
     >
       <SelectPrimitive.Trigger
+        ref={triggerRef}
         aria-label={ariaLabel}
         className={cn(triggerBase, className)}
       >
@@ -57,6 +75,17 @@ export function AppSelect({
         <SelectPrimitive.Content
           position="popper"
           sideOffset={6}
+          onPointerDownOutside={(e) => {
+            // While open, taps outside land on the page, not the box, so it's
+            // where the tap is that says it was on the box.
+            const tap = (e as unknown as CustomEvent<{ originalEvent: PointerEvent }>).detail?.originalEvent;
+            const box = triggerRef.current?.getBoundingClientRect();
+            if (tap && box && tap.clientX >= box.left && tap.clientX <= box.right && tap.clientY >= box.top && tap.clientY <= box.bottom) {
+              closedByTrigger.current = true;
+              // Only the reopen that follows this tap is skipped.
+              setTimeout(() => { closedByTrigger.current = false; }, 400);
+            }
+          }}
           className={cn(contentBase, 'w-[var(--radix-select-trigger-width)]', contentClassName)}
         >
           <SelectPrimitive.Viewport>
