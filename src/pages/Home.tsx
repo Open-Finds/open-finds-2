@@ -690,7 +690,7 @@ export function HomePage({
 
   /** Makes the plan and opens its itinerary; returns its id, or null if it didn't work. */
   const buildAndCreatePlan = async (
-    venues: { name: string; address: string; type: VenueType; vibe_link: string | null }[]
+    venues: { name: string; address: string; type: VenueType; vibe_link: string | null; venue_partner_id?: string }[]
   ): Promise<string | null> => {
     if (creating || venues.length === 0) return null;
     setCreating(true);
@@ -702,6 +702,8 @@ export function HomePage({
         time: VIBE_DEFAULT_TIMES[v.type as Vibe] ?? '19:00',
         vibe_link: v.vibe_link,
         sort_order: i,
+        // So the "How was it?" reminder and review button know the venue.
+        ...(v.venue_partner_id ? { venue_partner_id: v.venue_partner_id } : {}),
       }));
       const newPlan = await createPlan({
         title: eventName || 'Night Out',
@@ -1466,7 +1468,7 @@ export function HomePage({
       const vibes = new Set(selectedVibes);
       for (const v of sponsoredPicked) vibes.add(v.type as Vibe);
       setSelectedVibes(Array.from(vibes).slice(0, 3) as Vibe[]);
-      const planId = await buildAndCreatePlan(sponsoredPicked.map((v) => ({ name: v.business_name, address: v.address, type: v.type, vibe_link: v.instagram_link })));
+      const planId = await buildAndCreatePlan(sponsoredPicked.map((v) => ({ name: v.business_name, address: v.address, type: v.type, vibe_link: v.instagram_link, venue_partner_id: v.id })));
       // An itinerary appearance, for the venues' numbers.
       if (planId) void recordSponsoredEvents(sponsoredPicked.map((v) => v.id), 'saved', planId);
     };

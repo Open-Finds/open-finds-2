@@ -372,6 +372,8 @@ export type Stop = {
   vibe_link: string | null;
   sort_order: number;
   user_id: string;
+  /** The sponsored venue this stop is, when it was picked from Sponsored Venues. */
+  venue_partner_id?: string | null;
 };
 
 export type RsvpStatus = 'pending' | 'in' | 'declined';
@@ -585,7 +587,11 @@ export async function createStops(
     user_id: userId,
     sort_order: i,
   }));
-  const { data, error } = await supabase.from('stops').insert(rows).select();
+  let { data, error } = await supabase.from('stops').insert(rows).select();
+  // Before the review-reminders migration there's no venue_partner_id column.
+  if (error && (error.code === 'PGRST204' || error.code === '42703') && /venue_partner_id/.test(error.message)) {
+    ({ data, error } = await supabase.from('stops').insert(rows.map(({ venue_partner_id: _v, ...r }) => (void _v, r))).select());
+  }
   if (error) throw error;
   return (data ?? []) as Stop[];
 }
@@ -1697,8 +1703,16 @@ export async function savePushSubscription(sub: PushSubscription): Promise<void>
   if (error) throw error;
 }
 
+/**
+ * The push key pair's public half (the private half is the VAPID_PRIVATE_KEY
+ * function secret). Public by design: every browser that subscribes gets it.
+ * Kept here as well as in VITE_VAPID_PUBLIC_KEY because the live build had
+ * no such variable, which quietly turned phone notifications off for everyone.
+ */
+const VAPID_PUBLIC_KEY = 'BNr1kC9VGCM8xBIV2eIUoFY68mQJa7q8BGZOJ6iRO7z_MUglX56jaDMX9daIRrc7_0uRgUUS2qPqedkx3G87enE';
+
 export async function subscribeToPush(): Promise<PushSubscription | null> {
-  const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+  const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY;
   if (!publicKey || !('serviceWorker' in navigator) || !('PushManager' in window)) return null;
 
   // iOS requires the app to be installed to home screen before push works

@@ -1,19 +1,21 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { parseLocalDate } from '../lib/time';
 import {
   fetchPlan,
   fetchStops,
   fetchRsvps,
+  fetchSponsoredVenues,
   sortStops,
   sortStopsByTime,
   resequenceStopsByTime,
   type Plan,
   type Stop,
   type Rsvp,
+  type SponsoredVenue,
 } from '../lib/supabase';
 import { mapsDirectionsUrl } from '../lib/maps';
 import { useCountdown } from '../lib/countdown';
-import { ChevronLeft, CalendarPlus, Clock, Check, X, Clock3, Navigation, Share2, Smartphone } from 'lucide-react';
+import { ChevronLeft, CalendarPlus, Clock, Check, X, Clock3, Navigation, Share2, Smartphone, Star } from 'lucide-react';
 import { StopCard } from '../components/StopCard';
 import { AddToCalendar } from '../components/AddToCalendar';
 import { HostBadge } from '../components/Shared';
@@ -21,6 +23,8 @@ import { InviteFriendsModal } from '../components/InviteFriendsModal';
 import { ShareOnSocialDialog } from '../components/ShareOnSocial';
 import { buildInviteMessage, getShareUrl } from '../lib/invite';
 import { planToCalendarEvent } from '../lib/calendar';
+
+const VenueReviewsDialog = lazy(() => import('../components/SponsoredVenues').then((m) => ({ default: m.VenueReviewsDialog })));
 
 export function DashboardPage({
   id,
@@ -36,6 +40,9 @@ export function DashboardPage({
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // Live sponsored venues: after the event, their stops can be reviewed for a credit.
+  const [sponsored, setSponsored] = useState<SponsoredVenue[]>([]);
+  const [reviewing, setReviewing] = useState<SponsoredVenue | null>(null);
 
 
   // Counts down to the first stop (or 7pm when there are no times), the same
@@ -43,6 +50,11 @@ export function DashboardPage({
   const event = plan ? planToCalendarEvent(plan, stops) : null;
   const countdown = useCountdown(event ? event.start.toISOString() : '2099-01-01');
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const isOver = !!event && Date.now() >= event.end.getTime();
+  const sponsoredFor = (stop: Stop) =>
+    sponsored.find((v) => v.id === stop.venue_partner_id)
+    ?? (stop.venue_partner_id ? undefined : sponsored.find((v) => v.business_name.trim().toLowerCase() === stop.name.trim().toLowerCase()));
+  const reviewable = isOver ? stops.map(sponsoredFor).filter((v): v is SponsoredVenue => !!v && v.can_review) : [];
 
   useEffect(() => {
     let active = true;
@@ -57,6 +69,7 @@ export function DashboardPage({
         setPlan(p);
         setStops(sortStops(s));
         setRsvps(r);
+        fetchSponsoredVenues().then((v) => { if (active) setSponsored(v); }, () => {});
       } finally {
         if (active) setLoading(false);
       }
@@ -147,7 +160,7 @@ export function DashboardPage({
                 ? "It's on now!"
                 : 'This event has passed'}
           </p>
-          {countdown.isPast && event && Date.now() >= event.end.getTime() && (
+          {isOver && reviewable.length > 0 && (
             <p className="mt-1 text-sm text-muted-foreground">Give a review and gain some credits</p>
           )}
         </div>
@@ -204,16 +217,31 @@ export function DashboardPage({
         <div className="mt-6">
           <h2 className="mb-3 text-heading text-foreground">Itinerary</h2>
           <div className="space-y-3">
-            {stops.map((stop, i) => (
-              <StopCard
-                key={stop.id}
-                stop={stop}
-                index={i}
-                onSaved={handleStopSaved}
-              />
-            ))}
+            {stops.map((stop, i) => {
+              const venue = isOver ? sponsoredFor(stop) : undefined;
+              return (
+                <div key={stop.id}>
+                  <StopCard stop={stop} index={i} onSaved={handleStopSaved} />
+                  {venue?.can_review && (
+                    <button onClick={() => setReviewing(venue)} className={`${venue.reviewed_by_me ? 'btn-outline' : 'btn-secondary'} mt-2 w-full`}>
+                      <Star size={18} /> {venue.reviewed_by_me ? 'See your review' : 'Leave a review · earn 1 credit'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
+
+        {reviewing && (
+          <Suspense fallback={null}>
+            <VenueReviewsDialog
+              venue={reviewing}
+              onClose={() => setReviewing(null)}
+              onChanged={() => fetchSponsoredVenues().then(setSponsored, () => {})}
+            />
+          </Suspense>
+        )}
 
         {/* Action buttons */}
         <div className="mt-8 space-y-3">
