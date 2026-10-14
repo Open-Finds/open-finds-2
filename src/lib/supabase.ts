@@ -408,6 +408,9 @@ export type SavedVenue = {
   visited: boolean;
   personal_note: string | null;
   rating: number | null;
+  /** From Google Places, looked up once (venue-photo). */
+  photo_url?: string | null;
+  photo_checked_at?: string | null;
 };
 
 export type Collection = {

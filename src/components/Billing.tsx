@@ -245,7 +245,7 @@ function CheckoutForm({
               <button
                 type="button"
                 onClick={() => { void checkout.removePromotionCode(); }}
-                className="text-xs text-muted-foreground underline-offset-2 hover:text-primary-text hover:underline"
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-info hover:underline"
               >
                 Remove
               </button>
@@ -285,7 +285,7 @@ function CheckoutForm({
           <button
             type="button"
             onClick={() => setPromoOpen(true)}
-            className="flex w-fit items-center gap-1.5 text-sm text-primary-text underline-offset-2 hover:underline"
+            className="flex w-fit items-center gap-1.5 text-sm text-info underline-offset-2 hover:underline"
           >
             <Tag size={14} /> Add a promo code
           </button>
@@ -538,7 +538,7 @@ export function BillingPanel({
                         href={inv.pdf}
                         target="_blank"
                         rel="noreferrer"
-                        className="ml-auto flex items-center gap-1 text-primary-text hover:underline"
+                        className="ml-auto flex items-center gap-1 text-info hover:underline"
                       >
                         <Download size={14} /> Receipt
                       </a>

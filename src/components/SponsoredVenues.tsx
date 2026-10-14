@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { CheckItOut } from './CheckItOut';
 import { LoadError } from './LoadError';
 import { Badge, RatingLine } from './PartnerBits';
-import { TYPE_LABELS } from '../lib/partners';
+import { TYPE_LABELS, typeWithIcon } from '../lib/partners';
 import { cn } from '../lib/utils';
 
 const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
@@ -106,7 +106,7 @@ export function SponsoredVenuePicker({
                   <MapPin size={13} className="shrink-0 text-muted-foreground" /> <span className="truncate">{v.address}</span>
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <Badge tone="gold">{TYPE_LABELS[v.type] ?? v.type}</Badge>
+                  <Badge tone="gold">{typeWithIcon(v.type)}</Badge>
                   <RatingLine average={v.average_rating} count={v.review_count} />
                   <span className="font-semibold text-foreground">Reviews →</span>
                 </div>
@@ -234,7 +234,7 @@ export function VenueReviewsDialog({ venue, onClose, onChanged }: { venue: Spons
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="gold">{TYPE_LABELS[venue.type] ?? venue.type}</Badge>
+          <Badge tone="gold">{typeWithIcon(venue.type)}</Badge>
           <RatingLine average={average} count={count} className="text-sm" />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -304,7 +304,7 @@ export function VenueReviewsDialog({ venue, onClose, onChanged }: { venue: Spons
                 <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{r.body}</p>
                 {r.mine && (
                   <div className="mt-2 flex gap-2">
-                    <Button size="sm" variant="outline" disabled={saving} onClick={startWriting}><Pencil /> Edit</Button>
+                    <Button size="sm" variant="outline" disabled={saving} onClick={startWriting}><Pencil className="text-info" /> Edit</Button>
                     <Button size="sm" variant="ghost" disabled={saving} onClick={() => void remove()} className="text-destructive-text hover:bg-destructive-soft hover:text-destructive-text"><Trash2 /> Delete</Button>
                   </div>
                 )}

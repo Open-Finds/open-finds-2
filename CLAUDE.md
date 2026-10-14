@@ -25,6 +25,19 @@ Rules that follow from that:
 - Third-party surfaces that cannot take classes (Stripe's payment fields) read the tokens at runtime: see `stripeAppearance()` in `src/lib/stripe.ts`.
 - Do not upgrade React or Tailwind as part of a visual change.
 
+### Jacky's overrides (2026-10-15)
+
+These replace the matching rules in the library guide below:
+
+- Light mode is neutral white and light grey (like Instagram and Facebook's light mode), not cream: the `:root` tokens in `src/index.css`.
+- The main planning action (Start Planning) uses the logo's ring: `.btn-brand` (`bg-brand-ring`). Selected navigation tabs wear the ring too (`ViewToggle`).
+- Save Venue uses info: `.btn-info`. Edit (pencil) icons use `text-info`, and so do text links.
+- Settings' action buttons (Save Name, Save Username, …) use `.btn-ai-soft`: `ai-soft` in light mode, `ai` in dark.
+- "Add your first venue" style highlights use an `ai-soft` pill.
+- Dietary and preference tags, and venue tags, are `ai-soft` / `ai-soft-foreground`, always the same colour.
+- Character: category icons (🍔 🍸 🍰 🎯, `TYPE_ICONS` in `src/lib/partners.ts`) on category badges, and venue photos from Google (`VenueThumb`, venue-photo function), with the category icon shown when there's no photo.
+- Extract Venue and other AI actions stay `ai`.
+
 ## Purpose: give your agent a shared UI contract
 
 This guide teaches your coding assistant which components, fonts, tokens, and accessibility rules to use. It reduces invented styles and inconsistent interfaces across tasks. It is instruction context, not executable code: downloading it does not install the library, add an editor extension, or connect a service. Your agent still needs the actual library source.

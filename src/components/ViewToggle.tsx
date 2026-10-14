@@ -71,23 +71,16 @@ export function ViewToggle({
                 onClick={() => handleClick(tabView)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex min-h-[44px] flex-1 flex-col items-center gap-1 py-2.5 transition-colors',
+                  'flex min-h-[44px] flex-1 flex-col items-center gap-1 pb-2 pt-2 transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                  active ? 'text-primary-text' : 'text-muted-foreground hover:text-foreground'
+                  active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                <Icon
-                  size={22}
-                  strokeWidth={active ? 2.5 : 2}
-                  className={active ? 'drop-shadow-[0_0_6px_hsl(var(--primary)/0.5)]' : ''}
-                />
-                <span className="whitespace-nowrap text-xs font-medium">{label}</span>
-                <span
-                  className={cn(
-                    'h-0.5 w-6 rounded-full transition-all',
-                    active ? 'bg-primary' : 'bg-transparent'
-                  )}
-                />
+                {/* The selected tab wears the logo's ring (Jacky, 2026-10-15). */}
+                <span className={cn('flex h-8 w-14 items-center justify-center rounded-full transition-colors', active && 'bg-brand-ring text-white')}>
+                  <Icon size={21} strokeWidth={active ? 2.4 : 2} />
+                </span>
+                <span className={cn('whitespace-nowrap text-xs', active ? 'font-semibold' : 'font-medium')}>{label}</span>
               </button>
             );
           })}
@@ -119,13 +112,14 @@ export function ViewToggle({
                   'flex min-h-[44px] items-center gap-3 rounded-md px-3.5 py-2.5 text-sm font-semibold transition-all',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   active
-                    ? 'bg-primary-soft text-primary-text'
+                    ? 'bg-muted text-foreground'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
-                <Icon size={19} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
+                <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', active && 'bg-brand-ring text-white')}>
+                  <Icon size={18} strokeWidth={active ? 2.4 : 2} />
+                </span>
                 <span>{label}</span>
-                {active && <span className="ml-auto h-5 w-0.5 rounded-full bg-primary" />}
               </button>
             );
           })}

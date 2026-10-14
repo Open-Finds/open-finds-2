@@ -31,6 +31,7 @@ import { locateUser } from '../lib/geolocation';
 import { navigate } from '../lib/router';
 import { HelpTooltip } from '../components/HelpTooltip';
 import { AddressInput } from '../components/AddressInput';
+import { VenueThumb } from '../components/VenueThumb';
 import { CheckItOut } from '../components/CheckItOut';
 import { HostBadge } from '../components/Shared';
 import { InviteFriendsModal } from '../components/InviteFriendsModal';
@@ -950,7 +951,7 @@ export function HomePage({
             <button
               data-tour="plan-night"
               onClick={() => setPage('occasion')}
-              className="btn-secondary btn-lg w-full"
+              className="btn-brand btn-lg w-full"
             >
               <CalendarPlus size={20} /> Start Planning
             </button>
@@ -1041,7 +1042,7 @@ export function HomePage({
               <button
                 onClick={qaHandleSaveMulti}
                 disabled={qaSavingMulti || qaSelectedItems.size === 0}
-                className="btn-primary mt-4 w-full"
+                className="btn-info mt-4 w-full"
               >
                 {qaSavingMulti ? (
                   <><Loader2 size={18} className="animate-spin" /> Saving...</>
@@ -1143,9 +1144,9 @@ export function HomePage({
                     {qaTags.map((tag) => (
                       <span
                         key={tag}
-                        className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
+                        className="inline-flex items-center gap-1 rounded-full bg-ai-soft px-2.5 py-1 text-xs font-medium text-ai-soft-foreground"
                       >
-                        <Tag size={9} className="text-muted-foreground" />
+                        <Tag size={12} />
                         {tag}
                         <button
                           onClick={() => qaRemoveTag(tag)}
@@ -1162,7 +1163,7 @@ export function HomePage({
               <button
                 onClick={handleQuickAddSave}
                 disabled={qaSaving}
-                className="btn-primary btn-lg w-full"
+                className="btn-info btn-lg w-full"
               >
                 {qaSaving ? 'Saving...' : 'Save Venue'}
               </button>
@@ -1402,12 +1403,13 @@ export function HomePage({
                   return (
                     <div
                       key={v.id}
-                      className={`flex w-full items-start gap-3 rounded-md border p-4 text-left transition-all active:scale-[0.98] ${
+                      className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all active:scale-[0.98] ${
                         isSelected
                           ? 'border-primary bg-primary-soft'
                           : 'border-border bg-card hover:border-input'
                       }`}
                     >
+                      <VenueThumb venueId={v.id} type={v.type} photoUrl={v.photo_url} checked={!!v.photo_checked_at} />
                       <button
                         onClick={() => toggleSavedSelect(v.id)}
                         className="min-w-0 flex-1 text-left"
@@ -1417,7 +1419,7 @@ export function HomePage({
                           <MapPin size={13} className="text-muted-foreground" /> {v.address}
                         </p>
                         <span className="mt-2 inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
-                          {VIBE_LABELS[v.type as Vibe]?.label ?? v.type}
+                          {VIBE_LABELS[v.type as Vibe]?.icon} {VIBE_LABELS[v.type as Vibe]?.label ?? v.type}
                         </span>
                       </button>
                       <a
@@ -1557,8 +1559,8 @@ export function HomePage({
                     }}
                     className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 ${
                       isActive
-                        ? 'border-transparent bg-primary-soft text-primary-soft-foreground'
-                        : 'border-border bg-muted text-foreground hover:border-input'
+                        ? 'border-transparent bg-ai-soft text-ai-soft-foreground'
+                        : 'border-ai-soft-foreground/25 bg-card text-ai-soft-foreground hover:bg-ai-soft'
                     }`}
                   >
                     {opt.label}

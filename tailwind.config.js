@@ -57,6 +57,7 @@ export default {
         },
         info: {
           DEFAULT: 'hsl(var(--info) / <alpha-value>)',
+          foreground: 'hsl(var(--info-foreground) / <alpha-value>)',
           soft: 'hsl(var(--info-soft) / <alpha-value>)',
         },
         scrim: 'hsl(var(--scrim) / <alpha-value>)',

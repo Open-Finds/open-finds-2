@@ -21,20 +21,22 @@
   :root {
     color-scheme: light;
 
-    --background: 36 33% 97%;
+    /* Neutral white and light-grey surfaces, like Instagram and Facebook's
+       light mode (Jacky, 2026-10-15), rather than the library's cream. */
+    --background: 220 17% 95%;
     --foreground: 216 10% 10%;
     --card: 0 0% 100%;
     --card-foreground: 216 10% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 216 10% 10%;
-    --muted: 38 22% 93%;
-    --muted-foreground: 212 7% 38%;
-    --secondary: 38 22% 93%;
+    --muted: 220 16% 94%;
+    --muted-foreground: 220 7% 38%;
+    --secondary: 220 16% 94%;
     --secondary-foreground: 216 10% 10%;
-    --accent: 38 22% 93%;
+    --accent: 220 14% 90%;
     --accent-foreground: 216 10% 10%;
-    --border: 37 19% 86%;
-    --input: 37 7% 53%;
+    --border: 220 13% 88%;
+    --input: 220 8% 54%;
     --ring: 24 100% 35%;
 
     /* Amber: the main action and the selected state */
@@ -62,6 +64,7 @@
     --destructive-text: 4 76% 40%;
     --destructive-soft: 5 85% 95%;
     --info: 193 82% 31%;
+    --info-foreground: 0 0% 100%;
     --info-soft: 190 63% 93%;
 
     --scrim: 216 10% 10%;
@@ -115,6 +118,7 @@
     --destructive-text: 0 91% 71%;
     --destructive-soft: 3 37% 12%;
     --info: 188 86% 53%;
+    --info-foreground: 204 14% 7%;
     --info-soft: 193 52% 11%;
 
     --scrim: 0 0% 0%;
@@ -245,6 +249,9 @@
   .btn-outline,
   .btn-ghost,
   .btn-ai,
+  .btn-brand,
+  .btn-info,
+  .btn-ai-soft,
   .btn-destructive {
     @apply inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-md px-5 text-base transition-[background-color,color,border-color,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:active:scale-100;
   }
@@ -262,6 +269,18 @@
   }
   .btn-ai {
     @apply bg-ai text-ai-foreground hover:bg-ai/90;
+  }
+  /* Jacky's additions (2026-10-15): the logo's ring for the main planning
+     action, info for saving a venue, soft violet for Settings' actions. */
+  .btn-brand {
+    @apply bg-brand-ring font-semibold text-white hover:brightness-105;
+    text-shadow: 0 1px 1px hsl(var(--scrim) / 0.35);
+  }
+  .btn-info {
+    @apply bg-info text-info-foreground hover:bg-info/90;
+  }
+  .btn-ai-soft {
+    @apply bg-ai-soft text-ai-soft-foreground hover:bg-ai-soft/80 dark:bg-ai dark:text-ai-foreground dark:hover:bg-ai/90;
   }
   .btn-destructive {
     @apply bg-destructive text-destructive-foreground hover:bg-destructive/90;

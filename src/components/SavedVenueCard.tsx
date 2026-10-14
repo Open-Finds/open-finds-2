@@ -12,6 +12,8 @@ import { geocodeAddress } from '../lib/apiKeys';
 import { VenueTypeSelect } from './ui/select';
 import { CheckItOut } from './CheckItOut';
 import { AddressInput } from './AddressInput';
+import { VenueThumb } from './VenueThumb';
+import { TYPE_ICONS } from '../lib/partners';
 
 const TYPE_LABELS: Record<VenueType, string> = {
   food: 'Food',
@@ -346,8 +348,9 @@ export function SavedVenueCard({
           : 'border-border bg-card hover:border-input'
       }`}
     >
+      <VenueThumb venueId={venue.id} type={venue.type} photoUrl={venue.photo_url} checked={!!venue.photo_checked_at} canFetch={!readOnly} />
       <div className="min-w-0 flex-1">
-        <h3 className="truncate font-semibold text-foreground">{venue.name}</h3>
+        <h3 className="truncate pr-8 font-semibold text-foreground">{venue.name}</h3>
         <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
           <MapPin size={13} className="text-muted-foreground" /> {venue.address}
         </p>
@@ -368,14 +371,14 @@ export function SavedVenueCard({
             </span>
           ))}
           <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
-            {TYPE_LABELS[venue.type as VenueType] ?? venue.type}
+            {TYPE_ICONS[venue.type] ?? ''} {TYPE_LABELS[venue.type as VenueType] ?? venue.type}
           </span>
           {tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-0.5 rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground"
+              className="inline-flex items-center gap-1 rounded-full bg-ai-soft px-2 py-0.5 text-xs font-medium text-ai-soft-foreground"
             >
-              <Tag size={9} className="text-muted-foreground" />
+              <Tag size={12} />
               {tag}
             </span>
           ))}
@@ -409,7 +412,7 @@ export function SavedVenueCard({
           handleEdit();
         }}
         aria-label="Edit venue"
-        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-primary-text transition-all hover:bg-muted active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-info transition-all hover:bg-info-soft active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
       >
         <Pencil size={14} />
       </button>}

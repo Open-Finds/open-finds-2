@@ -368,7 +368,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                 <button
                   type="button"
                   onClick={() => { setResetting(true); setError(null); }}
-                  className="self-end text-xs font-medium text-primary-text underline-offset-2 hover:underline"
+                  className="self-end text-xs font-medium text-info underline-offset-2 hover:underline"
                 >
                   Forgot password?
                 </button>

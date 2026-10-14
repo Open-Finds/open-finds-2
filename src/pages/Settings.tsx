@@ -205,7 +205,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           <button
             onClick={handleSaveName}
             disabled={nameSaving}
-            className="btn-secondary w-full"
+            className="btn-ai-soft w-full"
           >
             {nameSaved ? <><Check size={15} /> Saved!</> : nameSaving ? 'Saving...' : 'Save Name'}
           </button>
@@ -235,7 +235,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           <button
             onClick={handleSaveUsername}
             disabled={usernameSaving || !usernameInput.trim()}
-            className="btn-secondary w-full"
+            className="btn-ai-soft w-full"
           >
             {usernameSaved ? <><Check size={15} /> Saved!</> : usernameSaving ? 'Saving...' : 'Save Username'}
           </button>
@@ -267,8 +267,8 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                   }}
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-semibold transition-all duration-200 active:scale-95 ${
                     selected
-                      ? 'border-transparent bg-primary-soft text-primary-soft-foreground'
-                      : 'border-border bg-muted text-foreground hover:border-input'
+                      ? 'border-transparent bg-ai-soft text-ai-soft-foreground'
+                      : 'border-ai-soft-foreground/25 bg-card text-ai-soft-foreground hover:bg-ai-soft'
                   }`}
                 >
                   {selected && <Check size={14} strokeWidth={3} />}
@@ -292,7 +292,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
               }
             }}
             disabled={dietarySaving}
-            className="btn-secondary w-full"
+            className="btn-ai-soft w-full"
           >
             {dietarySaved ? <><Check size={15} /> Saved!</> : dietarySaving ? 'Saving...' : 'Save Preferences'}
           </button>
@@ -321,7 +321,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           <button
             onClick={handleSaveEmail}
             disabled={emailSaving}
-            className="btn-secondary w-full"
+            className="btn-ai-soft w-full"
           >
             {emailSaving ? 'Saving...' : 'Save Email'}
           </button>
@@ -346,7 +346,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           <button
             onClick={handleSavePassword}
             disabled={passwordSaving}
-            className="btn-secondary w-full"
+            className="btn-ai-soft w-full"
           >
             {passwordSaved ? <><Check size={15} /> Updated!</> : passwordSaving ? 'Saving...' : 'Save Password'}
           </button>

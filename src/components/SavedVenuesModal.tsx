@@ -351,7 +351,7 @@ export function SavedVenuesModal({
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="btn-primary w-full"
+                    className="btn-info w-full"
                   >
                     {saving ? 'Saving...' : 'Save Venue'}
                   </button>

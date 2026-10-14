@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { PartnerForm } from '../components/PartnerForm';
 import { RatingLine, Stat, StatusBadge, Badge } from '../components/PartnerBits';
-import { TYPE_LABELS, money } from '../lib/partners';
+import { money, typeWithIcon } from '../lib/partners';
 import { LoadError } from '../components/LoadError';
 
 /**
@@ -110,7 +110,7 @@ export function MyVenuesPage() {
                             <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><MapPin size={12} className="shrink-0 text-muted-foreground" /> <span className="truncate">{p.address}</span></p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
-                            <Badge tone="gold">{TYPE_LABELS[p.type] ?? p.type}</Badge>
+                            <Badge tone="gold">{typeWithIcon(p.type)}</Badge>
                             <StatusBadge status={status} />
                           </div>
                         </div>
@@ -127,7 +127,7 @@ export function MyVenuesPage() {
                             <span>{p.impressions} appearances · {p.visits} visits · {money(p.total_billed_cents)} billed</span>
                             <RatingLine average={p.average_rating} count={p.review_count} />
                           </p>
-                          <Button size="sm" variant="outline" onClick={() => setEditing(p)}><Pencil /> Edit</Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditing(p)}><Pencil className="text-info" /> Edit</Button>
                         </div>
                       </li>
                     );

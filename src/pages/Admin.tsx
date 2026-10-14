@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AppSelect } from '../components/ui/select';
 import { PartnerForm } from '../components/PartnerForm';
 import { Badge, Figure, RatingLine, Stat, StatusBadge } from '../components/PartnerBits';
-import { TYPE_LABELS, money } from '../lib/partners';
+import { money, typeWithIcon } from '../lib/partners';
 import { cn } from '../lib/utils';
 
 type Tab = 'overview' | 'approvals' | 'venues' | 'team';
@@ -162,7 +162,7 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
             </nav>
 
             {tab !== 'overview' && (
-              <button onClick={() => goTab('overview')} className="mb-4 flex items-center gap-1 text-sm font-semibold text-primary-text hover:underline">
+              <button onClick={() => goTab('overview')} className="mb-4 flex items-center gap-1 text-sm font-semibold text-info hover:underline">
                 <ChevronLeft size={16} /> Admin overview
               </button>
             )}
@@ -266,7 +266,7 @@ function Overview({ partners, team, isAdmin, onRateChanged }: { partners: AdminP
       <section className="rounded-lg border border-border bg-card p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-bold text-foreground">By team member</h2>
-          <button onClick={() => goTab('team')} className="text-xs font-semibold text-primary-text hover:underline">Team & payouts →</button>
+          <button onClick={() => goTab('team')} className="text-xs font-semibold text-info hover:underline">Team & payouts →</button>
         </div>
         {sellers.length === 0 ? (
           <p className="text-sm text-muted-foreground">No workers yet. Add one in Team.</p>
@@ -396,7 +396,7 @@ function Approvals({
             <PartnerCard key={p.id} p={p}>
               {isAdmin && <Button size="sm" variant="secondary" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>}
               {isAdmin && <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onReject(p)}><X /> Reject</Button>}
-              <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil /> Edit</Button>
+              <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-info" /> Edit</Button>
             </PartnerCard>
           ))}
         </div>
@@ -489,7 +489,7 @@ function Venues({
                 {isAdmin && status !== 'live' && status !== 'paused' && (
                   <Button size="sm" variant="secondary" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>
                 )}
-                <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil /> Edit</Button>
+                <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-info" /> Edit</Button>
                 {(status === 'live' || status === 'paused') && (
                   <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onTogglePause(p)}>
                     {p.active ? <><Pause /> Pause</> : <><Play /> Resume</>}
@@ -527,7 +527,7 @@ function PartnerCard({ p, children }: { p: AdminPartner; children: React.ReactNo
           <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground"><MapPin size={13} className="shrink-0 text-muted-foreground" /> <span className="truncate">{p.address}</span></p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-          <Badge tone="gold">{TYPE_LABELS[p.type] ?? p.type}</Badge>
+          <Badge tone="gold">{typeWithIcon(p.type)}</Badge>
           <StatusBadge status={partnerStatus(p)} />
         </div>
       </div>
@@ -538,8 +538,8 @@ function PartnerCard({ p, children }: { p: AdminPartner; children: React.ReactNo
 
       <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
         <span className="text-foreground">{p.contact_name}</span>
-        <a href={`mailto:${p.contact_email}`} className="flex min-w-0 items-center gap-1 text-primary-text hover:underline"><Mail size={13} /> <span className="truncate">{p.contact_email}</span></a>
-        {p.contact_phone && <a href={`tel:${p.contact_phone}`} className="flex items-center gap-1 text-primary-text hover:underline"><Phone size={13} /> {p.contact_phone}</a>}
+        <a href={`mailto:${p.contact_email}`} className="flex min-w-0 items-center gap-1 text-info hover:underline"><Mail size={13} /> <span className="truncate">{p.contact_email}</span></a>
+        {p.contact_phone && <a href={`tel:${p.contact_phone}`} className="flex items-center gap-1 text-info hover:underline"><Phone size={13} /> {p.contact_phone}</a>}
       </p>
       <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
         <UserRound size={12} className="text-muted-foreground" />

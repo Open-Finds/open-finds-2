@@ -69,7 +69,7 @@ export function AddToCalendar({
               <Letter className="bg-muted text-foreground">O</Letter> Outlook
             </a>
           </div>
-          <button type="button" onClick={saveIcs} className="text-xs text-muted-foreground underline-offset-2 hover:text-primary-text hover:underline">
+          <button type="button" onClick={saveIcs} className="text-xs text-muted-foreground underline-offset-2 hover:text-info hover:underline">
             Another calendar? Download the .ics file
           </button>
         </DialogContent>

@@ -642,7 +642,7 @@ export function VenuesPage() {
                     <button
                       onClick={handleSaveMulti}
                       disabled={savingMulti || selectedItems.size === 0}
-                      className="btn-primary mt-4 w-full"
+                      className="btn-info mt-4 w-full"
                     >
                       {savingMulti ? (
                         <><Loader2 size={18} className="animate-spin" /> Saving...</>
@@ -711,7 +711,7 @@ export function VenuesPage() {
                           {tags.map((tag) => (
                             <span
                               key={tag}
-                              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
+                              className="inline-flex items-center gap-1 rounded-full bg-ai-soft px-2.5 py-1 text-xs font-medium text-ai-soft-foreground"
                             >
                               {tag}
                               <button
@@ -729,7 +729,7 @@ export function VenuesPage() {
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="btn-primary btn-lg w-full"
+                      className="btn-info btn-lg w-full"
                     >
                       {saving ? 'Saving...' : 'Save Venue'}
                     </button>
@@ -840,7 +840,7 @@ export function VenuesPage() {
                               <>
                                 <button
                                   onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }}
-                                  className="ml-0.5 text-muted-foreground transition-opacity hover:text-primary-text sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                  className="ml-0.5 text-info transition-opacity hover:text-info/80 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                   aria-label="Rename collection"
                                 >
                                   <Pencil size={10} />
@@ -896,7 +896,7 @@ export function VenuesPage() {
               {hasFilters && !loading && filtered.length === 0 && (
                 <button
                   onClick={clearFilters}
-                  className="text-sm font-medium text-primary-text underline-offset-2 hover:underline"
+                  className="text-sm font-medium text-info underline-offset-2 hover:underline"
                 >
                   Clear filters
                 </button>
@@ -918,7 +918,7 @@ export function VenuesPage() {
                       <p className="text-sm text-muted-foreground">No venues match your filters.</p>
                       <button
                         onClick={clearFilters}
-                        className="mt-2 text-sm font-medium text-primary-text underline-offset-2 hover:underline"
+                        className="mt-2 text-sm font-medium text-info underline-offset-2 hover:underline"
                       >
                         Clear filters
                       </button>
@@ -928,9 +928,9 @@ export function VenuesPage() {
                       <p className="text-sm text-muted-foreground">No saved venues yet.</p>
                       <button
                         onClick={() => setShowAddForm(true)}
-                        className="mt-2 text-sm font-medium text-primary-text underline-offset-2 hover:underline"
+                        className="mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-ai-soft px-4 text-small text-ai-soft-foreground transition-colors hover:bg-ai-soft/80"
                       >
-                        Add your first venue
+                        <Plus size={16} /> Add your first venue
                       </button>
                     </>
                   )}

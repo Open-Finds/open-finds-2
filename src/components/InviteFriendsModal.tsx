@@ -176,7 +176,7 @@ export function InviteFriendsModal({
                     <button
                       type="button"
                       onClick={() => setSelectedFriends(allSelected ? new Set() : new Set(invitable.map((f) => f.user_id)))}
-                      className="text-xs font-semibold text-primary-text underline-offset-2 hover:underline"
+                      className="text-xs font-semibold text-info underline-offset-2 hover:underline"
                     >
                       {allSelected ? 'Clear' : 'Select all'}
                     </button>

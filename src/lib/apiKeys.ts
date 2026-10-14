@@ -320,3 +320,29 @@ export async function suggestAddresses(
     return [];
   }
 }
+
+/**
+ * A saved venue's photo from Google, looked up once per venue and stored
+ * (venue-photo function). Null when Google has none or it couldn't be fetched.
+ * Lookups run three at a time so a long list doesn't fire them all at once.
+ */
+const photoQueue: (() => void)[] = [];
+let photoRunning = 0;
+export async function fetchVenuePhoto(venueId: string, refresh = false): Promise<string | null> {
+  if (photoRunning >= 3) await new Promise<void>((resolve) => photoQueue.push(resolve));
+  photoRunning++;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/venue-photo`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({ venue_id: venueId, refresh }),
+    });
+    if (!res.ok) return null;
+    return ((await res.json())?.url as string | null) ?? null;
+  } catch {
+    return null;
+  } finally {
+    photoRunning--;
+    photoQueue.shift()?.();
+  }
+}

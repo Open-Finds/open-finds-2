@@ -62,7 +62,7 @@ export function StopCard({
         <button
           onClick={startEdit}
           aria-label="Edit stop"
-          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-primary-text transition-all hover:border-input hover:bg-muted active:scale-90"
+          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-info transition-all hover:border-input hover:bg-info-soft active:scale-90"
         >
           <Pencil size={13} strokeWidth={2.5} />
         </button>
