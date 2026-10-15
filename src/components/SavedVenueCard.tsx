@@ -224,7 +224,8 @@ export function SavedVenueCard({
               <button
                 onClick={addTag}
                 type="button"
-                className="flex shrink-0 items-center justify-center rounded-lg border border-border bg-primary-soft px-3 text-foreground transition-all active:scale-90"
+                aria-label="Add tag"
+                className="btn-add px-3"
               >
                 <Plus size={16} />
               </button>
@@ -340,7 +341,7 @@ export function SavedVenueCard({
   return (
     <div
       onClick={selectable ? onSelect : undefined}
-      className={`group relative flex items-start gap-3 rounded-md border p-4 transition-all ${
+      className={`group relative flex min-w-0 items-start gap-3 rounded-md border p-4 transition-all [overflow-wrap:anywhere] ${
         selectable ? 'cursor-pointer active:scale-[0.98]' : ''
       } ${
         isSelected
@@ -351,8 +352,8 @@ export function SavedVenueCard({
       <VenueThumb venueId={venue.id} type={venue.type} photoUrl={venue.photo_url} checked={!!venue.photo_checked_at} canFetch={!readOnly} />
       <div className="min-w-0 flex-1">
         <h3 className="truncate pr-8 font-semibold text-foreground">{venue.name}</h3>
-        <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
-          <MapPin size={13} className="text-muted-foreground" /> {venue.address}
+        <p className="mt-1 flex items-start gap-1 text-sm text-muted-foreground">
+          <MapPin size={13} className="mt-1 shrink-0 text-muted-foreground" /> {venue.address}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {/* Visited, rating and note are the owner's own; other members don't see them. */}
@@ -412,7 +413,7 @@ export function SavedVenueCard({
           handleEdit();
         }}
         aria-label="Edit venue"
-        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-info transition-all hover:bg-info-soft active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-brand-yellow bg-transparent text-brand-yellow transition-all hover:bg-brand-yellow/10 active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
       >
         <Pencil size={14} />
       </button>}

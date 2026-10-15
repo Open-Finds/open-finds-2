@@ -447,13 +447,14 @@ export function VenuesPage() {
           <>
             <button
               onClick={() => setOpenCollectionId(null)}
-              className="mb-4 flex items-center gap-1 text-primary-text transition-all active:scale-90"
+              aria-label="Back to all venues"
+              className="-ml-2 mb-2 flex size-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted active:scale-95"
             >
-              <ChevronLeft size={24} strokeWidth={2.5} /> All venues
+              <ChevronLeft size={28} strokeWidth={2.5} />
             </button>
             <div className="mb-4 flex items-center justify-between">
               <div className="flex min-w-0 items-center gap-2">
-                <Folder size={22} className="shrink-0 text-muted-foreground" />
+                <Folder size={22} className="shrink-0 text-primary-text" />
                 <h1 className="truncate text-title text-foreground">{openCollection.name}</h1>
                 <span className="text-sm text-muted-foreground">{filtered.length}</span>
                 {memberCount > 0 && (
@@ -546,7 +547,7 @@ export function VenuesPage() {
           <>
             <div className="flex items-center justify-between gap-3 pr-14">
               <div>
-                <h1 className="text-title text-foreground">Venues</h1>
+                <h1 className="text-title text-foreground">My Venues</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Your saved spots, searchable and filterable.
                 </p>
@@ -556,7 +557,7 @@ export function VenuesPage() {
                   setShowAddForm(!showAddForm);
                   if (!showAddForm) resetForm();
                 }}
-                className={`${showAddForm ? 'btn-outline' : 'btn-primary'} btn-sm shrink-0`}
+                className={`${showAddForm ? 'btn-outline' : 'btn-info'} btn-sm shrink-0`}
               >
                 {showAddForm ? <X size={18} /> : <Plus size={18} />}
                 {showAddForm ? 'Close' : 'Add Venue'}
@@ -701,7 +702,8 @@ export function VenuesPage() {
                         <button
                           onClick={addTag}
                           type="button"
-                          className="flex shrink-0 items-center justify-center rounded-md border border-border bg-primary-soft px-4 text-foreground transition-all active:scale-90"
+                          aria-label="Add tag"
+                          className="btn-add px-4"
                         >
                           <Plus size={18} />
                         </button>
@@ -747,9 +749,9 @@ export function VenuesPage() {
                 </div>
                 <button
                   onClick={() => setShowNewCollection(!showNewCollection)}
-                  className="flex items-center gap-1 text-xs font-medium text-primary-text transition-all active:scale-90"
+                  className="btn-add h-9 px-3 text-sm font-medium"
                 >
-                  <FolderPlus size={14} /> New
+                  <FolderPlus size={16} /> New
                 </button>
               </div>
 
@@ -831,7 +833,7 @@ export function VenuesPage() {
                               onClick={() => setOpenCollectionId(c.id)}
                               className="flex items-center gap-1"
                             >
-                              {c.user_id === myId ? <Folder size={11} /> : <Users size={11} />}
+                              {c.user_id === myId ? <Folder size={11} className="text-primary-text" /> : <Users size={11} className="text-primary-text" />}
                               {c.name}
                               <span className="text-muted-foreground">{count}</span>
                             </button>
@@ -840,7 +842,7 @@ export function VenuesPage() {
                               <>
                                 <button
                                   onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }}
-                                  className="ml-0.5 text-info transition-opacity hover:text-info/80 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                  className="ml-0.5 text-brand-yellow transition-opacity hover:text-brand-yellow/80 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                   aria-label="Rename collection"
                                 >
                                   <Pencil size={10} />

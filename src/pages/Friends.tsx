@@ -419,7 +419,7 @@ export function FriendsPage() {
                             onClick={() => navigate(`/venues?collection=${c.id}`)}
                             className="flex min-w-0 flex-1 items-center gap-3 text-left"
                           >
-                            <FolderOpen size={20} className="shrink-0 text-muted-foreground" />
+                            <FolderOpen size={20} className="shrink-0 text-primary-text" />
                             <span className="min-w-0">
                               <span className="block truncate font-semibold text-foreground">{c.name}</span>
                               <span className="block text-xs text-muted-foreground">
@@ -465,7 +465,7 @@ export function FriendsPage() {
                             onClick={() => setSharing(c)}
                             className="flex shrink-0 items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-muted active:scale-95"
                           >
-                            <UserPlus size={13} /> Add friends
+                            <UserPlus size={13} className="text-primary-text" /> Add friends
                           </button>
                         </div>
                       ))}

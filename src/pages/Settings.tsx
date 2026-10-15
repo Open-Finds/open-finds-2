@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins, Store, SunMoon } from 'lucide-react';
-import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isManagerRole, isTeam, ROLE_LABELS, SUBSCRIPTION_PLANS } from '../lib/supabase';
+import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins, SunMoon } from 'lucide-react';
+import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isTeam, SUBSCRIPTION_PLANS } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../lib/router';
 import { ScrollHint } from '../components/ScrollHint';
@@ -407,31 +407,18 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           </button>
         </section>
 
-        {/* Team: My Venues for workers, managers and the super admin */}
+        {/* Admin: the team's sponsored venues (workers see their own) */}
         {isTeam(role) && (
-          <section className="mb-6 rounded-lg border border-border bg-card p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
-              <Store size={13} /> {ROLE_LABELS[role]}
-            </h2>
-            <p className="mb-4 text-sm text-muted-foreground">Submit venues, see how they're doing, and track your commission.</p>
-            <button
-              onClick={() => navigate('/my-venues')}
-              className="flex w-full items-center justify-between rounded-md border border-input bg-background px-4 py-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] hover:bg-muted"
-            >
-              <span className="flex items-center gap-2"><Store size={16} /> Open My Venues</span>
-              <ChevronRight size={18} />
-            </button>
-          </section>
-        )}
-
-        {/* Admin dashboard: managers and the super admin (workers have My Venues) */}
-        {isManagerRole(role) && (
           <section className="mb-6 rounded-lg border border-border bg-card p-5">
             <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
               <ShieldCheck size={13} /> Admin
             </h2>
             <p className="mb-4 text-sm text-muted-foreground">
-              {role === 'admin' ? 'Venue partners, approvals, revenue, and your team and their commission.' : 'Venue partners, approvals, revenue and the team.'}
+              {role === 'admin'
+                ? 'Sponsored venues, approvals, revenue, and your team and their commission.'
+                : role === 'manager'
+                  ? 'Sponsored venues, approvals, revenue and the team.'
+                  : 'Submit sponsored venues, see how they\'re doing, and track your commission.'}
             </p>
             <button
               onClick={() => navigate('/admin')}

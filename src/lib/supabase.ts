@@ -2134,9 +2134,9 @@ export async function setTeamRole(email: string, role: AppRole): Promise<void> {
     type: 'team_role',
     title: `You're now a ${label.toLowerCase()} on The Unsaved`,
     body: role === 'staff'
-      ? 'Open My Venues to submit venues and track your commission.'
-      : 'Open My Venues, or the admin dashboard from Settings.',
-    data: { url: '/my-venues', role },
+      ? 'Open Admin in Settings to submit sponsored venues and track your commission.'
+      : 'Open Admin in Settings to manage sponsored venues.',
+    data: { url: '/admin', role },
   });
 }
 

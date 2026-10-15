@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ChevronLeft, ShieldCheck, Plus, Search, Loader2, Pencil, Trash2, Check, Pause, Play, X,
-  Building2, Mail, Phone, MapPin, Users, Lock, UserRound, Clock, Wallet, Store,
+  Building2, Mail, Phone, MapPin, Users, Lock, UserRound, Clock, Wallet,
 } from 'lucide-react';
 import {
   fetchAdminPartners, adminUpdatePartner, adminDeletePartner,
@@ -15,6 +15,7 @@ import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { AppSelect } from '../components/ui/select';
 import { PartnerForm } from '../components/PartnerForm';
+import { MyVenuesPage } from './MyVenues';
 import { Badge, Figure, RatingLine, Stat, StatusBadge } from '../components/PartnerBits';
 import { money, typeWithIcon } from '../lib/partners';
 import { cn } from '../lib/utils';
@@ -106,6 +107,9 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
     return <div className="min-h-screen bg-background" />;
   }
 
+  // A worker's Admin is their own sponsored venues and commission.
+  if (role === 'staff') return <MyVenuesPage />;
+
   const pending = partners.filter((p) => partnerStatus(p) === 'pending');
 
   return (
@@ -127,15 +131,8 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
         {!canManage ? (
           <div className="mt-8 rounded-lg border border-border bg-card p-8 text-center">
             <Lock size={28} className="mx-auto mb-3 text-muted-foreground" />
-            <p className="font-semibold text-foreground">The admin dashboard is for managers.</p>
-            {role === 'staff' ? (
-              <>
-                <p className="mt-1 text-sm text-muted-foreground">Your venues and commission are in My Venues.</p>
-                <Button className="mt-5" onClick={() => navigate('/my-venues')}><Store /> Open My Venues</Button>
-              </>
-            ) : (
-              <p className="mt-1 text-sm text-muted-foreground">Ask the super admin if you need access.</p>
-            )}
+            <p className="font-semibold text-foreground">Admin is for The Unsaved team.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Ask the super admin if you need access.</p>
           </div>
         ) : (
           <>
@@ -396,7 +393,7 @@ function Approvals({
             <PartnerCard key={p.id} p={p}>
               {isAdmin && <Button size="sm" variant="secondary" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>}
               {isAdmin && <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onReject(p)}><X /> Reject</Button>}
-              <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-info" /> Edit</Button>
+              <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-brand-yellow" /> Edit</Button>
             </PartnerCard>
           ))}
         </div>
@@ -489,7 +486,7 @@ function Venues({
                 {isAdmin && status !== 'live' && status !== 'paused' && (
                   <Button size="sm" variant="secondary" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>
                 )}
-                <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-info" /> Edit</Button>
+                <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-brand-yellow" /> Edit</Button>
                 {(status === 'live' || status === 'paused') && (
                   <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onTogglePause(p)}>
                     {p.active ? <><Pause /> Pause</> : <><Play /> Resume</>}

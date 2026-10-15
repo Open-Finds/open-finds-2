@@ -68,9 +68,9 @@ export function MyVenuesPage() {
       <div className="mx-auto w-full max-w-3xl">
         <div className="mb-1 flex items-center gap-3">
           <Store size={26} className="text-muted-foreground" />
-          <h1 className="text-title text-foreground">My Venues</h1>
+          <h1 className="text-title text-foreground">Sponsored Venues</h1>
         </div>
-        <p className="mb-5 text-sm text-muted-foreground">Venues you've signed up, how they're doing, and your commission.</p>
+        <p className="mb-5 text-sm text-muted-foreground">Sponsored venues you've signed up, how they're doing, and your commission.</p>
 
         {isManagerRole(role) && (
           <button
@@ -127,7 +127,7 @@ export function MyVenuesPage() {
                             <span>{p.impressions} appearances · {p.visits} visits · {money(p.total_billed_cents)} billed</span>
                             <RatingLine average={p.average_rating} count={p.review_count} />
                           </p>
-                          <Button size="sm" variant="outline" onClick={() => setEditing(p)}><Pencil className="text-info" /> Edit</Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditing(p)}><Pencil className="text-brand-yellow" /> Edit</Button>
                         </div>
                       </li>
                     );

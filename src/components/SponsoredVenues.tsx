@@ -304,7 +304,7 @@ export function VenueReviewsDialog({ venue, onClose, onChanged }: { venue: Spons
                 <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{r.body}</p>
                 {r.mine && (
                   <div className="mt-2 flex gap-2">
-                    <Button size="sm" variant="outline" disabled={saving} onClick={startWriting}><Pencil className="text-info" /> Edit</Button>
+                    <Button size="sm" variant="outline" disabled={saving} onClick={startWriting}><Pencil className="text-brand-yellow" /> Edit</Button>
                     <Button size="sm" variant="ghost" disabled={saving} onClick={() => void remove()} className="text-destructive-text hover:bg-destructive-soft hover:text-destructive-text"><Trash2 /> Delete</Button>
                   </div>
                 )}

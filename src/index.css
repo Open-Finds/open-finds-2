@@ -270,11 +270,11 @@
   .btn-ai {
     @apply bg-ai text-ai-foreground hover:bg-ai/90;
   }
-  /* Jacky's additions (2026-10-15): the logo's ring for the main planning
-     action, info for saving a venue, soft violet for Settings' actions. */
+  /* Jacky's additions (2026-10-15): info for saving a venue, soft violet for
+     Settings' actions. The main planning action was the logo's ring, then
+     just the orange-yellow gradient (Robert: too much colour). */
   .btn-brand {
-    @apply bg-brand-ring font-semibold text-white hover:brightness-105;
-    text-shadow: 0 1px 1px hsl(var(--scrim) / 0.35);
+    @apply bg-primary-gradient font-semibold text-primary-foreground hover:bg-primary-gradient-hover active:bg-primary-gradient-active;
   }
   .btn-info {
     @apply bg-info text-info-foreground hover:bg-info/90;
@@ -284,6 +284,10 @@
   }
   .btn-destructive {
     @apply bg-destructive text-destructive-foreground hover:bg-destructive/90;
+  }
+  /* Add a tag, new collection: the logo's yellow, outlined, see-through middle. */
+  .btn-add {
+    @apply inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border-2 border-brand-yellow bg-transparent text-brand-yellow transition-[background-color,transform] duration-150 hover:bg-brand-yellow/10 active:scale-95;
   }
   .btn-sm {
     @apply h-9 px-3 text-sm;
@@ -300,7 +304,9 @@
      One column on phones, two on tablets, three on wide screens. */
   .listing-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    /* minmax(0, …): one venue with a long word or many tags must not widen
+       every card past the screen (it did, on a 180-venue list). */
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.75rem;
   }
   @media (min-width: 768px) {

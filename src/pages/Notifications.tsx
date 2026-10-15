@@ -58,7 +58,7 @@ export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => voi
       case 'team_role':
         // Made a worker or manager: their new tab, with the role loaded.
         await refreshProfile();
-        navigate('/my-venues');
+        navigate('/admin');
         break;
       default:
         // RSVPs and anything else about a plan: the host's dashboard.

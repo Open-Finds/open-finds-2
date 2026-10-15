@@ -30,7 +30,7 @@ Rules that follow from that:
 These replace the matching rules in the library guide below:
 
 - Light mode is neutral white and light grey (like Instagram and Facebook's light mode), not cream: the `:root` tokens in `src/index.css`.
-- The main planning action (Start Planning) uses the logo's ring: `.btn-brand` (`bg-brand-ring`). Selected navigation tabs wear the ring too (`ViewToggle`).
+- The main planning action (Start Planning) uses `.btn-brand`, and selected navigation tabs wear the same orange-yellow gradient (`ViewToggle`). Robert found the logo's ring too colourful there (2026-10-15).
 - Save Venue uses info: `.btn-info`. Edit (pencil) icons use `text-info`, and so do text links.
 - Settings' action buttons (Save Name, Save Username, …) use `.btn-ai-soft`: `ai-soft` in light mode, `ai` in dark.
 - "Add your first venue" style highlights use an `ai-soft` pill.

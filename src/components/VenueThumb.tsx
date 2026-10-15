@@ -4,9 +4,9 @@ import { TYPE_ICONS } from '../lib/partners';
 import { cn } from '../lib/utils';
 
 /**
- * A venue's photo, or its category icon until there is one (Jacky: more
- * character — venue photos and category icons). Looks the photo up the first
- * time a venue is shown, when `canFetch` (the caller's own venue).
+ * A venue's photo, when Google has one (Jacky: more character). Shows
+ * nothing otherwise. Looks the photo up the first time a venue is shown,
+ * when `canFetch` (the caller's own venue).
  */
 export function VenueThumb({
   venueId,
@@ -34,6 +34,10 @@ export function VenueThumb({
     void fetchVenuePhoto(venueId).then((u) => { if (live) setUrl(u); });
     return () => { live = false; };
   }, [venueId, photoUrl, checked, canFetch]);
+
+  // No photo, no tile: the category already shows on the card's badge
+  // (Robert, 2026-10-15: the big icon repeated it).
+  if (!url) return null;
 
   return (
     <div className={cn('flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-2xl', className)} aria-hidden>

@@ -16,7 +16,7 @@ import { NotificationsPage } from './pages/Notifications';
 import { ViewToggle } from './components/ViewToggle';
 import { GuidedTour } from './components/GuidedTour';
 import { CreditPrompt } from './components/CreditPrompt';
-import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isTeam, isSigningUp } from './lib/supabase';
+import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isSigningUp } from './lib/supabase';
 import { Bell } from 'lucide-react';
 
 /*
@@ -33,10 +33,9 @@ const TripRsvpPage = lazy(() => import('./pages/TripRsvp').then((m) => ({ defaul
 const TripDayPage = lazy(() => import('./pages/TripDay').then((m) => ({ default: m.TripDayPage })));
 const VenuePortalPage = lazy(() => import('./pages/VenuePortal').then((m) => ({ default: m.VenuePortalPage })));
 const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })));
-const MyVenuesPage = lazy(() => import('./pages/MyVenues').then((m) => ({ default: m.MyVenuesPage })));
 const SubscriptionPage = lazy(() => import('./pages/Subscription').then((m) => ({ default: m.SubscriptionPage })));
 
-type View = 'home' | 'events' | 'venues' | 'friends' | 'myvenues' | 'settings';
+type View = 'home' | 'events' | 'venues' | 'friends' | 'settings';
 
 /**
  * Authenticated chrome. The content column clears the mobile tab bar via
@@ -50,7 +49,6 @@ function Shell({
   unreadCount,
   onOpenNotifications,
   isEditingItinerary = false,
-  showMyVenues = false,
 }: {
   children: React.ReactNode;
   view: View;
@@ -58,7 +56,6 @@ function Shell({
   unreadCount: number;
   onOpenNotifications: () => void;
   isEditingItinerary?: boolean;
-  showMyVenues?: boolean;
 }) {
   return (
     <>
@@ -69,7 +66,7 @@ function Shell({
       {/* Hidden while editing an itinerary: leaving would drop unsaved edits. */}
       {!isEditingItinerary && <button
         onClick={onOpenNotifications}
-        className="fixed right-4 top-4 z-50 flex size-11 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-1 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 sm:right-5 sm:top-5"
+        className="fixed right-4 top-4 z-50 flex size-11 items-center justify-center rounded-full border border-border bg-card text-primary-text shadow-1 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 sm:right-5 sm:top-5"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
       >
         <Bell size={20} />
@@ -80,7 +77,7 @@ function Shell({
         )}
       </button>}
 
-      <ViewToggle view={view} onChange={onChangeView} isEditingItinerary={isEditingItinerary} showMyVenues={showMyVenues} />
+      <ViewToggle view={view} onChange={onChangeView} isEditingItinerary={isEditingItinerary} />
     </>
   );
 }
@@ -95,7 +92,7 @@ function AppInner() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [homeResetKey, setHomeResetKey] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile, role } = useAuth();
+  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile } = useAuth();
 
   // The walkthrough runs over the app until it's finished or skipped, and
   // again after Settings → Replay Walkthrough. It points at Home's buttons,
@@ -125,9 +122,8 @@ function AppInner() {
       setEditPlanId(null);
       setView('venues');
     } else if (route.name === 'my-venues') {
-      setDashboardId(null);
-      setEditPlanId(null);
-      setView('myvenues');
+      // Old links: sponsored venues are in Admin now.
+      navigate('/admin');
     }
   }, [route]);
 
@@ -264,7 +260,6 @@ function AppInner() {
     onChangeView: switchView,
     unreadCount,
     onOpenNotifications: () => setShowNotifications(true),
-    showMyVenues: isTeam(role),
   };
 
   if (editPlanId) {
@@ -327,8 +322,6 @@ function AppInner() {
           <EventsPage onOpenPlan={openDashboard} />
         ) : view === 'friends' ? (
           <FriendsPage />
-        ) : view === 'myvenues' ? (
-          <MyVenuesPage />
         ) : view === 'settings' ? (
           <SettingsPage onBack={() => switchView('home')} />
         ) : (

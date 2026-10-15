@@ -1134,7 +1134,8 @@ export function HomePage({
                   <button
                     onClick={qaAddTag}
                     type="button"
-                    className="flex shrink-0 items-center justify-center rounded-md border border-border bg-primary-soft px-4 text-foreground transition-all active:scale-90"
+                    aria-label="Add tag"
+                    className="btn-add px-4"
                   >
                     <Plus size={18} />
                   </button>

@@ -61,6 +61,8 @@ export default {
           soft: 'hsl(var(--info-soft) / <alpha-value>)',
         },
         scrim: 'hsl(var(--scrim) / <alpha-value>)',
+        /* The logo's yellow (Robert: add-tag and new-collection buttons). */
+        'brand-yellow': 'hsl(var(--brand-yellow) / <alpha-value>)',
         muted: {
           DEFAULT: 'hsl(var(--muted) / <alpha-value>)',
           foreground: 'hsl(var(--muted-foreground) / <alpha-value>)',

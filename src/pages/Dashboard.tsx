@@ -249,14 +249,14 @@ export function DashboardPage({
             href={navUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-primary w-full"
+            className="btn-outline w-full"
           >
             <Navigation size={18} /> Open in Maps
           </a>
           <AddToCalendar plan={plan} stops={stops} />
           <button
             onClick={() => setInviteOpen(true)}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-base font-medium text-foreground transition-all active:scale-[0.98]"
+            className="btn-primary w-full"
           >
             <Smartphone size={18} /> Invite Friends
           </button>

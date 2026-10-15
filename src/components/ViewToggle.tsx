@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Home, CalendarDays, Bookmark, Settings, Users, Store } from 'lucide-react';
+import { Home, CalendarDays, Bookmark, Settings, Users } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -11,15 +11,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-type View = 'home' | 'events' | 'venues' | 'friends' | 'myvenues' | 'settings';
+type View = 'home' | 'events' | 'venues' | 'friends' | 'settings';
 
-const ALL_TABS: { view: View; label: string; icon: typeof Home }[] = [
+// Sponsored-venue work for the team lives in Settings → Admin (Robert, 2026-10-15).
+const TABS: { view: View; label: string; icon: typeof Home }[] = [
   { view: 'home', label: 'Home', icon: Home },
   { view: 'events', label: 'Events', icon: CalendarDays },
-  { view: 'venues', label: 'Venues', icon: Bookmark },
+  { view: 'venues', label: 'My Venues', icon: Bookmark },
   { view: 'friends', label: 'Friends', icon: Users },
-  // Workers, managers and the super admin: the venue partners they signed up.
-  { view: 'myvenues', label: 'My Venues', icon: Store },
   { view: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -27,15 +26,12 @@ export function ViewToggle({
   view,
   onChange,
   isEditingItinerary = false,
-  showMyVenues = false,
 }: {
   view: View;
   onChange: (view: View) => void;
   isEditingItinerary?: boolean;
-  showMyVenues?: boolean;
 }) {
   const [pendingView, setPendingView] = useState<View | null>(null);
-  const TABS = showMyVenues ? ALL_TABS : ALL_TABS.filter((t) => t.view !== 'myvenues');
 
   const handleClick = (target: View) => {
     if (isEditingItinerary) {
@@ -76,8 +72,8 @@ export function ViewToggle({
                   active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                {/* The selected tab wears the logo's ring (Jacky, 2026-10-15). */}
-                <span className={cn('flex h-8 w-14 items-center justify-center rounded-full transition-colors', active && 'bg-brand-ring text-white')}>
+                {/* The selected tab wears the orange-yellow gradient. */}
+                <span className={cn('flex h-8 w-14 items-center justify-center rounded-full transition-colors', active && 'bg-primary-gradient text-primary-foreground')}>
                   <Icon size={21} strokeWidth={active ? 2.4 : 2} />
                 </span>
                 <span className={cn('whitespace-nowrap text-xs', active ? 'font-semibold' : 'font-medium')}>{label}</span>
@@ -116,7 +112,7 @@ export function ViewToggle({
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
-                <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', active && 'bg-brand-ring text-white')}>
+                <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', active && 'bg-primary-gradient text-primary-foreground')}>
                   <Icon size={18} strokeWidth={active ? 2.4 : 2} />
                 </span>
                 <span>{label}</span>
