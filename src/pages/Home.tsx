@@ -74,6 +74,7 @@ import { findSimilarVenues } from '../lib/venueMatch';
 import { DuplicateVenueDialog, type PendingDuplicate } from '../components/DuplicateVenueDialog';
 import { TRIPS_ENABLED } from '../lib/features';
 import { takeSharedLink } from '../lib/shareTarget';
+import { ShareToAppFlow } from '../components/ShareToAppFlow';
 
 type Page =
   | 'hero'
@@ -303,6 +304,7 @@ export function HomePage({
   const [qaError, setQaError] = useState<string | null>(null);
   const [qaSaved, setQaSaved] = useState(false);
   const [qaLinkInput, setQaLinkInput] = useState('');
+  const [sharedLink, setSharedLink] = useState<string | null>(null);
   const [qaExtracting, setQaExtracting] = useState(false);
   const [qaExtractedItems, setQaExtractedItems] = useState<ExtractedVenueItem[]>([]);
   const [qaSelectedItems, setQaSelectedItems] = useState<Set<number>>(new Set());
@@ -453,16 +455,13 @@ export function HomePage({
     }
   };
 
-  // Shared into the app from Instagram, TikTok or Maps: straight to the start
-  // screen with the link in the box, and find the venue without a tap.
+  // Incoming shares open the review popup without exposing the reel URL.
   useEffect(() => {
     if (editPlanId) return;
     const shared = takeSharedLink();
     if (!shared) return;
     setPage('hero');
-    setQaLinkInput(shared);
-    void qaHandleExtract(shared);
-    window.setTimeout(() => document.querySelector('[data-tour="save-venue"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400);
+    setSharedLink(shared);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -938,6 +937,12 @@ export function HomePage({
     return (
       <div className="relative flex min-h-screen flex-col items-center overflow-y-auto bg-background px-6 pb-28 pt-16 text-center">
         {dupDialog}
+        {sharedLink && <ShareToAppFlow
+          key={sharedLink}
+          link={sharedLink}
+          onClose={() => setSharedLink(null)}
+          onSaved={() => { setQaSaved(true); window.setTimeout(() => setQaSaved(false), 2500); }}
+        />}
         <div className="relative z-10 flex w-full max-w-md flex-col items-center">
           <Logo size={88} />
           <h1 className="mt-4 text-display text-foreground">The Unsaved</h1>

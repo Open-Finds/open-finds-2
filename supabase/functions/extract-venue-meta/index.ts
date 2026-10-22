@@ -26,6 +26,7 @@ type MetaResult = {
   oembedTitle: string | null;
   oembedAuthor: string | null;
   oembedHtml: string | null;
+  thumbnail: string | null;
   fetched: boolean;
 };
 
@@ -100,6 +101,7 @@ function extractMeta(html: string): {
   ogTitle: string | null;
   ogDescription: string | null;
   ogSiteName: string | null;
+  thumbnail: string | null;
   pageTitle: string | null;
   metaDescription: string | null;
   jsonLd: string | null;
@@ -155,8 +157,9 @@ function extractMeta(html: string): {
   // Cap to avoid huge payloads — higher for video/reel content which needs more context
   if (text.length > 6000) text = text.slice(0, 6000);
   const rawText = text || null;
+  const thumbnail = (getMeta("og:image") || getMeta("twitter:image"))?.replace(/&amp;/gi, "&") ?? null;
 
-  return { ogTitle, ogDescription, ogSiteName, pageTitle, metaDescription, jsonLd, rawText };
+  return { ogTitle, ogDescription, ogSiteName, pageTitle, metaDescription, jsonLd, rawText, thumbnail };
 }
 
 async function fetchWithHeaders(
@@ -231,7 +234,7 @@ async function fetchMetaOEmbed(
   url: string,
   platform: Platform,
   contentType: ContentType
-): Promise<{ title: string | null; author: string | null; html: string | null } | null> {
+): Promise<{ title: string | null; author: string | null; html: string | null; thumbnail: string | null } | null> {
   try {
     let endpoint: string;
     let oembedUrl: string;
@@ -273,6 +276,7 @@ async function fetchMetaOEmbed(
       title: parsed.title,
       author: parsed.author,
       html: embedHtml,
+      thumbnail: typeof data.thumbnail_url === "string" ? data.thumbnail_url : null,
     };
   } catch {
     return null;
@@ -313,7 +317,7 @@ function canonicalTikTokUrl(url: string): string {
  */
 async function fetchTikTokOEmbed(
   videoUrl: string
-): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
+): Promise<{ title: string | null; author: string | null; handle: string | null; thumbnail: string | null } | null> {
   const url = canonicalTikTokUrl(videoUrl);
   for (let attempt = 0; attempt < 4; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1000 * attempt));
@@ -325,7 +329,7 @@ async function fetchTikTokOEmbed(
 
 async function fetchTikTokOEmbedOnce(
   videoUrl: string
-): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
+): Promise<{ title: string | null; author: string | null; handle: string | null; thumbnail: string | null } | null> {
   try {
     const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(videoUrl)}`;
     const res = await fetch(oembedUrl, {
@@ -343,7 +347,8 @@ async function fetchTikTokOEmbedOnce(
     // author_name is the display name; author_unique_id is the @handle.
     const handle =
       typeof data.author_unique_id === "string" ? data.author_unique_id.trim() : null;
-    return { title: title || null, author: author || null, handle: handle || null };
+    const thumbnail = typeof data.thumbnail_url === "string" ? data.thumbnail_url : null;
+    return { title: title || null, author: author || null, handle: handle || null, thumbnail };
   } catch {
     return null;
   }
@@ -391,7 +396,7 @@ Deno.serve(async (req: Request) => {
     const handle = extractHandle(target, platform);
 
     // Kick off oEmbed and HTML scrape in parallel for maximum speed
-    const oembedPromises: Promise<{ title: string | null; author: string | null; html: string | null } | null>[] = [];
+    const oembedPromises: ReturnType<typeof fetchMetaOEmbed>[] = [];
 
     // Meta oEmbed for Instagram posts/reels and Facebook posts/videos
     if (
@@ -445,6 +450,7 @@ Deno.serve(async (req: Request) => {
     }
     // The @handle: from the link itself, else what TikTok says the creator is.
     const creatorHandle = handle || tiktokOembed?.handle || null;
+    const oembedThumbnail = tiktokOembed?.thumbnail || metaOembed?.thumbnail || null;
 
     // If HTML scrape failed, return whatever we have from oEmbed
     if (!html) {
@@ -463,6 +469,7 @@ Deno.serve(async (req: Request) => {
         oembedTitle,
         oembedAuthor,
         oembedHtml,
+        thumbnail: oembedThumbnail,
         fetched: oembedTitle !== null || oembedAuthor !== null,
       };
       return json(req, result);
@@ -512,6 +519,7 @@ Deno.serve(async (req: Request) => {
       oembedTitle,
       oembedAuthor,
       oembedHtml,
+      thumbnail: meta.thumbnail || oembedThumbnail,
       fetched: true,
     };
 

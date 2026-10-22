@@ -33,5 +33,5 @@ export function composeShareMessage(parts: {
     '',
     parts.link.trim(),
   ];
-  return (message ? [message, '', ...body] : body).join('\n');
+  return [message, '', ...body].join('\n');
 }
