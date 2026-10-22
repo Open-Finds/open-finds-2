@@ -131,10 +131,33 @@ type MetaResult = {
   oembedTitle: string | null;
   oembedAuthor: string | null;
   oembedHtml: string | null;
+  /** The post's preview image, when the page or oEmbed gives one. */
+  thumbnail?: string | null;
   fetched: boolean;
 };
 
-async function fetchPageMeta(url: string): Promise<MetaResult | null> {
+// The thumbnail and the extraction both need the page's metadata; look it up once.
+const metaCache = new Map<string, Promise<MetaResult | null>>();
+
+function fetchPageMeta(url: string): Promise<MetaResult | null> {
+  const cached = metaCache.get(url);
+  if (cached) return cached;
+  const request = fetchPageMetaOnce(url).then((meta) => {
+    if (!meta) metaCache.delete(url);
+    return meta;
+  });
+  metaCache.set(url, request);
+  return request;
+}
+
+/** The preview image of a shared link (reel, TikTok, page), or null. */
+export async function fetchLinkThumbnail(link: string): Promise<string | null> {
+  const meta = await fetchPageMeta(link);
+  const thumb = meta?.thumbnail?.trim();
+  return thumb && /^https?:\/\//i.test(thumb) ? thumb : null;
+}
+
+async function fetchPageMetaOnce(url: string): Promise<MetaResult | null> {
   try {
     const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-venue-meta`;
     const res = await fetch(apiUrl, {
