@@ -22,13 +22,19 @@ export async function confirmPlannerEvent(d: PlannerDraft, host: string, onCreat
       host_name: host, type: [...new Set(d.stops.map((s) => s.category))].join(','), status: 'active', ...endFields(d) });
     id = plan.id; onCreated(id);
   }
-  const existing = await fetchStops(id);
+  const [existing, pending] = await Promise.all([fetchStops(id), d.pendingPlanId ? fetchPlan(id) : Promise.resolve(null)]);
+  if (d.pendingPlanId && !pending) throw new Error('The pending event could not be found. Review your events before retrying.');
   if (existing.length) {
     const expected = rows(d);
     if (existing.length !== expected.length || existing.some((s, i) => venueKey(s) !== venueKey(expected[i]) || s.time !== expected[i].time)) {
       throw new Error('This event was partly saved. Open it from Events to review it before trying again.');
     }
-  } else await createStops(id, rows(d));
+  }
+  // A pending row reflects an earlier attempt; reconcile details before retrying stops.
+  if (pending) await updatePlan(id, { title: d.name.trim(), date: d.date, location: d.location.trim() || null,
+    type: [...new Set(d.stops.map(s => s.category))].join(','),
+    ...(d.endTime ? endFields(d) : pending.end_time || pending.end_date ? { end_time: null, end_date: null } : {}) });
+  if (!existing.length) await createStops(id, rows(d));
   return id;
 }
 export async function savePlannerEdits(d: PlannerDraft, ownerId: string): Promise<string> {

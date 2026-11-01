@@ -4,7 +4,7 @@ vi.mock('./supabase', () => api);
 import { confirmPlannerEvent, savePlannerEdits } from './plannerApi';
 import { emptyDraft, plannerReducer, venueKey, type PlannerDraft } from './planner';
 const draft = (): PlannerDraft => ({ ...plannerReducer(emptyDraft(), { type: 'add', venue: { id: 'v', name: 'Test café', address: '1 Test St', category: 'food', source: 'saved', link: null, lat: null, lon: null, tags: [], entityKind: 'venue' } }), name: 'Test event' });
-beforeEach(() => { Object.values(api).forEach((fn) => fn.mockReset()); api.createPlan.mockResolvedValue({ id: 'plan' }); api.fetchStops.mockResolvedValue([]); api.createStops.mockResolvedValue([]); });
+beforeEach(() => { Object.values(api).forEach((fn) => fn.mockReset()); api.createPlan.mockResolvedValue({ id: 'plan' }); api.fetchStops.mockResolvedValue([]); api.fetchPlan.mockResolvedValue({ id: 'plan', title: 'Test event', end_time: null, end_date: null }); api.createStops.mockResolvedValue([]); });
 describe('planner confirmation boundary', () => {
   it('persists an explicit overnight end without deriving it from itinerary stops', async () => {
     await confirmPlannerEvent({ ...draft(), endTime: '02:00', endNextDay: true, date: '2026-12-31' }, 'Host', vi.fn());
@@ -65,4 +65,36 @@ describe('planner confirmation boundary', () => {
     expect(api.reorderStops).toHaveBeenCalledWith('same-plan', ['stop-b', 'stop-a']);
     expect(api.insertStop).not.toHaveBeenCalled(); expect(api.deleteStop).not.toHaveBeenCalled();
   });
+});
+
+it('reconciles edited name, date, location and overnight end on the existing pending event after a partial failure', async () => {
+  api.createStops.mockRejectedValueOnce(new Error('network failure'));
+  let d = draft();
+  await expect(confirmPlannerEvent(d, 'Host', id => { d = { ...d, pendingPlanId: id }; })).rejects.toThrow('network failure');
+  d = { ...d, name: 'New name', date: '2030-12-31', location: 'New starting point', endTime: '02:00', endNextDay: true };
+  expect(await confirmPlannerEvent(d, 'Host', vi.fn())).toBe('plan');
+  expect(api.createPlan).toHaveBeenCalledTimes(1);
+  expect(api.updatePlan).toHaveBeenCalledWith('plan', { title: 'New name', date: '2030-12-31', location: 'New starting point', type: 'food', end_time: '02:00', end_date: '2031-01-01' });
+  expect(api.createStops).toHaveBeenCalledTimes(2);
+});
+it('clears a previously saved optional end when a retry removes it', async () => {
+  api.fetchPlan.mockResolvedValue({ id: 'plan', end_time: '23:00', end_date: '2030-01-01' });
+  await confirmPlannerEvent({ ...draft(), pendingPlanId: 'plan', endTime: '', endNextDay: false }, 'Host', vi.fn());
+  expect(api.updatePlan).toHaveBeenCalledWith('plan', expect.objectContaining({ end_time: null, end_date: null }));
+  expect(api.createPlan).not.toHaveBeenCalled();
+});
+it('does not write stops or create another event if pending metadata reconciliation fails', async () => {
+  api.updatePlan.mockRejectedValueOnce(new Error('metadata update failed'));
+  const d = { ...draft(), pendingPlanId: 'plan', name: 'Edited name' };
+  await expect(confirmPlannerEvent(d, 'Host', vi.fn())).rejects.toThrow('metadata update failed');
+  expect(api.createStops).not.toHaveBeenCalled(); expect(api.createPlan).not.toHaveBeenCalled();
+  await confirmPlannerEvent(d, 'Host', vi.fn());
+  expect(api.createStops).toHaveBeenCalledTimes(1); expect(api.createPlan).not.toHaveBeenCalled();
+});
+it('does not create a replacement or modify metadata for a missing or ambiguous pending event', async () => {
+  api.fetchPlan.mockResolvedValueOnce(null);
+  await expect(confirmPlannerEvent({ ...draft(), pendingPlanId: 'missing' }, 'Host', vi.fn())).rejects.toThrow('could not be found');
+  api.fetchStops.mockResolvedValue([{ name: 'Different', address: 'Different', time: '19:00' }]);
+  await expect(confirmPlannerEvent({ ...draft(), pendingPlanId: 'plan' }, 'Host', vi.fn())).rejects.toThrow('partly saved');
+  expect(api.updatePlan).not.toHaveBeenCalled(); expect(api.createPlan).not.toHaveBeenCalled(); expect(api.createStops).not.toHaveBeenCalled();
 });

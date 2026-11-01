@@ -1,8 +1,8 @@
 import { PlannerDisclosure } from '../components/PlannerDisclosure';
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { X, Plus, RotateCw, Shuffle, LocateFixed, Sparkles, Search, Check } from 'lucide-react';
 import { fetchSavedVenues, fetchCollections, fetchCollectionVenueIds, fetchSponsoredVenues, fetchPlan, fetchStops, sortStops,
-  insertSavedVenue, fetchPlannerSixStopSupport, fetchPlannerTimingSupport, hasPremium, type SavedVenue, type Collection } from '../lib/supabase';
+  insertSavedVenue, fetchPlannerSixStopSupport, fetchPlannerTimingSupport, hasPremium, recordSponsoredEvents, type SponsoredVenue, type SavedVenue, type Collection } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { CATEGORIES, CATEGORY_LABELS, MODES, emptyDraft, plannerReducer, savedCandidate, partnerCandidate,
   readPlannerDraft, persistPlannerDraft, randomSaved, venueKey, draftFromStops, distanceKm, type PlannerMode, type PlannerVenue } from '../lib/planner';
@@ -23,6 +23,8 @@ import { DiscoveryCard } from '../components/DiscoveryCard';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 
+const VenueReviewsDialog = lazy(() => import('../components/SponsoredVenues').then(m => ({ default: m.VenueReviewsDialog })));
+
 export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId, onDone, onCancel, onDirty }: {
   mode?: PlannerMode; seed?: SavedVenue[]; collectionId?: string; editPlanId?: string;
   onDone: (id: string) => void; onCancel: () => void; onDirty: (dirty: boolean) => void;
@@ -37,7 +39,11 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
     return d;
   });
   const [saved, setSaved] = useState<PlannerVenue[]>([]);
-  const [partners, setPartners] = useState<PlannerVenue[]>([]);
+  const [partnerRecords, setPartnerRecords] = useState<SponsoredVenue[]>([]);
+  const partners = useMemo(() => partnerRecords.map(partnerCandidate), [partnerRecords]);
+  const [reviewing, setReviewing] = useState<SponsoredVenue | null>(null);
+  const impressions = useRef(new Set<string>());
+  const attributedSaves = useRef(new Set<string>());
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionIds, setCollectionIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
@@ -51,7 +57,13 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [picksError, setPicksError] = useState(false);
-  const [aiVenues, setAiVenues] = useState<PlannerVenue[]>([]);
+  const aiContext = JSON.stringify([owner, draft.location, draft.origin]);
+  const aiContextRef = useRef(aiContext);
+  aiContextRef.current = aiContext;
+  const aiRequest = useRef(0);
+  const [aiResult, setAiResult] = useState<{ context: string; venues: PlannerVenue[] }>({ context: '', venues: [] });
+  const aiVenues = useMemo(() => aiResult.context === aiContext ? aiResult.venues : [], [aiResult, aiContext]);
+  useEffect(() => () => { aiRequest.current++; }, []);
   const [proposal, setProposal] = useState<PlannerVenue[] | null>(null);
   const [fallback, setFallback] = useState(false);
   const [fallbackKm, setFallbackKm] = useState(10);
@@ -84,7 +96,7 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
     const savedRequest = fetchSavedVenues();
     Promise.all([savedRequest, fetchCollections()]).then(([v, c]) => { if (live) { setSaved(v.map(savedCandidate)); setCollections(c); } },
       () => { if (live) setError('Your saved venues could not be loaded. Close and reopen the planner to retry.'); }).finally(() => { if (live) setLoading(false); });
-    fetchSponsoredVenues().then((v) => { if (live) setPartners(v.map(partnerCandidate)); }, () => { if (live) setPicksError(true); });
+    fetchSponsoredVenues().then((v) => { if (live) setPartnerRecords(v); }, () => { if (live) setPicksError(true); });
     if (editPlanId) Promise.all([fetchPlan(editPlanId), fetchStops(editPlanId), savedRequest]).then(([p, stops, venues]) => {
       if (!live) return;
       if (!p || p.owner_id !== owner) { setError('Only the event host may edit this event.'); return; }
@@ -119,14 +131,29 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
       const point = travel.coords[venueKey(v)] ?? (v.lat != null && v.lon != null ? { lat: v.lat, lon: v.lon } : null);
       return validCoordinate(point) && distanceKm(draft.origin, point) <= fallbackKm;
     }
+    if (travel.busy || !supportedModes.includes(travelMode)) return false;
     const seconds = travel.seconds[venueKey(v)];
-    return typeof seconds === 'number' && seconds <= draft.maxTravelMinutes * 60;
+    return Number.isFinite(seconds) && typeof seconds === 'number' && seconds >= 0 && seconds <= draft.maxTravelMinutes * 60;
   };
-  const filtered = (values: PlannerVenue[]) => values.filter((v) => category === 'all' || categoriesOf({ type: v.category, tags: v.tags }).includes(category as typeof v.category)).filter((v) => matchesTaxonomy(v, search)).filter(eligible);
   const desired = Object.values(draft.counts).reduce((sum, n) => sum + n, 0);
+  const filtered = (values: PlannerVenue[]) => values
+    .filter(v => category === 'all' || categoriesOf({ type: v.category, tags: v.tags }).includes(category as typeof v.category))
+    .filter(v => matchesTaxonomy(v, search))
+    .filter(v => !desired || !['picks', 'ai'].includes(draft.mode) || categoriesOf({ type: v.category, tags: v.tags }).some(c => draft.counts[c] > 0))
+    .filter(eligible);
+  // Both discovery surfaces and the selection handler use this same current pool.
+  const discoveryResults = filtered(routePool);
+  const visiblePartnerIds = draft.mode === 'picks' && hasLocation && filtersActive && !loading && !chat && !leaving && !reviewing
+    ? discoveryResults.flatMap(v => v.partnerId ? [v.partnerId] : []).sort().join(',') : '';
+  useEffect(() => {
+    const ids = visiblePartnerIds.split(',').filter(id => id && !impressions.current.has(owner + '|' + id));
+    ids.forEach(id => impressions.current.add(owner + '|' + id));
+    if (ids.length) void recordSponsoredEvents(ids, 'impression').catch(() => {});
+  }, [owner, visiblePartnerIds]);
   const choose = (venue: PlannerVenue) => {
     const selected = draft.stops.some((v) => venueKey(v) === venueKey(venue));
     if (selected) dispatch({ type: 'remove', key: venueKey(venue) });
+    else if (!discoveryResults.some(v => v.id === venue.id && venueKey(v) === venueKey(venue))) setNotice('This place no longer matches your discovery filters. Refresh the results.');
     else if (draft.stops.length < 6) dispatch({ type: 'add', venue: { ...venue, ...(travel.coords[venueKey(venue)] ?? {}) } });
     else setNotice('Your itinerary has six stops. Remove one before adding another.');
   };
@@ -143,6 +170,7 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
     const origin = await geocodeAddress(draft.location.trim());
     if (!validCoordinate(origin)) throw new Error('Could not verify that starting location. Try a full address or use current location.');
     if (revision !== locationRevision.current) throw new Error('Location changed. Apply the new starting location.');
+    aiContextRef.current = JSON.stringify([owner, draft.location, origin]);
     dispatch({ type: 'patch', patch: { origin } }); return origin;
   };
   const shuffle = () => {
@@ -156,19 +184,24 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
   };
   const findAI = async () => {
     activateFilters();
-    setBusy(true); setError(''); setNotice(''); setAiVenues([]);
+    const request = ++aiRequest.current, revision = locationRevision.current;
+    let context: string | undefined;
+    const current = () => request === aiRequest.current && revision === locationRevision.current && (!context || aiContextRef.current === context);
+    setBusy(true); setError(''); setNotice(''); setAiResult({ context: '', venues: [] });
     try {
       const origin = await resolveOrigin();
       if (!origin) throw new Error('Choose a starting location first.');
+      context = JSON.stringify([owner, draft.location, origin]);
       const query = [desired ? CATEGORIES.filter((c) => draft.counts[c] > 0).map((c) => CATEGORY_LABELS[c]).join(', ') : 'restaurants, bars and experiences', selectedVibes.map((v) => v.label).join(', '), draft.mood, (dietaryPreferences ?? []).join(', ')].filter(Boolean).join('. ');
       const candidates = await discoverVenues(query, origin, saved);
+      if (!current()) return;
       if (!candidates.length) { setNotice('No new verified places were found. Try a different mood or location.'); return; }
       let ordered = candidates;
       try { const ids = await rankExistingVenues(candidates, query); if (ids.length) ordered = [...candidates].sort((a, b) => (ids.includes(a.id) ? ids.indexOf(a.id) : 99) - (ids.includes(b.id) ? ids.indexOf(b.id) : 99)); }
-      catch { setNotice('AI ranking is unavailable. Showing verified Places results, filtered by journey time.'); }
-      setAiVenues(ordered.filter((v) => !desired || categoriesOf({ type: v.category, tags: v.tags }).some((c) => draft.counts[c] > 0)));
-    } catch (e) { setError(e instanceof Error ? e.message : 'AI Finds is unavailable. Your itinerary is safe.'); }
-    finally { setBusy(false); }
+      catch { if (current()) setNotice('AI ranking is unavailable. Showing verified Places results, filtered by journey time.'); }
+      if (current()) setAiResult({ context, venues: ordered });
+    } catch (e) { if (current()) setError(e instanceof Error ? e.message : 'AI Finds is unavailable. Your itinerary is safe.'); }
+    finally { if (request === aiRequest.current) setBusy(false); }
   };
   const saveDiscovered = async (v: PlannerVenue) => {
     if (savingVenue || saved.some((s) => venueKey(s) === venueKey(v) || (v.providerId && s.tags.includes(`google-place:${v.providerId}`)))) return;
@@ -192,11 +225,17 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
       const id = editPlanId ? await savePlannerEdits(draft, owner) : await confirmPlannerEvent(draft, displayName || 'You', (id) => {
         const pending = { ...draft, pendingPlanId: id }; dispatch({ type: 'patch', patch: { pendingPlanId: id } }); persistPlannerDraft(owner, pending);
       });
+      const partnerIds = [...new Set(draft.stops.flatMap(v => v.partnerId ? [v.partnerId] : []))]
+        .filter(partnerId => !attributedSaves.current.has(owner + '|' + id + '|' + partnerId));
+      partnerIds.forEach(partnerId => attributedSaves.current.add(owner + '|' + id + '|' + partnerId));
+      if (partnerIds.length) void recordSponsoredEvents(partnerIds, 'saved', id).catch(() => {});
       savedSuccessfully.current = true; persistPlannerDraft(owner, null); onDirty(false); onDone(id);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save this event. Your draft is kept.'); }
     finally { saving.current = false; setBusy(false); }
   };
   const cards = (values: PlannerVenue[]) => <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{values.map((v) => <DiscoveryCard key={v.id} venue={v}
+    reviewSummary={v.source === 'partner' ? (() => { const p = partnerRecords.find(p => p.id === v.partnerId); return p ? { average: p.average_rating, count: p.review_count } : undefined; })() : undefined}
+    onReviews={v.source === 'partner' ? () => { const p = partnerRecords.find(p => p.id === v.partnerId); if (p) setReviewing(p); } : undefined}
     selected={draft.stops.some((s) => venueKey(s) === venueKey(v))} disabled={draft.stops.length >= 6} onSelect={() => choose(v)}
     travelLabel={fallback ? 'Straight-line fallback · journey time not applied' : typeof travel.seconds[venueKey(v)] === 'number' ? journeyLabel(travel.seconds[venueKey(v)], travelMode) : undefined}
     onSave={v.source === 'external' ? () => saveDiscovered(v) : undefined} saved={saved.some((s) => venueKey(s) === venueKey(v) || !!v.providerId && s.tags.includes(`google-place:${v.providerId}`))} saving={savingVenue === v.id} />)}</div>;
@@ -224,7 +263,7 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
         {!!draft.origin && !travel.busy && routePool.some((v) => typeof travel.seconds[venueKey(v)] !== 'number') && !fallback && <button className="btn-outline mt-3" onClick={() => setFallback(true)}>Use straight-line distance fallback (not journey time)</button>}
         {fallback && <div className="mt-3 rounded-md border border-border p-3"><p className="text-small">Distance fallback active by your choice. The travel-time limit is not applied. Only places with known coordinates are included.</p><label className="mt-2 block text-small">Straight-line distance<select aria-label="Fallback distance" className="ux-field ml-2" value={fallbackKm} onChange={(e) => setFallbackKm(Number(e.target.value))}>{[2, 5, 10, 20, 50].map((n) => <option key={n} value={n}>{n} km</option>)}</select></label><button className="btn-ghost" onClick={() => setFallback(false)}>Return to journey times</button></div>}
       </div>
-      {draft.mode === 'random' ? <><div className="mb-4 rounded-lg border border-dashed border-border p-5"><Shuffle className="mb-3 text-info" /><p className="text-small text-muted-foreground">{saved.length} saved places · Preview a random plan</p><button onClick={shuffle} disabled={busy || loading || travel.busy} className="btn-primary mt-4"><Shuffle size={17} />Randomise My Plan</button></div>{proposal && <div className="mb-4 rounded-lg border border-border p-4"><h4 className="text-label">Proposed plan · {proposal.length} stops</h4><ol className="my-3 list-inside list-decimal">{proposal.map((v) => <li key={v.id}>{v.name}</li>)}</ol><div className="flex flex-wrap gap-2"><button className="btn-primary" disabled={!proposal.length} onClick={() => { dispatch({ type: 'proposal', venues: proposal, replace: false }); setProposal(null); setNotice('Proposed places merged. Existing selections are kept; six stops maximum.'); }}>Merge into itinerary</button><button className="btn-outline" disabled={!proposal.length} onClick={() => { dispatch({ type: 'proposal', venues: proposal, replace: true }); setProposal(null); setNotice('Itinerary replaced with your chosen proposal.'); }}>Replace itinerary</button><button className="btn-ghost" onClick={() => setProposal(null)}>Keep current itinerary</button></div></div>}{cards(randomIds.map((id) => saved.find((v) => v.id === id)).filter((v): v is PlannerVenue => !!v))}</> : <>
+      {draft.mode === 'random' ? <><div className="mb-4 rounded-lg border border-dashed border-border p-5"><Shuffle className="mb-3 text-info" /><p className="text-small text-muted-foreground">{saved.length} saved places · Preview a random plan</p><button onClick={shuffle} disabled={busy || loading || travel.busy} className="btn-primary mt-4"><Shuffle size={17} />Randomise My Plan</button></div>{proposal && <div className="mb-4 rounded-lg border border-border p-4"><h4 className="text-label">Proposed plan · {proposal.length} stops</h4><ol className="my-3 list-inside list-decimal">{proposal.map((v) => <li key={v.id}>{v.name}</li>)}</ol><div className="flex flex-wrap gap-2"><button className="btn-primary" disabled={!proposal.length} onClick={() => { dispatch({ type: 'proposal', venues: proposal, replace: false }); setProposal(null); setNotice('Proposed places merged. Existing selections are kept; six stops maximum.'); }}>Merge into itinerary</button><button className="btn-outline" disabled={!proposal.length} onClick={() => { dispatch({ type: 'proposal', venues: proposal, replace: true }); setProposal(null); setNotice('Itinerary replaced with your chosen proposal.'); }}>Replace itinerary</button><button className="btn-ghost" onClick={() => setProposal(null)}>Keep current itinerary</button></div></div>}{cards(discoveryResults.filter(v => randomIds.includes(v.id)))}</> : <>
         {draft.mode === 'ai' && <div className="mb-5 rounded-lg border border-primary/30 bg-primary-soft p-4">
           <h3 className="text-heading">What are you in the mood for?</h3><p className="mt-1 text-small text-muted-foreground">Choose a vibe</p>
           <div className="mt-4 grid grid-cols-3 gap-2" aria-label="Vibe suggestions">{VIBE_GROUPS[ideaGroup].map((v) => <button key={v.id} type="button" aria-pressed={draft.vibes.includes(v.id)} className={"min-h-12 rounded-md border px-2 py-2 text-small " + (draft.vibes.includes(v.id) ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card")} onClick={() => patch({ type: 'patch', patch: { vibes: draft.vibes.includes(v.id) ? draft.vibes.filter((id) => id !== v.id) : [...draft.vibes, v.id] } })}>{v.label}</button>)}</div>
@@ -241,7 +280,7 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
 </div>
         </div>
         {!validCoordinate(draft.origin) ? <p role="status" className="text-small text-muted-foreground">Apply your starting location to see venues.</p> : !filtersActive ? <button type="button" className="btn-outline" onClick={activateFilters}>Show venues</button> : loading ? <p role="status">Loading your venues…</p> : (() => {
-          const values = filtered(draft.mode === 'saved' ? saved.filter((v) => !draft.collectionId || collectionIds.includes(v.id)) : draft.mode === 'picks' ? partners.filter((v) => !desired || categoriesOf({ type: v.category, tags: v.tags }).some((c) => draft.counts[c] > 0)) : aiVenues);
+          const values = discoveryResults;
           return values.length ? cards(values) : <div className="rounded-lg border border-dashed border-border p-6 text-small text-muted-foreground">{travel.busy ? 'Checking journey estimates…' : draft.mode === 'picks' && picksError ? 'Our Picks could not be loaded. Your other planning modes are still available.' : draft.mode === 'ai' ? 'Choose a mood to find places within your travel limit.' : 'No venues match yet. Try another search or collection.'}</div>;
         })()}
         </PlannerDisclosure>
@@ -276,8 +315,11 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
     <section ref={createRef} tabIndex={-1} className="plan-section adventure-card rounded-lg border border-border bg-card p-5" aria-labelledby="create-heading"><p className="text-caption text-info">04 — Make it happen</p><h2 id="create-heading" className="mt-1 text-heading">{editPlanId ? 'Save your changes' : 'Ready for a good time?'}</h2><p className="my-3 text-small text-muted-foreground">{draft.stops.length} places · {draft.name || 'Name your event above'} · {draft.date} · {draft.startTime || 'Set a start time'}</p>
       <button className="btn-primary w-full" disabled={busy || !draft.stops.length} onClick={finish}><Check size={17} />{busy ? 'Saving…' : editPlanId ? 'Save event changes' : 'Create Event'}</button>
     </section>
+    {reviewing && <Suspense fallback={<p role="status">Loading reviews…</p>}><VenueReviewsDialog venue={reviewing} onClose={() => setReviewing(null)} onChanged={() => {
+      void fetchSponsoredVenues().then(records => { setPartnerRecords(records); setReviewing(current => records.find(p => p.id === current?.id) ?? current); }, () => setPicksError(true));
+    }} /></Suspense>}
     <WorkflowNavigator sections={workflowSections} blocked={chat || leaving} />
-    <Sheet open={chat} onOpenChange={setChat}><SheetContent side="bottom" className="h-[60dvh] lg:mx-auto lg:max-w-2xl"><SheetHeader><SheetTitle>Find your kind of night</SheetTitle><SheetDescription>Refine the mood, budget or occasion. Search real new places; unavailable providers are reported clearly.</SheetDescription></SheetHeader><label className="mt-5 block text-label">Your discovery preferences<textarea className="ux-field mt-2 w-full" value={draft.mood} onChange={(e) => patch({ type: 'patch', patch: { mood: e.target.value } })} placeholder="A casual Japanese date night under $50…" /></label><button onClick={findAI} disabled={busy} className="btn-primary my-4"><Sparkles size={16} />{busy ? 'Finding…' : 'Refine recommendations'}</button>{error && <p role="alert" className="mb-3 text-small text-destructive-text">{error}</p>}{cards(aiVenues)}</SheetContent></Sheet>
+    <Sheet open={chat} onOpenChange={setChat}><SheetContent side="bottom" className="h-[60dvh] lg:mx-auto lg:max-w-2xl"><SheetHeader><SheetTitle>Find your kind of night</SheetTitle><SheetDescription>Refine the mood, budget or occasion. Search real new places; unavailable providers are reported clearly.</SheetDescription></SheetHeader><label className="mt-5 block text-label">Your discovery preferences<textarea className="ux-field mt-2 w-full" value={draft.mood} onChange={(e) => patch({ type: 'patch', patch: { mood: e.target.value } })} placeholder="A casual Japanese date night under $50…" /></label><button onClick={findAI} disabled={busy} className="btn-primary my-4"><Sparkles size={16} />{busy ? 'Finding…' : 'Refine recommendations'}</button>{error && <p role="alert" className="mb-3 text-small text-destructive-text">{error}</p>}{discoveryResults.length ? cards(discoveryResults) : <p role="status" className="text-small text-muted-foreground">{travel.busy ? 'Checking journey estimates…' : 'No places match your current discovery filters.'}</p>}</SheetContent></Sheet>
     <Dialog open={leaving} onOpenChange={setLeaving}><DialogContent><DialogHeader><DialogTitle>Leave this plan for now?</DialogTitle><DialogDescription>{editPlanId ? 'Unsaved edits will be discarded. The saved event will stay as it is.' : 'Keep your draft to pick up later, or discard it. No confirmed event will be deleted.'}</DialogDescription></DialogHeader><button className="btn-primary" onClick={onCancel}>{editPlanId ? 'Leave without saving' : 'Keep draft and leave'}</button><button className="btn-outline" onClick={() => setLeaving(false)}>Keep planning</button>{!editPlanId && <button className="btn-ghost text-destructive-text" onClick={() => { persistPlannerDraft(owner, null); savedSuccessfully.current = true; onCancel(); }}>Discard draft</button>}</DialogContent></Dialog>
   </main>;
 }

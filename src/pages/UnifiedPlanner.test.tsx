@@ -1,23 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-const mocks = vi.hoisted(() => ({ saved: vi.fn(), picks: vi.fn(), confirm: vi.fn(), support: vi.fn(), premium: vi.fn(), timing: vi.fn(), discover: vi.fn(), save: vi.fn(), routesUnavailable: false }));
+const mocks = vi.hoisted(() => ({ saved: vi.fn(), picks: vi.fn(), confirm: vi.fn(), support: vi.fn(), premium: vi.fn(), timing: vi.fn(), discover: vi.fn(), save: vi.fn(), track: vi.fn(), publicReviews: vi.fn(), publicSave: vi.fn(), publicDelete: vi.fn(), routesBusy: false, routeSeconds: {} as Record<string, number>, modes: ['driving', 'walking'] as ('driving' | 'walking' | 'transit')[], routesUnavailable: false }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ session: { user: { id: 'qa' } }, displayName: 'QA', subscriptionTier: 'free', premiumUnlocked: true }) }));
 vi.mock('../lib/supabase', () => ({ fetchSavedVenues: mocks.saved, insertSavedVenue: mocks.save, fetchCollections: async () => [],
-  fetchCollectionVenueIds: async () => [], fetchSponsoredVenues: mocks.picks,
+  fetchCollectionVenueIds: async () => [], fetchSponsoredVenues: mocks.picks, recordSponsoredEvents: mocks.track,
+  fetchVenueReviews: mocks.publicReviews, saveVenueReview: mocks.publicSave, deleteVenueReview: mocks.publicDelete, fetchMyCredits: async () => 3,
   fetchPlan: async () => null, fetchStops: async () => [], sortStops: (x: unknown) => x,
   hasPremium: mocks.premium, fetchPlannerSixStopSupport: mocks.support, fetchPlannerTimingSupport: mocks.timing }));
 vi.mock('../lib/plannerApi', async (original) => ({ ...await original<typeof import('../lib/plannerApi')>(), confirmPlannerEvent: mocks.confirm, savePlannerEdits: vi.fn() }));
 vi.mock('../lib/openai', () => ({ rankExistingVenues: async () => [] }));
 vi.mock('../lib/apiKeys', () => ({ geocodeAddress: async () => ({ lat: -33.8, lon: 151.2 }) }));
 vi.mock('../lib/discovery', () => ({ discoverVenues: mocks.discover }));
-vi.mock('../lib/useTravel', () => ({ useTravelModes: () => ['driving', 'walking'], useDiscoveryTravel: (_owner: string, _origin: unknown, venues: import('../lib/planner').PlannerVenue[]) => ({ busy: false, seconds: mocks.routesUnavailable ? {} : Object.fromEntries(venues.map((v, i) => [venueKey(v), i === 6 ? 2400 : 600])), coords: {} }), useItineraryTravel: () => ({ busy: false, legs: [480, 720, 300, 180, 400] }) }));
+vi.mock('../lib/useTravel', () => ({ useTravelModes: () => mocks.modes, useDiscoveryTravel: (_owner: string, _origin: unknown, venues: import('../lib/planner').PlannerVenue[]) => ({ busy: mocks.routesBusy, seconds: mocks.routesUnavailable ? {} : Object.fromEntries(venues.map((v, i) => [venueKey(v), mocks.routeSeconds[v.id] ?? (i === 6 ? 2400 : 600)])), coords: {} }), useItineraryTravel: () => ({ busy: false, legs: [480, 720, 300, 180, 400] }) }));
 import { venueKey } from '../lib/planner';
 import { UnifiedPlanner } from './UnifiedPlanner';
 const saved = Array.from({ length: 7 }, (_, i) => ({ id: `v${i}`, name: `Fixture Café ${i}`, address: `${i + 1} Test Rd`, type: 'food', link: null,
   user_id: 'qa', lat: -33.8, lon: 151.2, tags: [], visited: false, personal_note: null, rating: null, collection: null, created_at: '' }));
 const done = vi.fn();
-beforeEach(() => { localStorage.clear(); mocks.routesUnavailable = false; mocks.discover.mockReset(); mocks.discover.mockResolvedValue([]); mocks.save.mockReset(); mocks.timing.mockResolvedValue(true); HTMLElement.prototype.scrollIntoView = vi.fn(); mocks.premium.mockReturnValue(true); mocks.saved.mockResolvedValue(saved); mocks.picks.mockResolvedValue([{ id: 'p1', business_name: 'Fixture partner', address: '8 Test Rd', type: 'bar', lat: null, lon: null }]); mocks.confirm.mockResolvedValue('new-event'); mocks.support.mockResolvedValue(true); });
+beforeEach(() => { localStorage.clear(); mocks.routesUnavailable = false; mocks.routesBusy = false; mocks.routeSeconds = {}; mocks.modes = ['driving', 'walking']; mocks.track.mockReset().mockResolvedValue(undefined); mocks.publicSave.mockReset().mockResolvedValue(undefined); mocks.publicReviews.mockReset().mockResolvedValue([]); mocks.discover.mockReset(); mocks.discover.mockResolvedValue([]); mocks.save.mockReset(); mocks.timing.mockResolvedValue(true); HTMLElement.prototype.scrollIntoView = vi.fn(); mocks.premium.mockReturnValue(true); mocks.saved.mockResolvedValue(saved); mocks.picks.mockResolvedValue([{ id: 'p1', business_name: 'Fixture partner', address: '8 Test Rd', type: 'bar', lat: null, lon: null, review_count: 2, average_rating: 4.5, can_review: true, reviewed_by_me: false, instagram_link: null, website: null }]); mocks.confirm.mockResolvedValue('new-event'); mocks.support.mockResolvedValue(true); });
 const renderPlanner = () => render(<UnifiedPlanner onDone={done} onCancel={vi.fn()} onDirty={vi.fn()} />);
 async function start() {
   const user = userEvent.setup();
@@ -245,4 +246,120 @@ it('reveals filters with location text, mounts cards only on intent, and hides e
   await user.clear(screen.getByLabelText('Starting location'));
   expect(screen.queryByRole('textbox', { name: 'Search venues' })).not.toBeInTheDocument();
   expect(screen.queryByText('Fixture Café 0')).not.toBeInTheDocument();
+});
+
+const externalPlaces = [
+  { id: 'external-food', name: 'Verified six-minute restaurant', address: '9 Verified Street', category: 'food', source: 'external', providerId: 'food-id', lat: -33.8, lon: 151.2, tags: [], link: null, entityKind: 'venue' },
+  { id: 'external-bar', name: 'Verified twelve-minute bar', address: '10 Verified Street', category: 'bar', source: 'external', providerId: 'bar-id', lat: -33.8, lon: 151.2, tags: [], link: null, entityKind: 'venue' },
+];
+it('excludes six- and twelve-minute AI venues under a one-minute limit in both discovery surfaces', async () => {
+  mocks.discover.mockResolvedValue(externalPlaces); mocks.routeSeconds = { 'external-food': 360, 'external-bar': 720 };
+  renderPlanner(); const user = await start();
+  await user.click(screen.getByRole('button', { name: 'AI Finds' }));
+  fireEvent.change(screen.getByRole('slider'), { target: { value: '1' } });
+  await user.click(screen.getByRole('button', { name: 'Find Places' }));
+  await waitFor(() => expect(mocks.discover).toHaveBeenCalled());
+  expect(screen.queryByRole('heading', { name: externalPlaces[0].name })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Add to itinerary' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Expand discovery chat' }));
+  const sheet = screen.getByRole('dialog');
+  expect(within(sheet).queryByRole('heading', { name: externalPlaces[0].name })).not.toBeInTheDocument();
+  expect(within(sheet).queryByRole('button', { name: 'Add to itinerary' })).not.toBeInTheDocument();
+  expect(within(sheet).getByRole('status')).toHaveTextContent('No places match');
+});
+it('applies the same category filter in AI chat and fails closed while routing is pending or unavailable', async () => {
+  mocks.discover.mockResolvedValue(externalPlaces);
+  renderPlanner(); const user = await start();
+  await user.click(screen.getByRole('button', { name: 'AI Finds' }));
+  await user.click(screen.getByRole('button', { name: 'Find Places' }));
+  await screen.findByRole('heading', { name: externalPlaces[0].name });
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Venue category' }), 'bar');
+  expect(screen.queryByRole('heading', { name: externalPlaces[0].name })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Expand discovery chat' }));
+  const sheet = screen.getByRole('dialog');
+  expect(within(sheet).queryByRole('heading', { name: externalPlaces[0].name })).not.toBeInTheDocument();
+  await user.click(within(sheet).getByRole('button', { name: 'Add to itinerary' }));
+  mocks.routesBusy = true;
+  await user.type(within(sheet).getByLabelText('Your discovery preferences'), 'Chill');
+  expect(within(sheet).queryByRole('button', { name: 'Add to itinerary' })).not.toBeInTheDocument();
+  expect(within(sheet).getByRole('status')).toHaveTextContent('Checking journey');
+  mocks.routesBusy = false; mocks.routesUnavailable = true;
+  await user.type(within(sheet).getByLabelText('Your discovery preferences'), ' night');
+  expect(within(sheet).queryByRole('button', { name: 'Add to itinerary' })).not.toBeInTheDocument();
+  mocks.routesUnavailable = false; mocks.modes = [];
+  await user.type(within(sheet).getByLabelText('Your discovery preferences'), '!');
+  expect(within(sheet).queryByRole('heading', { name: externalPlaces[1].name })).not.toBeInTheDocument();
+  await user.click(within(sheet).getByRole('button', { name: /^Close$/ }));
+  expect(screen.getByRole('button', { name: 'Remove ' + externalPlaces[1].name })).toBeInTheDocument();
+});
+it('discards an in-flight AI response when its starting location changes', async () => {
+  let resolve!: (places: typeof externalPlaces) => void;
+  mocks.discover.mockReturnValue(new Promise(r => { resolve = r; }));
+  renderPlanner(); const user = await start();
+  await user.click(screen.getByRole('button', { name: 'AI Finds' }));
+  await user.click(screen.getByRole('button', { name: 'Find Places' }));
+  await waitFor(() => expect(mocks.discover).toHaveBeenCalled());
+  await user.clear(screen.getByLabelText('Starting location'));
+  await user.type(screen.getByLabelText('Starting location'), 'Melbourne');
+  await user.click(screen.getByRole('button', { name: 'Apply location' }));
+  await act(async () => { resolve(externalPlaces); });
+  await user.click(screen.getByRole('button', { name: 'Expand discovery chat' }));
+  expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Add to itinerary' })).not.toBeInTheDocument();
+});
+it('invalidates completed AI results after a new origin is applied and supports searching without a separate Apply action', async () => {
+  mocks.discover.mockResolvedValue(externalPlaces);
+  renderPlanner(); const user = userEvent.setup();
+  await user.type(screen.getByLabelText('Starting location'), 'Sydney');
+  await user.click(screen.getByRole('button', { name: 'AI Finds' }));
+  await user.click(screen.getByRole('button', { name: 'Find Places' }));
+  await screen.findByRole('heading', { name: externalPlaces[0].name });
+  await user.clear(screen.getByLabelText('Starting location'));
+  await user.type(screen.getByLabelText('Starting location'), 'Melbourne');
+  await user.click(screen.getByRole('button', { name: 'Apply location' }));
+  expect(screen.queryByRole('heading', { name: externalPlaces[0].name })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Expand discovery chat' }));
+  expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Add to itinerary' })).not.toBeInTheDocument();
+});
+it('restores public partner reviews and deduplicates visible impressions across rerenders and mode switches', async () => {
+  renderPlanner(); const user = await start();
+  expect(mocks.track).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Our Picks' }));
+  expect(mocks.track).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Show venues' }));
+  expect(screen.getByText('4.5')).toBeInTheDocument();
+  expect(screen.getByText('(2 reviews)')).toBeInTheDocument();
+  await waitFor(() => expect(mocks.track).toHaveBeenCalledWith(['p1'], 'impression'));
+  await user.click(screen.getByRole('button', { name: 'Fixture partner: reviews' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Fixture partner' });
+  await user.click(within(dialog).getByRole('button', { name: 'Write a review · earn 1 credit' }));
+  await user.click(within(dialog).getByRole('radio', { name: '5 stars' }));
+  await user.type(within(dialog).getByLabelText('Your review'), 'A useful public partner review.');
+  await user.click(within(dialog).getByRole('button', { name: 'Post review · +1 credit' }));
+  await waitFor(() => expect(mocks.publicSave).toHaveBeenCalledWith('p1', 5, 'A useful public partner review.', undefined));
+  expect(mocks.save).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole('button', { name: /^Close$/ }));
+  await user.click(screen.getByRole('button', { name: 'Saved Venues' }));
+  await user.click(screen.getByRole('button', { name: 'Our Picks' }));
+  expect(mocks.track.mock.calls.filter(c => c[1] === 'impression')).toHaveLength(1);
+});
+it('attributes a partner save once only after successful confirmation, not selection or a failed attempt', async () => {
+  renderPlanner(); const user = await start();
+  await user.click(screen.getByRole('button', { name: 'Our Picks' }));
+  await user.click(screen.getByRole('button', { name: 'Show venues' }));
+  await user.click(screen.getByRole('button', { name: 'Add to itinerary' }));
+  expect(mocks.track.mock.calls.filter(c => c[1] === 'saved')).toHaveLength(0);
+  mocks.confirm.mockRejectedValueOnce(new Error('offline'));
+  await user.click(screen.getByRole('button', { name: 'Create Event' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('offline');
+  expect(mocks.track.mock.calls.filter(c => c[1] === 'saved')).toHaveLength(0);
+  await user.dblClick(screen.getByRole('button', { name: 'Create Event' }));
+  await waitFor(() => expect(mocks.track.mock.calls.filter(c => c[1] === 'saved')).toEqual([[['p1'], 'saved', 'new-event']]));
+});
+it('does not count an impression for a partner excluded by the journey limit', async () => {
+  renderPlanner(); const user = await start();
+  await user.click(screen.getByRole('button', { name: 'Our Picks' }));
+  fireEvent.change(screen.getByRole('slider'), { target: { value: '1' } });
+  await user.click(screen.getByRole('button', { name: 'Show venues' }));
+  expect(screen.queryByRole('button', { name: 'Fixture partner: reviews' })).not.toBeInTheDocument();
+  expect(mocks.track).not.toHaveBeenCalled();
 });

@@ -1,9 +1,11 @@
 import { MapPin, Music2, Utensils, Wine, IceCream, Compass, Mountain, Plus, Check } from 'lucide-react';
 import { CATEGORY_LABELS, type PlannerVenue } from '../lib/planner';
+import { RatingLine } from './PartnerBits';
 import { CATEGORY_SHORT } from '../lib/taxonomy';
 const icons = { food: Utensils, dessert: IceCream, bar: Wine, activity: Compass, nightlife: Music2, outdoors: Mountain };
 
-export function DiscoveryCard({ venue, selected, onSelect, onOpen, disabled = false, actionLabel, travelLabel, onSave, saved, saving }: {
+export function DiscoveryCard({ venue, selected, onSelect, onOpen, disabled = false, actionLabel, travelLabel, onSave, saved, saving, reviewSummary, onReviews }: {
+  reviewSummary?: { average: number; count: number }; onReviews?: () => void;
   venue: PlannerVenue; selected?: boolean; onSelect?: () => void; onOpen?: () => void; disabled?: boolean; actionLabel?: string; travelLabel?: string; onSave?: () => void; saved?: boolean; saving?: boolean;
 }) {
   const Icon = icons[venue.category];
@@ -16,6 +18,7 @@ export function DiscoveryCard({ venue, selected, onSelect, onOpen, disabled = fa
         : <h3 className="text-subheading text-foreground">{venue.name}</h3>}
       <p className="mt-1 flex gap-1 text-small text-muted-foreground"><MapPin size={14} className="mt-0.5 shrink-0" />{venue.address}</p>
       {venue.source === 'external' && <p className="mt-2 text-small text-muted-foreground"><a className="underline" href={venue.link ?? undefined} target="_blank" rel="noopener noreferrer">View on Google Maps</a>{venue.attributions?.map((a, i) => <span key={i}> · {a.url ? <a href={a.url} target="_blank" rel="noopener noreferrer">{a.provider}</a> : a.provider}</span>)}</p>}
+      {reviewSummary && onReviews && <button type="button" className="mt-2 flex min-h-11 items-center gap-2 text-small text-primary-text" aria-label={venue.name + ': reviews'} onClick={onReviews}><RatingLine average={reviewSummary.average} count={reviewSummary.count} /><span>Reviews</span></button>}
       {travelLabel && <p className="mt-2 text-small text-info">{travelLabel}</p>}
       {venue.startsAt && <p className="mt-2 text-small text-primary-text">{new Date(venue.startsAt).toLocaleString()}</p>}
       {onSelect && <button onClick={onSelect} disabled={disabled && !selected} aria-pressed={selected}
