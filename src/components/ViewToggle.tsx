@@ -1,3 +1,4 @@
+import { BrandLogo } from './BrandLogo';
 import { useState } from 'react';
 import { Home, CalendarDays, Bookmark, Settings, Users } from 'lucide-react';
 import {
@@ -91,7 +92,7 @@ export function ViewToggle({
         className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-border bg-card lg:flex"
       >
         <div className="flex items-center gap-2.5 px-6 py-7">
-          <img src="/the-unsaved-mark.png" alt="" width={32} height={32} className="shrink-0" />
+          <BrandLogo size={32} withName={false} />
           <span className="text-heading tracking-tight">The Unsaved</span>
         </div>
 

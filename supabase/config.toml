@@ -9,7 +9,10 @@
 # also call requireUser() internally to prove a real end-user session. Both
 # layers are needed; neither is sufficient alone.
 
-project_id = "gsoshbdfjozomsxtbize"
+# Local CLI identifier aligned with the canonical project's name for clarity.
+# Remote link state / --project-ref controls remote targeting, not this value.
+# Editing this file does not link or deploy anything.
+project_id = "wfrlkifdlgmlbffumglt"
 
 [functions.ai-proxy]
 verify_jwt = true
@@ -18,6 +21,10 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.travel-times]
+verify_jwt = true
+
+# Prepared locally; requires explicit deployment approval.
+[functions.discover-venues]
 verify_jwt = true
 
 [functions.resolve-place]

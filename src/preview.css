@@ -1,0 +1,6 @@
+/* Local development preview only; the app inside retains its own viewport. */
+.phone-preview-host, .phone-preview-host body { margin:0; background:#1e1e1e; }
+.phone-preview-stage { display:flex; justify-content:center; align-items:center; min-width:393px; min-height:852px; height:100dvh; padding:0; box-sizing:border-box; background:#1e1e1e; }
+.phone-preview-device { flex:0 0 393px; width:393px; height:852px; overflow-y:auto; overflow-x:hidden; border-radius:30px; outline:1px solid #505050; box-shadow:0 16px 44px #0008,0 0 0 5px #292929; background:#1e1e1e; }
+.phone-preview-app { display:block; width:393px; height:852px; border:0; }
+

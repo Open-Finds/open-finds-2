@@ -23,6 +23,7 @@ export type DestinationInput = string | {
   lon?: number | null;
 };
 
+export type TravelMode = 'driving' | 'walking' | 'transit';
 export type OriginInput = string | { lat: number; lon: number };
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -38,7 +39,9 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 // can say that rather than "nothing within 30 min".
 export async function fetchDistanceMatrix(
   origin: OriginInput,
-  destinations: DestinationInput[]
+  destinations: DestinationInput[],
+  mode: TravelMode = 'driving',
+  originIsVenue = false
 ): Promise<VenueDistance[] | null> {
   const hasOrigin =
     typeof origin === "string"
@@ -46,7 +49,7 @@ export async function fetchDistanceMatrix(
       : origin.lat != null && origin.lon != null;
   if (!hasOrigin || destinations.length === 0) return null;
 
-  const result = await requestTravelTimes(origin, destinations);
+  const result = await requestTravelTimes(origin, destinations, mode, originIsVenue);
   if (result === 'origin-not-found') {
     throw new LocationNotFoundError(typeof origin === 'string' ? origin.trim() : 'your location');
   }
@@ -55,14 +58,17 @@ export async function fetchDistanceMatrix(
 
 async function requestTravelTimes(
   origin: OriginInput,
-  destinations: DestinationInput[]
+  destinations: DestinationInput[],
+  mode: TravelMode = 'driving',
+  originIsVenue = false
 ): Promise<VenueDistance[] | null | 'origin-not-found'> {
   try {
     const apiUrl = `${SUPABASE_URL}/functions/v1/travel-times`;
     const res = await fetch(apiUrl, {
       method: 'POST',
       headers: await edgeAuthHeaders(),
-      body: JSON.stringify({ origin, destinations }),
+      body: JSON.stringify({ origin, destinations, mode, originIsVenue }),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!res.ok) {
@@ -77,20 +83,27 @@ async function requestTravelTimes(
     }
     if (data?.originError === 'not_found') return 'origin-not-found';
 
+    // Older deployments only calculate driving; never mislabel those estimates.
+    if (data?.mode !== mode && (mode !== 'driving' || data?.mode != null)) return null;
+    if (originIsVenue && data?.verifiedOrigin !== true) return null;
     const distances = data?.distances;
     if (!Array.isArray(distances)) {
       console.warn('[travel-times] unexpected response shape', { data });
       return null;
     }
 
-    return distances.map((d: Omit<VenueDistance, 'venueKey'>) => ({
+    return distances.map((d: Omit<VenueDistance, 'venueKey'>, i: number) => {
+      const input = destinations[i];
+      const known = typeof input === 'object' && typeof input.lat === 'number' && Number.isFinite(input.lat) && Math.abs(input.lat) <= 90 && typeof input.lon === 'number' && Number.isFinite(input.lon) && Math.abs(input.lon) <= 180;
+      if (!known && data?.verifiedCoordinates !== true) return { venueKey: '', durationSeconds: null, durationText: null, error: true };
+      return ({
       venueKey: '',
-      durationSeconds: d.durationSeconds ?? null,
+      durationSeconds: typeof d.durationSeconds === 'number' && Number.isFinite(d.durationSeconds) && d.durationSeconds >= 0 ? d.durationSeconds : null,
       durationText: d.durationText ?? null,
       error: d.error ?? false,
       lat: d.lat ?? null,
       lon: d.lon ?? null,
-    }));
+    }); });
   } catch (err) {
     console.warn('[travel-times] fetch failed', { origin, error: err });
     return null;

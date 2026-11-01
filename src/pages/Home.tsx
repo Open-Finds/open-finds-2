@@ -1,3 +1,4 @@
+import { brandAssets } from '../lib/brand';
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -157,7 +158,7 @@ const DIETARY_OPTIONS: { key: string; label: string }[] = [
 function Logo({ size = 96 }: { size?: number }) {
   return (
     <img
-      src="/the-unsaved-mark.png"
+      src={brandAssets.mark}
       width={size}
       height={size}
       alt=""

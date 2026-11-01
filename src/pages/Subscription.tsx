@@ -26,7 +26,7 @@ const PLAN_META: Record<SubscriptionTier, { icon: React.ReactNode; tagline: stri
 
 const FREE_FEATURES = [
   '1 active plan',
-  '2 stops per plan',
+  'Up to 6 stops per plan',
   '3 AI extractions a day',
   '3 Something New suggestions a day',
   'Share plan and RSVP',
@@ -36,7 +36,7 @@ const FREE_FEATURES = [
 
 const PREMIUM_FEATURES = [
   'Unlimited active plans',
-  'Up to 5 stops per plan',
+  'Up to 6 stops per plan',
   'Unlimited AI extraction',
   'Unlimited Something New',
   ...(TRIPS_ENABLED ? ['Multi-day trips'] : []),

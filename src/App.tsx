@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useRouter, navigate } from './lib/router';
 import { clearPlanDraft } from './lib/draft';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { HomePage } from './pages/Home';
+import { HomeDashboard } from './pages/HomeDashboard';
+import { UnifiedPlanner } from './pages/UnifiedPlanner';
 import { EventsPage } from './pages/Events';
 import { DashboardPage } from './pages/Dashboard';
 import { VenuesPage } from './pages/Venues';
@@ -13,11 +14,15 @@ import { ConfirmedPage } from './pages/Confirmed';
 import { DeclinedPage } from './pages/Declined';
 import { FriendsPage } from './pages/Friends';
 import { NotificationsPage } from './pages/Notifications';
-import { ViewToggle } from './components/ViewToggle';
+import { MainNavigation, type AppView } from './components/MainNavigation';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
+import { takeSharedLink } from './lib/shareTarget';
+import type { PlannerMode } from './lib/planner';
+import type { SavedVenue } from './lib/supabase';
 import { GuidedTour } from './components/GuidedTour';
 import { CreditPrompt } from './components/CreditPrompt';
 import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isSigningUp } from './lib/supabase';
-import { Bell } from 'lucide-react';
+import { Bell, Settings } from 'lucide-react';
 
 /*
   Pages most people rarely open (admin, venue portal, subscription and its
@@ -35,7 +40,7 @@ const VenuePortalPage = lazy(() => import('./pages/VenuePortal').then((m) => ({ 
 const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })));
 const SubscriptionPage = lazy(() => import('./pages/Subscription').then((m) => ({ default: m.SubscriptionPage })));
 
-type View = 'home' | 'events' | 'venues' | 'friends' | 'settings';
+type View = AppView;
 
 /**
  * Authenticated chrome. The content column clears the mobile tab bar via
@@ -49,6 +54,7 @@ function Shell({
   unreadCount,
   onOpenNotifications,
   isEditingItinerary = false,
+  guard,
 }: {
   children: React.ReactNode;
   view: View;
@@ -56,6 +62,7 @@ function Shell({
   unreadCount: number;
   onOpenNotifications: () => void;
   isEditingItinerary?: boolean;
+  guard?: React.ReactNode;
 }) {
   return (
     <>
@@ -77,7 +84,9 @@ function Shell({
         )}
       </button>}
 
-      <ViewToggle view={view} onChange={onChangeView} isEditingItinerary={isEditingItinerary} />
+      {view !== 'home' && view !== 'planner' && !isEditingItinerary && <button aria-label="Settings" onClick={() => onChangeView('settings')} className="ux-icon fixed right-16 top-4 z-40"><Settings size={19} /></button>}
+      <MainNavigation view={view} onChange={onChangeView} />
+      {guard}
     </>
   );
 }
@@ -91,8 +100,21 @@ function AppInner() {
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('right');
   const [showNotifications, setShowNotifications] = useState(false);
   const [homeResetKey, setHomeResetKey] = useState(0);
+  const [plannerMode, setPlannerMode] = useState<PlannerMode | undefined>();
+  const [plannerSeed, setPlannerSeed] = useState<SavedVenue[]>([]);
+  const [plannerCollection, setPlannerCollection] = useState('');
+  const [plannerDirty, setPlannerDirty] = useState(false);
+  const [pendingView, setPendingView] = useState<View | null>(null);
+  const [openSave, setOpenSave] = useState(false);
+  const [incomingShare, setIncomingShare] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile } = useAuth();
+  useEffect(() => {
+    if (!session) return;
+    const shared = takeSharedLink();
+    if (shared) { setIncomingShare(shared); setOpenSave(true); setView('venues'); }
+  }, [session]);
+  useEffect(() => { if (view !== 'venues') { setOpenSave(false); setIncomingShare(null); } }, [view]);
 
   // The walkthrough runs over the app until it's finished or skipped, and
   // again after Settings → Replay Walkthrough. It points at Home's buttons,
@@ -113,8 +135,14 @@ function AppInner() {
     setShowNotifications(false);
     if (route.name === 'dashboard' && route.id) {
       setDashboardId(route.id);
+      setView('events');
     } else if (route.name === 'home') {
       setDashboardId(null);
+      setView('home');
+    } else if (route.name === 'events' || route.name === 'friends' || route.name === 'settings' || route.name === 'planner') {
+      setDashboardId(null); setView(route.name);
+    } else if (route.name === 'create' || route.name === 'build') {
+      setDashboardId(null); setView('planner');
     } else if (route.name === 'venues') {
       // Deep link (e.g. from a shared-collection notification). The Venues
       // page reads any ?collection= param itself.
@@ -216,28 +244,36 @@ function AppInner() {
         await updateDietaryPreferences(dietary);
         await refreshProfile();
       }
+      if (incomingShare) setView('venues');
     } catch { /* ignore */ }
   };
 
-  const switchView = (v: View) => {
+  const applyView = (v: View) => {
     setEditPlanId(null);
     setDashboardId(null);
     setShowNotifications(false);
     setSlideDir(v === 'home' ? 'right' : 'left');
     setView(v);
     if (v === 'home') {
-      // Home always means the start screen, even mid-wizard or after sharing
-      // a plan: drop the saved draft and remount the page.
-      clearPlanDraft();
+      // Remount Home to refresh its statistics; planner drafts remain saved.
       setHomeResetKey((k) => k + 1);
       navigate('/');
-    } else if (planPage || route.name === 'admin') {
-      // Leaving an invitation or the admin dashboard for another tab.
-      navigate('/');
-    }
+    } else navigate(`/${v}`);
+  };
+  const switchView = (v: View) => {
+    if (editPlanId || (plannerDirty && view === 'planner' && v !== 'planner')) { setPendingView(v); return; }
+    applyView(v);
+  };
+  const startPlanner = (mode?: PlannerMode, seed?: SavedVenue, collection = '') => {
+    setPlannerMode(mode); setPlannerSeed(seed ? [seed] : []); setPlannerCollection(collection);
+    setHomeResetKey((k) => k + 1); applyView('planner');
   };
 
-  const openDashboard = (planId: string) => setDashboardId(planId);
+  const openDashboard = (planId: string) => {
+    setDashboardId(planId);
+    setView('events');
+    navigate(`/plan/${planId}/dashboard`);
+  };
   const closeDashboard = () => {
     setDashboardId(null);
     navigate('/');
@@ -245,14 +281,14 @@ function AppInner() {
 
   const handleEditPlan = (planId: string) => {
     setDashboardId(null);
-    setView('home');
+    setView('planner');
     setSlideDir('right');
     setEditPlanId(planId);
   };
 
   const finishEditing = (planId: string) => {
     setEditPlanId(null);
-    setDashboardId(planId);
+    openDashboard(planId);
   };
 
   const shellProps = {
@@ -260,15 +296,17 @@ function AppInner() {
     onChangeView: switchView,
     unreadCount,
     onOpenNotifications: () => setShowNotifications(true),
+    guard: <Dialog open={pendingView !== null} onOpenChange={(open) => !open && setPendingView(null)}><DialogContent><DialogHeader><DialogTitle>Leave your planner?</DialogTitle><DialogDescription>Your new-event draft is kept on this device. Unsaved edits to an existing event will be discarded.</DialogDescription></DialogHeader><button className="btn-primary" onClick={() => { const target = pendingView; setPendingView(null); setPlannerDirty(false); if (target) applyView(target); }}>Leave planner</button><button className="btn-outline" onClick={() => setPendingView(null)}>Keep planning</button></DialogContent></Dialog>,
   };
 
   if (editPlanId) {
     return (
       <Shell {...shellProps} isEditingItinerary>
-        <HomePage
+        <UnifiedPlanner key={editPlanId}
           editPlanId={editPlanId}
-          onNavigateToDashboard={finishEditing}
-          onCancelEdit={() => {
+          onDone={finishEditing}
+          onDirty={setPlannerDirty}
+          onCancel={() => {
             setEditPlanId(null);
             setDashboardId(editPlanId);
           }}
@@ -317,15 +355,20 @@ function AppInner() {
       {tourActive && <GuidedTour initialDietary={dietaryPreferences} onFinish={finishTour} />}
       <div key={view === 'home' ? `home-${homeResetKey}` : view} className={`animate-slide-${slideDir}`}>
         {view === 'home' ? (
-          <HomePage onNavigateToDashboard={openDashboard} />
+          <HomeDashboard onPlan={startPlanner} onVenues={() => switchView('venues')} onEvent={openDashboard}
+            onSettings={() => switchView('settings')} onSave={() => { setOpenSave(true); switchView('venues'); }} />
+        ) : view === 'planner' ? (
+          <UnifiedPlanner key={`planner-${homeResetKey}`} mode={plannerMode} seed={plannerSeed} collectionId={plannerCollection}
+            onDirty={setPlannerDirty} onDone={(id) => { setPlannerDirty(false); openDashboard(id); }} onCancel={() => { setPlannerDirty(false); applyView('home'); }} />
         ) : view === 'events' ? (
-          <EventsPage onOpenPlan={openDashboard} />
+          <EventsPage onOpenPlan={openDashboard} onPlan={() => startPlanner()} />
         ) : view === 'friends' ? (
           <FriendsPage />
         ) : view === 'settings' ? (
           <SettingsPage onBack={() => switchView('home')} />
         ) : (
-          <VenuesPage />
+          <VenuesPage initialAdd={openSave} sharedLink={incomingShare} onPlan={(v) => startPlanner('saved', v)}
+            onPlanCollection={(id) => startPlanner('saved', undefined, id)} />
         )}
       </div>
     </Shell>

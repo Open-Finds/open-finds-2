@@ -10,6 +10,7 @@ import {
   type FriendWithProfile, type Collection, type PublicProfile,
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
+import { APP_URL, copyToClipboard } from '../lib/invite';
 import { useAuth } from '../context/AuthContext';
 import { ShareCollectionModal } from '../components/ShareCollectionModal';
 import { LoadError } from '../components/LoadError';
@@ -24,6 +25,8 @@ const TAB_LABELS: Record<Tab, string> = { friends: 'Friends', collections: 'Grou
 type MyCollection = Collection & { memberCount: number };
 
 export function FriendsPage() {
+  const [inviteStatus, setInviteStatus] = useState('');
+  const inviteApp = async () => { try { if (navigator.share) await navigator.share({ title: 'The Unsaved', text: 'Good plans need good company. Join me on The Unsaved.', url: APP_URL }); else setInviteStatus(await copyToClipboard(APP_URL) ? 'App invitation link copied. Friends are added only after an accepted request.' : 'Copy this app link: ' + APP_URL); } catch { setInviteStatus('Sharing was cancelled. No friend request was sent.'); } };
   const [tab, setTab] = useState<Tab>('friends');
   const { session } = useAuth();
   const currentUserId = session?.user.id;
@@ -187,9 +190,9 @@ export function FriendsPage() {
     friends.find((f) => f.user_id === userId && (f.status === 'accepted' || f.status === 'pending'));
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-background px-6 pt-8 pb-24">
+    <div className="ux-page">
       <div className="mx-auto w-full">
-        <h1 className="mb-6 text-title text-foreground">Friends</h1>
+        <h1 className="mb-2 text-title text-foreground">Your friends</h1><p className="mb-5 text-small text-muted-foreground">{friends.filter((f) => f.status === 'accepted').length} friends connected</p><button className="btn-primary mb-4" onClick={inviteApp}><UserPlus size={17} />Invite friends</button>{inviteStatus && <p role="status" className="mb-4 text-small text-primary-text">{inviteStatus}</p>}
 
         {/* Tab switcher */}
         <div className="mb-6 flex min-h-11 gap-1 rounded-md bg-muted p-1" role="tablist">
@@ -318,7 +321,7 @@ export function FriendsPage() {
               ) : acceptedFriends.length === 0 ? (
                 <div className="rounded-lg border border-border bg-card p-8 text-center">
                   <Users size={32} className="mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">No friends yet. Search by username to add someone!</p>
+                  <p className="text-sm text-muted-foreground">Good plans need good company. Invite friends to join, or search by username to send a request.</p>
                 </div>
               ) : (
                 <div className="listing-grid">

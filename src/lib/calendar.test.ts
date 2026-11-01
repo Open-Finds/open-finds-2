@@ -9,6 +9,13 @@ const stops = [
 ] as Stop[];
 
 describe('calendar links', () => {
+  it('exports the explicit overnight end and never derives the end from the last stop', () => {
+    const explicit = planToCalendarEvent({ ...plan, end_time: '02:00:00', end_date: '2026-10-10' }, stops);
+    expect(explicit.end).toEqual(new Date('2026-10-10T02:00:00'));
+    const without = planToCalendarEvent(plan, stops);
+    expect(without.end.getTime() - without.start.getTime()).toBe(3 * 60 * 60 * 1000);
+    expect(plan).not.toHaveProperty('end_time');
+  });
   const ev = planToCalendarEvent(plan, stops);
 
   it('Outlook opens a new event with the plan filled in', () => {

@@ -18,6 +18,11 @@ const RATE_LIMIT = 400;
 const RATE_WINDOW_SECONDS = 60 * 60;
 
 type Suggestion = { text: string; main: string; secondary: string; place_id?: string };
+type PlacePrediction = {
+  text?: { text?: string };
+  structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } };
+  placeId?: string;
+};
 
 /** One Places Autocomplete call; null when the key isn't allowed to use it. */
 async function placesCall(body: Record<string, unknown>, apiKey: string): Promise<Suggestion[] | null> {
@@ -31,9 +36,9 @@ async function placesCall(body: Record<string, unknown>, apiKey: string): Promis
     return null;
   }
   const data = await res.json();
-  return ((data.suggestions ?? []) as Array<Record<string, any>>)
+  return ((data.suggestions ?? []) as { placePrediction?: PlacePrediction }[])
     .map((s) => s.placePrediction)
-    .filter(Boolean)
+    .filter((p): p is PlacePrediction => Boolean(p))
     .map((p) => ({
       text: p.text?.text ?? "",
       main: p.structuredFormat?.mainText?.text ?? p.text?.text ?? "",
@@ -96,7 +101,7 @@ async function geocodeMatches(input: string, apiKey: string): Promise<Suggestion
     if (data.status !== "ZERO_RESULTS") logGoogleError("address-suggest", data);
     return [];
   }
-  return ((data.results ?? []) as Array<Record<string, any>>).slice(0, 5).map((r) => {
+  return ((data.results ?? []) as { formatted_address?: string }[]).slice(0, 5).map((r) => {
     const text = String(r.formatted_address ?? "");
     const [main, ...rest] = text.split(", ");
     return { text, main, secondary: rest.join(", ") };

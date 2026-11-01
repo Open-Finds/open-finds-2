@@ -23,12 +23,12 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: 'save-venue',
     title: 'Save places from any link',
-    body: 'Paste an Instagram, TikTok, Facebook or Google Maps link here and tap Extract Venue. We fill in the name, address and type for you, so your saved list builds itself.',
+    body: 'Open Save Venues and paste an Instagram, TikTok, Facebook or Google Maps link. The existing link tools help fill in the details before you save.',
   },
   {
-    target: 'plan-night',
+    target: 'tab-planner',
     title: 'Plan a night out',
-    body: 'Tap Start Planning, pick your vibes and how far you’ll travel. We build a night with times and stops from your saved places, or find somewhere new.',
+    body: 'Tap Plan for one shared itinerary. Switch between Random Night, Saved Venues, Our Picks and AI Finds without losing your selected stops.',
   },
   {
     target: 'tab-friends',

@@ -6,8 +6,6 @@ import {
   fetchRsvps,
   fetchSponsoredVenues,
   sortStops,
-  sortStopsByTime,
-  resequenceStopsByTime,
   type Plan,
   type Stop,
   type Rsvp,
@@ -15,25 +13,27 @@ import {
 } from '../lib/supabase';
 import { mapsDirectionsUrl } from '../lib/maps';
 import { useCountdown } from '../lib/countdown';
-import { ChevronLeft, CalendarPlus, Clock, Check, X, Clock3, Navigation, Share2, Smartphone, Star } from 'lucide-react';
+import { ChevronLeft, CalendarPlus, Clock, Check, X, Clock3, Navigation, Share2, Smartphone, Star, Pencil } from 'lucide-react';
 import { StopCard } from '../components/StopCard';
 import { AddToCalendar } from '../components/AddToCalendar';
 import { HostBadge } from '../components/Shared';
 import { InviteFriendsModal } from '../components/InviteFriendsModal';
-import { ShareOnSocialDialog } from '../components/ShareOnSocial';
-import { buildInviteMessage, getShareUrl } from '../lib/invite';
+import { EventShareSheet } from '../components/EventShareSheet';
+import { useAuth } from '../context/AuthContext';
 import { planToCalendarEvent } from '../lib/calendar';
 
 const VenueReviewsDialog = lazy(() => import('../components/SponsoredVenues').then((m) => ({ default: m.VenueReviewsDialog })));
 
 export function DashboardPage({
   id,
-  onBack,
+  onBack, onEditPlan,
 }: {
   id: string;
   onBack: () => void;
   onEditPlan: (planId: string) => void;
 }) {
+  const { session } = useAuth();
+  const [loadError, setLoadError] = useState(false);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
@@ -70,7 +70,7 @@ export function DashboardPage({
         setStops(sortStops(s));
         setRsvps(r);
         fetchSponsoredVenues().then((v) => { if (active) setSponsored(v); }, () => {});
-      } finally {
+      } catch { if (active) setLoadError(true); } finally {
         if (active) setLoading(false);
       }
     })();
@@ -86,6 +86,7 @@ export function DashboardPage({
       </div>
     );
   }
+  if (loadError) return <div className="ux-page"><p role="alert">Could not load this event.</p><button className="btn-outline mt-4" onClick={onBack}>Back to events</button></div>;
   if (!plan) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">
@@ -99,25 +100,17 @@ export function DashboardPage({
 
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
 
+  const isHost = !!session && plan.owner_id === session.user.id;
   const navUrl = mapsDirectionsUrl(stops.map((s) => s.address), plan.location) ?? '#';
 
-  /**
-   * A time edit changes the chronological order, so persist the new sequence
-   * rather than only re-sorting on screen — sort_order is what the next load
-   * reads back.
-   */
-  const handleStopSaved = async (updated: Stop) => {
+  // Time edits preserve the host's chosen itinerary order, including midnight.
+  const handleStopSaved = (updated: Stop) => {
     const next = stops.map((s) => (s.id === updated.id ? updated : s));
-    setStops(sortStopsByTime(next));
-    try {
-      setStops(await resequenceStopsByTime(id, next));
-    } catch {
-      // Ordering is cosmetic if this fails; the edit itself already saved.
-    }
+    setStops(sortStops(next));
   };
 
   return (
-    <div className="relative min-h-screen overflow-y-auto bg-background px-6 pt-20 pb-24">
+    <div className="ux-page event-summary-page relative pt-20">
       <button
         onClick={onBack}
         aria-label="Back"
@@ -127,9 +120,9 @@ export function DashboardPage({
       </button>
 
       <div className="mx-auto w-full">
-        {/* Header */}
+        {/* Header */}<div className="mb-4 flex items-center justify-between pr-24"><h2 className="text-heading">Event summary</h2>{isHost && <button className="ux-icon text-primary-text" onClick={() => onEditPlan(plan.id)} aria-label="Edit event"><Pencil size={18} /></button>}</div>
         <div className="rounded-lg border border-border bg-card p-5">
-          <h1 className="text-title text-foreground">{plan.title}</h1>
+          <h1 className="text-title text-foreground">{plan.title}</h1><p className="mt-1 text-small text-primary-text">{stops[0]?.time?.slice(0, 5) || "Time to be agreed"}</p>{plan.end_time && <p className="mt-1 text-small text-muted-foreground">Ends {plan.end_date} at {plan.end_time.slice(0, 5)}</p>}
           <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
             <CalendarPlus size={14} className="text-muted-foreground" />
             {parseLocalDate(plan.date).toLocaleDateString('en-AU', {
@@ -139,6 +132,7 @@ export function DashboardPage({
               year: 'numeric',
             })}
           </p>
+          {plan.location && <p className="mt-3 text-small text-muted-foreground">Meet up: {plan.location}</p>}
         </div>
 
         {/* Countdown */}
@@ -221,7 +215,7 @@ export function DashboardPage({
               const venue = isOver ? sponsoredFor(stop) : undefined;
               return (
                 <div key={stop.id}>
-                  <StopCard stop={stop} index={i} onSaved={handleStopSaved} />
+                  <StopCard stop={stop} index={i} onSaved={handleStopSaved} canEdit={isHost} />
                   {venue?.can_review && (
                     <button onClick={() => setReviewing(venue)} className={`${venue.reviewed_by_me ? 'btn-outline' : 'btn-secondary'} mt-2 w-full`}>
                       <Star size={18} /> {venue.reviewed_by_me ? 'See your review' : 'Leave a review · earn 1 credit'}
@@ -264,19 +258,13 @@ export function DashboardPage({
             onClick={() => setShareOpen(true)}
             className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-base font-medium text-foreground transition-all active:scale-[0.98]"
           >
-            <Share2 size={18} /> Share on Social
+            <Share2 size={18} /> Share your plan
           </button>
         </div>
       </div>
 
       <InviteFriendsModal open={inviteOpen} onClose={() => setInviteOpen(false)} planId={id} />
-      <ShareOnSocialDialog
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        title={plan.title}
-        message={buildInviteMessage(plan)}
-        url={getShareUrl(id)}
-      />
+      <EventShareSheet open={shareOpen} onClose={() => setShareOpen(false)} plan={plan} stops={stops} />
     </div>
   );
 }
