@@ -69,6 +69,7 @@ export default {
         },
         accent: {
           DEFAULT: 'hsl(var(--accent) / <alpha-value>)',
+          highlight: 'hsl(var(--accent-highlight) / <alpha-value>)',
           foreground: 'hsl(var(--accent-foreground) / <alpha-value>)',
         },
         popover: {

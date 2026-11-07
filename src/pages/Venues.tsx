@@ -577,7 +577,7 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
                   setShowAddForm(!showAddForm);
                   if (!showAddForm) resetForm();
                 }}
-                className={`${showAddForm ? 'btn-outline' : 'btn-info'} btn-sm shrink-0`}
+                className={`${showAddForm ? 'btn-outline' : 'btn-primary'} btn-sm shrink-0`}
               >
                 {showAddForm ? <X size={18} /> : <Plus size={18} />}
                 {showAddForm ? 'Close' : 'Save Venues'}
@@ -663,7 +663,7 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
                     <button
                       onClick={handleSaveMulti}
                       disabled={savingMulti || selectedItems.size === 0}
-                      className="btn-info mt-4 w-full"
+                      className="btn-primary mt-4 w-full"
                     >
                       {savingMulti ? (
                         <><Loader2 size={18} className="animate-spin" /> Saving...</>
@@ -751,7 +751,7 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="btn-info btn-lg w-full"
+                      className="btn-primary btn-lg w-full"
                     >
                       {saving ? 'Saving...' : 'Save Venue'}
                     </button>
@@ -862,7 +862,7 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
                               <>
                                 <button
                                   onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }}
-                                  className="ml-0.5 text-brand-yellow transition-opacity hover:text-brand-yellow/80 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                  className="ml-0.5 text-accent-highlight transition-opacity hover:text-accent-highlight/80 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                   aria-label="Rename collection"
                                 >
                                   <Pencil size={10} />

@@ -43,7 +43,7 @@ export function HomeDashboard({ onPlan, onVenues, onEvent, onSettings, onSave }:
       <button data-tour="tab-settings" onClick={onSettings} className="ux-icon" aria-label="Settings"><Settings size={21} /></button>
     </header>
     <div className="mb-6 flex items-center justify-between"><div><p className="text-caption text-primary-text">A little less someday.</p>
-      <h1 className="mt-1 text-title">Hi, {displayName?.split(' ')[0] || 'there'}<span className="text-primary-text">.</span></h1>
+      <h1 className="relative mt-1 w-fit text-title after:absolute after:-bottom-0.5 after:right-0 after:h-1 after:w-12 after:-rotate-3 after:rounded-full after:bg-accent-highlight">Hi, {displayName?.split(' ')[0] || 'there'}<span className="text-primary-text">.</span></h1>
       <p className="mt-1 text-small text-muted-foreground">{new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}</p></div>
       <div className="flex size-12 items-center justify-center rounded-full bg-primary-soft text-heading text-primary-text" aria-hidden="true">{displayName?.slice(0, 1).toUpperCase() || 'U'}</div>
     </div>
@@ -52,7 +52,7 @@ export function HomeDashboard({ onPlan, onVenues, onEvent, onSettings, onSave }:
       : state === 'error' ? <LoadError onRetry={() => setRetry((n) => n + 1)} /> : <>
         {next ? <button className="ux-next w-full text-left" onClick={() => onEvent(next.id)}>
           <div className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-text"><CalendarDays size={25} /></div>
-          <div className="min-w-0"><p className="text-caption text-muted-foreground">Next up · {parseLocalDate(next.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</p>
+          <div className="min-w-0"><p className="inline-block rounded-full bg-ai-soft px-2 py-0.5 text-caption text-ai-soft-foreground">Next up · {parseLocalDate(next.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</p>
             <h2 className="mt-1 truncate text-subheading">{next.title}</h2><p className="mt-1 text-small text-muted-foreground">{next.location || 'Meet-up details inside'}</p></div><ArrowRight size={18} className="ml-auto shrink-0" />
         </button> : <section className="ux-next"><CalendarDays className="shrink-0 text-primary-text" size={32} /><div><h2 className="text-subheading">Your next good story starts here.</h2><p className="mt-1 text-small text-muted-foreground">No upcoming events yet.</p></div></section>}
         <section className="mt-8"><div className="mb-4 flex items-center justify-between"><h2 className="text-heading">Ready when you are</h2><button onClick={onVenues} className="text-small font-semibold text-primary-text">All venues <ArrowRight size={13} className="inline" /></button></div>
@@ -70,6 +70,6 @@ export function HomeDashboard({ onPlan, onVenues, onEvent, onSettings, onSave }:
       { mode: 'random' as const, label: 'Random Night', hint: 'A new mix of your saved spots', Icon: Shuffle },
       { mode: 'picks' as const, label: 'Our Picks', hint: 'Places we have onboarded', Icon: Star },
       { mode: 'ai' as const, label: 'AI Finds', hint: 'Your mood. Your next discovery.', Icon: Sparkles },
-    ].map(({ mode, label, hint, Icon }) => <button key={mode} onClick={() => onPlan(mode)} className="ux-next text-left"><Icon size={23} className="shrink-0 text-primary-text" /><div><h3 className="text-label">{label}</h3><p className="mt-1 text-small text-muted-foreground">{hint}</p></div><ArrowRight className="ml-auto shrink-0" size={17} /></button>)}</div></section>
+    ].map(({ mode, label, hint, Icon }) => <button key={mode} onClick={() => onPlan(mode)} className="ux-next text-left"><Icon size={23} className={mode === 'ai' ? 'shrink-0 text-accent-highlight' : 'shrink-0 text-primary-text'} /><div><h3 className="text-label">{label}</h3><p className="mt-1 text-small text-muted-foreground">{hint}</p></div><ArrowRight className="ml-auto shrink-0" size={17} /></button>)}</div></section>
   </main>;
 }
