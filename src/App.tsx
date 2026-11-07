@@ -55,6 +55,7 @@ function Shell({
   onOpenNotifications,
   isEditingItinerary = false,
   guard,
+  inlineNotifications = false,
 }: {
   children: React.ReactNode;
   view: View;
@@ -63,6 +64,7 @@ function Shell({
   onOpenNotifications: () => void;
   isEditingItinerary?: boolean;
   guard?: React.ReactNode;
+  inlineNotifications?: boolean;
 }) {
   return (
     <>
@@ -71,7 +73,7 @@ function Shell({
       </div>
 
       {/* Hidden while editing an itinerary: leaving would drop unsaved edits. */}
-      {!isEditingItinerary && <button
+      {!isEditingItinerary && !inlineNotifications && <button
         onClick={onOpenNotifications}
         className="fixed right-4 top-4 z-50 flex size-11 items-center justify-center rounded-full border border-border bg-card text-primary-text shadow-1 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 sm:right-5 sm:top-5"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
@@ -84,7 +86,7 @@ function Shell({
         )}
       </button>}
 
-      {view !== 'home' && view !== 'planner' && !isEditingItinerary && <button aria-label="Settings" onClick={() => onChangeView('settings')} className="ux-icon fixed right-16 top-4 z-40"><Settings size={19} /></button>}
+      {view !== 'home' && view !== 'planner' && view !== 'discover' && !isEditingItinerary && <button aria-label="Settings" onClick={() => onChangeView('settings')} className="ux-icon fixed right-16 top-4 z-40"><Settings size={19} /></button>}
       <MainNavigation view={view} onChange={onChangeView} />
       {guard}
     </>
@@ -139,7 +141,7 @@ function AppInner() {
     } else if (route.name === 'home') {
       setDashboardId(null);
       setView('home');
-    } else if (route.name === 'events' || route.name === 'friends' || route.name === 'settings' || route.name === 'planner') {
+    } else if (route.name === 'events' || route.name === 'friends' || route.name === 'settings' || route.name === 'planner' || route.name === 'discover') {
       setDashboardId(null); setView(route.name);
     } else if (route.name === 'create' || route.name === 'build') {
       setDashboardId(null); setView('planner');
@@ -254,6 +256,11 @@ function AppInner() {
     setShowNotifications(false);
     setSlideDir(v === 'home' ? 'right' : 'left');
     setView(v);
+    if (v === 'planner' && view !== 'planner') {
+      setPlannerMode(undefined);
+      setPlannerSeed([]);
+      setPlannerCollection('');
+    }
     if (v === 'home') {
       // Remount Home to refresh its statistics; planner drafts remain saved.
       setHomeResetKey((k) => k + 1);
@@ -261,12 +268,13 @@ function AppInner() {
     } else navigate(`/${v}`);
   };
   const switchView = (v: View) => {
-    if (editPlanId || (plannerDirty && view === 'planner' && v !== 'planner')) { setPendingView(v); return; }
+    if (editPlanId || (plannerDirty && (view === 'planner' || view === 'discover') && v !== view)) { setPendingView(v); return; }
     applyView(v);
   };
   const startPlanner = (mode?: PlannerMode, seed?: SavedVenue, collection = '') => {
+    applyView('planner');
     setPlannerMode(mode); setPlannerSeed(seed ? [seed] : []); setPlannerCollection(collection);
-    setHomeResetKey((k) => k + 1); applyView('planner');
+    setHomeResetKey((k) => k + 1);
   };
 
   const openDashboard = (planId: string) => {
@@ -351,21 +359,22 @@ function AppInner() {
   }
 
   return (
-    <Shell {...shellProps}>
+    <Shell {...shellProps} inlineNotifications={view === 'home'}>
       {tourActive && <GuidedTour initialDietary={dietaryPreferences} onFinish={finishTour} />}
       <div key={view === 'home' ? `home-${homeResetKey}` : view} className={`animate-slide-${slideDir}`}>
         {view === 'home' ? (
           <HomeDashboard onPlan={startPlanner} onVenues={() => switchView('venues')} onEvent={openDashboard}
-            onSettings={() => switchView('settings')} onSave={() => { setOpenSave(true); switchView('venues'); }} />
-        ) : view === 'planner' ? (
-          <UnifiedPlanner key={`planner-${homeResetKey}`} mode={plannerMode} seed={plannerSeed} collectionId={plannerCollection}
+            onEvents={() => switchView('events')} onSettings={() => switchView('settings')}
+            unreadCount={unreadCount} onNotifications={shellProps.onOpenNotifications} onSave={() => { setOpenSave(true); switchView('venues'); }} />
+        ) : view === 'planner' || view === 'discover' ? (
+          <UnifiedPlanner key={`${view}-${homeResetKey}`} mode={view === 'discover' ? 'ai' : plannerMode} seed={view === 'discover' ? undefined : plannerSeed} collectionId={view === 'discover' ? undefined : plannerCollection}
             onDirty={setPlannerDirty} onDone={(id) => { setPlannerDirty(false); openDashboard(id); }} onCancel={() => { setPlannerDirty(false); applyView('home'); }} />
         ) : view === 'events' ? (
           <EventsPage onOpenPlan={openDashboard} onPlan={() => startPlanner()} />
         ) : view === 'friends' ? (
           <FriendsPage />
         ) : view === 'settings' ? (
-          <SettingsPage onBack={() => switchView('home')} />
+          <SettingsPage onBack={() => switchView('home')} onFriends={() => switchView('friends')} />
         ) : (
           <VenuesPage initialAdd={openSave} sharedLink={incomingShare} onPlan={(v) => startPlanner('saved', v)}
             onPlanCollection={(id) => startPlanner('saved', undefined, id)} />

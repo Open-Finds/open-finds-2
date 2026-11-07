@@ -1,19 +1,33 @@
-import { BrandLogo } from '../components/BrandLogo';
 import { useEffect, useState } from 'react';
-import { ArrowRight, CalendarDays, Check, Shuffle, Sparkles, Star, Settings, Plus } from 'lucide-react';
-import { fetchSavedVenues, fetchAllPlans, fetchInvitedPlanIds, fetchPlansByIds, type SavedVenue, type Plan } from '../lib/supabase';
-import { localDate, savedCandidate, type PlannerMode } from '../lib/planner';
+import { ArrowRight, Bell, Bookmark, CalendarDays, ChevronRight, Heart, Plus, Utensils } from 'lucide-react';
+import {
+  fetchSavedVenues, fetchAllPlans, fetchInvitedPlanIds, fetchPlansByIds, fetchStops, fetchRsvps,
+  sortStops, updateSavedVenue, type SavedVenue, type Plan, type Rsvp,
+} from '../lib/supabase';
+import { localDate, type PlannerMode } from '../lib/planner';
 import { useAuth } from '../context/AuthContext';
-import { DiscoveryCard } from '../components/DiscoveryCard';
 import { LoadError } from '../components/LoadError';
-import { parseLocalDate } from '../lib/time';
+import { formatTime, parseLocalDate } from '../lib/time';
 import { VenueDetails } from '../components/VenueDetails';
 import { SavedVenueCard } from '../components/SavedVenueCard';
+import { VenueThumb } from '../components/VenueThumb';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
+import { CATEGORY_SHORT, categoryOf } from '../lib/taxonomy';
 
-export function HomeDashboard({ onPlan, onVenues, onEvent, onSettings, onSave }: {
-  onPlan: (mode?: PlannerMode, seed?: SavedVenue) => void; onVenues: () => void;
-  onEvent: (id: string) => void; onSettings: () => void; onSave: () => void;
+const favouriteTag = 'Favourite';
+const isFavourite = (tag: string) => tag.trim().toLowerCase() === favouriteTag.toLowerCase();
+
+export function HomeDashboard({
+  onPlan, onVenues, onEvent, onEvents, onSettings, onSave, onNotifications, unreadCount,
+}: {
+  onPlan: (mode?: PlannerMode, seed?: SavedVenue) => void;
+  onVenues: () => void;
+  onEvent: (id: string) => void;
+  onEvents: () => void;
+  onSettings: () => void;
+  onSave: () => void;
+  onNotifications: () => void;
+  unreadCount: number;
 }) {
   const { displayName, session } = useAuth();
   const [detail, setDetail] = useState<SavedVenue | null>(null);
@@ -22,54 +36,176 @@ export function HomeDashboard({ onPlan, onVenues, onEvent, onSettings, onSave }:
   const [plans, setPlans] = useState<Plan[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retry, setRetry] = useState(0);
+  const [nextTime, setNextTime] = useState('');
+  const [going, setGoing] = useState<Rsvp[] | null>(null);
+  const [savingFavourite, setSavingFavourite] = useState<string | null>(null);
+  const [favouriteError, setFavouriteError] = useState(false);
+
   useEffect(() => {
     let live = true;
-    Promise.all([fetchSavedVenues(), fetchAllPlans(), fetchInvitedPlanIds().then(fetchPlansByIds)]).then(([v, own, invited]) => {
+    Promise.all([fetchSavedVenues(), fetchAllPlans(), fetchInvitedPlanIds().then(fetchPlansByIds)]).then(([saved, own, invited]) => {
       if (!live) return;
-      setVenues(v); setPlans([...new Map([...own, ...invited].map((p) => [p.id, p])).values()]
-        .filter((p) => !p.canceled && p.date >= localDate()).sort((a, b) => a.date.localeCompare(b.date)));
+      setVenues(saved);
+      setPlans([...new Map([...own, ...invited].map(plan => [plan.id, plan])).values()]
+        .filter(plan => !plan.canceled && plan.date >= localDate()).sort((a, b) => a.date.localeCompare(b.date)));
       setState('ready');
     }, () => { if (live) setState('error'); });
     return () => { live = false; };
   }, [retry]);
-  const visited = venues.filter((v) => v.visited).length;
-  const percentage = venues.length ? Math.round(visited / venues.length * 100) : 0;
+
   const next = plans[0];
-  return <main className="ux-page">
-    {detail && <VenueDetails venue={detail} owned={detail.user_id === session?.user.id} onClose={() => setDetail(null)} onPlan={() => { onPlan('saved', detail); setDetail(null); }} onEdit={() => { setEditing(detail); setDetail(null); }} onSaved={(updated) => { setDetail(updated); setVenues((prev) => prev.map((v) => v.id === updated.id ? updated : v)); }} />}
-    <Sheet open={!!editing} onOpenChange={(open) => !open && setEditing(null)}><SheetContent side="bottom" className="lg:mx-auto lg:max-w-2xl"><SheetHeader><SheetTitle>Edit saved venue</SheetTitle><SheetDescription>Changes update your saved library.</SheetDescription></SheetHeader>{editing && <SavedVenueCard venue={editing} isEditing onEditStart={() => {}} onEditEnd={() => setEditing(null)} onSaved={(updated) => setVenues((prev) => prev.map((v) => v.id === updated.id ? updated : v))} />}</SheetContent></Sheet>
-    <header className="mb-7 flex items-center justify-between pr-14">
-      <BrandLogo size={30} />
-      <button data-tour="tab-settings" onClick={onSettings} className="ux-icon" aria-label="Settings"><Settings size={21} /></button>
-    </header>
-    <div className="mb-6 flex items-center justify-between"><div><p className="text-caption text-primary-text">A little less someday.</p>
-      <h1 className="relative mt-1 w-fit text-title after:absolute after:-bottom-0.5 after:right-0 after:h-1 after:w-12 after:-rotate-3 after:rounded-full after:bg-accent-highlight">Hi, {displayName?.split(' ')[0] || 'there'}<span className="text-primary-text">.</span></h1>
-      <p className="mt-1 text-small text-muted-foreground">{new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}</p></div>
-      <div className="flex size-12 items-center justify-center rounded-full bg-primary-soft text-heading text-primary-text" aria-hidden="true">{displayName?.slice(0, 1).toUpperCase() || 'U'}</div>
-    </div>
-    <section className="adventure-intro mb-5" aria-labelledby="adventure-title"><p className="adventure-kicker">Out of the group chat. Into the city.</p><h2 id="adventure-title" className="adventure-display mt-3 text-foreground">Good plans.<br />Great stories.</h2><p className="mt-3 max-w-md text-small text-muted-foreground">That place you saved? Make it your next adventure.</p><div className="mt-5 grid max-w-sm grid-cols-2 gap-2"><button className="btn-primary px-3 text-small" onClick={() => onPlan()}>Make a plan</button><button className="btn-ghost px-2 text-small text-info" onClick={onSave}>Save a place<ArrowRight size={15} /></button></div></section>
-    {state === 'loading' ? <p role="status" className="py-6 text-muted-foreground">Getting your next good plan ready…</p>
-      : state === 'error' ? <LoadError onRetry={() => setRetry((n) => n + 1)} /> : <>
-        {next ? <button className="ux-next w-full text-left" onClick={() => onEvent(next.id)}>
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-text"><CalendarDays size={25} /></div>
-          <div className="min-w-0"><p className="inline-block rounded-full bg-ai-soft px-2 py-0.5 text-caption text-ai-soft-foreground">Next up · {parseLocalDate(next.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</p>
-            <h2 className="mt-1 truncate text-subheading">{next.title}</h2><p className="mt-1 text-small text-muted-foreground">{next.location || 'Meet-up details inside'}</p></div><ArrowRight size={18} className="ml-auto shrink-0" />
-        </button> : <section className="ux-next"><CalendarDays className="shrink-0 text-primary-text" size={32} /><div><h2 className="text-subheading">Your next good story starts here.</h2><p className="mt-1 text-small text-muted-foreground">No upcoming events yet.</p></div></section>}
-        <section className="mt-8"><div className="mb-4 flex items-center justify-between"><h2 className="text-heading">Ready when you are</h2><button onClick={onVenues} className="text-small font-semibold text-primary-text">All venues <ArrowRight size={13} className="inline" /></button></div>
-          {venues.length ? <div className="home-venue-preview grid grid-cols-2 gap-3 lg:grid-cols-3">{venues.slice(0, 3).map((v) => <DiscoveryCard key={v.id} venue={savedCandidate(v)} onOpen={() => setDetail(v)} actionLabel="Plan it" onSelect={() => onPlan('saved', v)} />)}</div>
-            : <div className="rounded-lg border border-dashed border-border p-6"><p className="text-small text-muted-foreground">Good plans start with a place worth saving.</p><button data-tour="save-venue" onClick={onSave} className="btn-outline mt-3"><Plus size={16} />Save Venues</button></div>}
-        </section>
-        <div className="my-3 grid grid-cols-2 gap-3">
-          <button onClick={onVenues} className="ux-stat text-left"><strong className="text-title tabular-nums">{venues.length}</strong><span className="text-caption text-muted-foreground">Saved venues</span></button>
-          <div className="ux-stat"><strong className="text-title tabular-nums">{plans.length}</strong><span className="text-caption text-muted-foreground">Upcoming events</span></div>
+  const nextId = next?.id;
+  useEffect(() => {
+    if (!nextId) return;
+    let live = true;
+    void fetchStops(nextId).then(stops => {
+      const first = sortStops(stops)[0];
+      if (live && first?.time) setNextTime(formatTime(first.time));
+    }).catch(() => {});
+    void fetchRsvps(nextId).then(rsvps => {
+      if (live) setGoing(rsvps.filter(rsvp => rsvp.status === 'in'));
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [nextId]);
+
+  const updateVenue = (updated: SavedVenue) => setVenues(current => current.map(venue => venue.id === updated.id ? updated : venue));
+  const toggleFavourite = async (venue: SavedVenue) => {
+    const tags = venue.tags ?? [];
+    setSavingFavourite(venue.id);
+    setFavouriteError(false);
+    try {
+      updateVenue(await updateSavedVenue(venue.id, {
+        tags: tags.some(isFavourite) ? tags.filter(tag => !isFavourite(tag)) : [...tags, favouriteTag],
+      }));
+    } catch {
+      setFavouriteError(true);
+    } finally {
+      setSavingFavourite(null);
+    }
+  };
+
+  const visited = venues.filter(venue => venue.visited).length;
+  const percentage = venues.length ? Math.round(visited / venues.length * 100) : 0;
+  const firstName = displayName?.trim().split(/\s+/)[0] || 'there';
+  const avatar = session?.user.user_metadata?.avatar_url ?? session?.user.user_metadata?.picture;
+
+  return (
+    <main className="ux-page reference-home">
+      {detail && <VenueDetails venue={detail} owned={detail.user_id === session?.user.id}
+        onClose={() => setDetail(null)} onPlan={() => { onPlan('saved', detail); setDetail(null); }}
+        onEdit={() => { setEditing(detail); setDetail(null); }}
+        onSaved={updated => { setDetail(updated); updateVenue(updated); }} />}
+      <Sheet open={!!editing} onOpenChange={open => { if (!open) setEditing(null); }}>
+        <SheetContent side="bottom" className="lg:mx-auto lg:max-w-2xl">
+          <SheetHeader><SheetTitle>Edit saved venue</SheetTitle><SheetDescription>Changes update your saved library.</SheetDescription></SheetHeader>
+          {editing && <SavedVenueCard venue={editing} isEditing onEditStart={() => {}} onEditEnd={() => setEditing(null)} onSaved={updateVenue} />}
+        </SheetContent>
+      </Sheet>
+
+      <header className="reference-header">
+        <div className="reference-wordmark">
+          <svg viewBox="0 0 44 44" width="38" height="38" aria-hidden>
+            <path d="M20 40c-5-7-14-14-14-23a14 14 0 1 1 28 0c0 9-9 16-14 23Z" fill="none" stroke="currentColor" strokeWidth="4" />
+            <path d="m20 8 2.5 5.5 6 .7-4.5 4.1 1.3 5.9-5.3-3-5.3 3 1.3-5.9-4.5-4.1 6-.7Z" fill="currentColor" />
+          </svg>
+          <span>The Unsaved</span>
         </div>
-        <section className="rounded-lg border border-border bg-card p-4"><div className="flex items-center justify-between"><div><strong className="text-heading tabular-nums">{visited}/{venues.length}</strong><p className="text-caption text-muted-foreground">Turned real</p></div><p className="text-small text-muted-foreground">{percentage}% visited <Check size={14} className="inline text-primary-text" /></p></div>
-          <progress aria-label="Saved venues visited" value={visited} max={venues.length || 1} className="ux-progress mt-3 w-full" /></section>
-      </>}
-    <section className="mt-8"><h2 className="mb-4 text-heading">Where will you end up?</h2><div className="grid gap-3 md:grid-cols-3">{[
-      { mode: 'random' as const, label: 'Random Night', hint: 'A new mix of your saved spots', Icon: Shuffle },
-      { mode: 'picks' as const, label: 'Our Picks', hint: 'Places we have onboarded', Icon: Star },
-      { mode: 'ai' as const, label: 'AI Finds', hint: 'Your mood. Your next discovery.', Icon: Sparkles },
-    ].map(({ mode, label, hint, Icon }) => <button key={mode} onClick={() => onPlan(mode)} className="ux-next text-left"><Icon size={23} className={mode === 'ai' ? 'shrink-0 text-accent-highlight' : 'shrink-0 text-primary-text'} /><div><h3 className="text-label">{label}</h3><p className="mt-1 text-small text-muted-foreground">{hint}</p></div><ArrowRight className="ml-auto shrink-0" size={17} /></button>)}</div></section>
-  </main>;
+        <button type="button" onClick={onNotifications} className="reference-bell"
+          aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}>
+          <Bell size={23} />
+          {unreadCount > 0 && <span className="reference-unread">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+        </button>
+      </header>
+
+      <div className="reference-greeting">
+        <div className="min-w-0">
+          <h1>Hi, <span className="reference-stroke">{firstName}</span></h1>
+          <p>{new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        </div>
+        <button type="button" data-tour="tab-settings" className="reference-avatar" onClick={onSettings} aria-label="Profile and settings">
+          <span aria-hidden>{firstName.slice(0, 1).toUpperCase()}</span>
+          {typeof avatar === 'string' && /^https:\/\//i.test(avatar) && <img src={avatar} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.hidden = true; }} />}
+        </button>
+      </div>
+
+      {state === 'loading' ? <p role="status" className="py-6 text-muted-foreground">Getting your next good plan ready…</p>
+        : state === 'error' ? <LoadError onRetry={() => { setState('loading'); setRetry(count => count + 1); }} /> : <>
+          {next ? (
+            <button type="button" className="reference-panel reference-next" onClick={() => onEvent(next.id)}>
+              <span className="reference-event-icon"><Utensils size={28} /></span>
+              <span className="min-w-0">
+                <span className="reference-badge">Next up · {parseLocalDate(next.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                <span className="reference-event-title">{next.title}</span>
+                <span className="reference-event-meta">{[nextTime, next.location].filter(Boolean).join(' · ') || 'Meet-up details inside'}</span>
+                {going && going.length > 0 && <span className="reference-going">
+                  {going.slice(0, 3).map(person => <span aria-hidden key={person.id}>{person.name.trim().charAt(0).toUpperCase()}</span>)}
+                  <strong>{going.length} going</strong>
+                </span>}
+              </span>
+              <ChevronRight size={22} aria-hidden />
+            </button>
+          ) : (
+            <button type="button" className="reference-panel reference-next" onClick={() => onPlan()}>
+              <span className="reference-event-icon"><CalendarDays size={27} /></span>
+              <span><span className="reference-event-title">Make a plan</span><span className="reference-event-meta">No upcoming events yet.</span></span>
+              <ChevronRight size={22} aria-hidden />
+            </button>
+          )}
+
+          <div className="reference-stats">
+            <button type="button" className="reference-panel reference-stat" onClick={onVenues}>
+              <strong className="reference-stroke">{venues.length}</strong><Bookmark aria-hidden /><span>Saved venues</span>
+            </button>
+            <button type="button" className="reference-panel reference-stat" onClick={onEvents}>
+              <strong>{plans.length}</strong><CalendarDays aria-hidden /><span>Upcoming events</span>
+            </button>
+          </div>
+
+          <section className="reference-panel reference-progress" aria-labelledby="turned-real">
+            <div><strong>{visited}/{venues.length}</strong><h2 id="turned-real">Turned real</h2></div>
+            <p>{percentage}% of saved venues visited</p>
+            <progress aria-label="Saved venues visited" value={visited} max={venues.length || 1} />
+          </section>
+
+          <section className="reference-recommendations" aria-labelledby="ready-title">
+            <div className="reference-section-heading">
+              <h2 id="ready-title" className="reference-stroke">Ready when you are</h2>
+              <button type="button" onClick={onVenues}>All venues ({venues.length}) <ChevronRight size={15} aria-hidden /></button>
+            </div>
+            {favouriteError && <p role="alert" className="mb-2 text-small text-destructive-text">Could not update the favourite. Try again.</p>}
+            {venues.length ? (
+              <div className="reference-venues">
+                {venues.slice(0, 2).map(venue => {
+                  const favourite = venue.tags?.some(isFavourite) ?? false;
+                  return <article key={venue.id} className="reference-panel reference-venue">
+                    <div className="reference-venue-cover">
+                      <Utensils size={26} aria-hidden className="reference-photo-placeholder" />
+                      <VenueThumb venueId={venue.id} type={venue.type} photoUrl={venue.photo_url} checked={!!venue.photo_checked_at}
+                        canFetch={venue.user_id === session?.user.id} className="reference-photo" />
+                      <span className="reference-badge">{CATEGORY_SHORT[categoryOf(venue)]}</span>
+                      <button type="button" className="reference-heart" aria-label={`Favourite ${venue.name}`} aria-pressed={favourite}
+                        disabled={savingFavourite !== null} onClick={() => void toggleFavourite(venue)}>
+                        <Heart size={19} fill={favourite ? 'currentColor' : 'none'} />
+                      </button>
+                    </div>
+                    <div className="reference-venue-body">
+                      <button type="button" className="reference-venue-name" onClick={() => setDetail(venue)}>{venue.name}</button>
+                      <p>{venue.address}</p>
+                      <button type="button" className="reference-plan" aria-label={`Plan it at ${venue.name}`} onClick={() => onPlan('saved', venue)}>
+                        Plan It <ArrowRight size={16} aria-hidden />
+                      </button>
+                    </div>
+                  </article>;
+                })}
+              </div>
+            ) : (
+              <div className="reference-panel p-4">
+                <p className="text-small text-muted-foreground">Save a place to see it here.</p>
+                <button type="button" data-tour="save-venue" onClick={onSave} className="btn-primary mt-2"><Plus size={17} />Save Venues</button>
+              </div>
+            )}
+          </section>
+        </>}
+    </main>
+  );
 }

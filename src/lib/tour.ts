@@ -21,7 +21,7 @@ export type TourStep = { target: string; title: string; body: string; dietary?: 
 
 export const TOUR_STEPS: TourStep[] = [
   {
-    target: 'save-venue',
+    target: 'tab-venues',
     title: 'Save places from any link',
     body: 'Open Save Venues and paste an Instagram, TikTok, Facebook or Google Maps link. The existing link tools help fill in the details before you save.',
   },
@@ -31,9 +31,9 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'Tap Plan for one shared itinerary. Switch between Random Night, Saved Venues, Our Picks and AI Finds without losing your selected stops.',
   },
   {
-    target: 'tab-friends',
+    target: 'tab-settings',
     title: 'Bring your friends',
-    body: 'Add friends here and make group collections you all add places to. When a plan is ready, invite them in the app or share the link. Anyone can RSVP, even without the app.',
+    body: 'Open your profile and choose Friends and group collections to add friends and share places. When a plan is ready, invite them in the app or share the link. Anyone can RSVP, even without the app.',
   },
   {
     target: 'tab-settings',

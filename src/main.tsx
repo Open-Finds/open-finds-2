@@ -7,6 +7,7 @@ import { initMonitoring, reportError } from './lib/monitoring';
 import { captureSharedLink, listenForInstallPrompt } from './lib/shareTarget';
 import './index.css';
 import './theme.css';
+import './home-dashboard.css';
 import './preview.css';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {

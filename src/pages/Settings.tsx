@@ -23,7 +23,7 @@ const DIETARY_OPTIONS = [
   { key: 'pescatarian', label: 'Pescatarian' },
 ];
 
-export function SettingsPage({ onBack }: { onBack: () => void }) {
+export function SettingsPage({ onBack, onFriends }: { onBack: () => void; onFriends?: () => void }) {
   const [privacy, setPrivacy] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState('');
   const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, premiumUnlocked, isVenuePartner, role } = useAuth();
@@ -179,6 +179,8 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
       <div className="mx-auto w-full">
         <h1 className="text-title text-foreground">Settings</h1>
         <p className="mt-1 mb-8 text-sm text-muted-foreground">{currentEmail}</p>
+
+        {onFriends && <button type="button" onClick={onFriends} className="btn-outline mb-6">Friends and group collections</button>}
 
         {/* Appearance */}
         <section className="mb-6 rounded-lg border border-border bg-card p-5">
