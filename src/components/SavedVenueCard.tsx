@@ -1,5 +1,6 @@
+import { tagLabel } from '../lib/taxonomy';
 import { useState } from 'react';
-import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2, Trash2 } from 'lucide-react';
+import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2, Trash2, BookmarkCheck } from 'lucide-react';
 import {
   deleteSavedVenue,
   updateSavedVenue,
@@ -9,20 +10,15 @@ import {
   type Collection,
 } from '../lib/supabase';
 import { geocodeAddress } from '../lib/apiKeys';
-import { VenueTypeSelect } from './ui/select';
+import { CategoryPicker } from './CategoryPicker';
 import { CheckItOut } from './CheckItOut';
 import { AddressInput } from './AddressInput';
 import { VenueThumb } from './VenueThumb';
-import { TYPE_ICONS } from '../lib/partners';
-
-const TYPE_LABELS: Record<VenueType, string> = {
-  food: 'Food',
-  activity: 'Activity',
-  dessert: 'Dessert',
-  bar: 'Bar',
-};
+import { CATEGORY_EMOJI } from '../lib/taxonomy';
+import { categoryOf, CATEGORY_LABELS } from '../lib/planner';
 
 type Props = {
+  onOpen?: () => void;
   venue: SavedVenue;
   isEditing: boolean;
   onEditStart: () => void;
@@ -48,6 +44,7 @@ type Props = {
 };
 
 export function SavedVenueCard({
+  onOpen,
   venue,
   isEditing,
   onEditStart,
@@ -199,11 +196,7 @@ export function SavedVenueCard({
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Type</label>
-            <VenueTypeSelect
-              value={editType}
-              onChange={setEditType}
-              className="rounded-lg border-border bg-background px-3 py-2 text-sm"
-            />
+            <CategoryPicker type={editType} tags={editTags} onChange={(value) => { setEditType(value.type); setEditTags(value.tags); }} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Tags</label>
@@ -237,7 +230,7 @@ export function SavedVenueCard({
                     key={tag}
                     className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                   >
-                    {tag}
+                    {tagLabel(tag)}
                     <button
                       onClick={() => removeTag(tag)}
                       type="button"
@@ -340,8 +333,8 @@ export function SavedVenueCard({
 
   return (
     <div
-      onClick={selectable ? onSelect : undefined}
-      className={`group relative flex min-w-0 items-start gap-3 rounded-md border p-4 transition-all [overflow-wrap:anywhere] ${
+      onClick={selectable ? onSelect : onOpen ? (e) => { if (!(e.target as HTMLElement).closest('button,a,input,select')) onOpen(); } : undefined}
+      className={`adventure-card group relative flex min-w-0 flex-col items-start gap-4 rounded-lg border p-4 sm:flex-row [overflow-wrap:anywhere] ${
         selectable ? 'cursor-pointer active:scale-[0.98]' : ''
       } ${
         isSelected
@@ -349,13 +342,14 @@ export function SavedVenueCard({
           : 'border-border bg-card hover:border-input'
       }`}
     >
-      <VenueThumb venueId={venue.id} type={venue.type} photoUrl={venue.photo_url} checked={!!venue.photo_checked_at} canFetch={!readOnly} />
-      <div className="min-w-0 flex-1">
-        <h3 className="truncate pr-8 font-semibold text-foreground">{venue.name}</h3>
+      <VenueThumb venueId={venue.id} type={venue.type} photoUrl={venue.photo_url} checked={!!venue.photo_checked_at} canFetch={!readOnly} className="h-44 w-full sm:h-32 sm:w-32" />
+      <div className="min-w-0 w-full flex-1">
+        <h3 className="pr-8 font-semibold text-foreground">{onOpen ? <button className="text-left" onClick={onOpen}>{venue.name}</button> : venue.name}</h3>
         <p className="mt-1 flex items-start gap-1 text-sm text-muted-foreground">
           <MapPin size={13} className="mt-1 shrink-0 text-muted-foreground" /> {venue.address}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {!readOnly && <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2.5 py-0.5 text-xs font-medium text-info"><BookmarkCheck size={11} />Saved</span>}
           {/* Visited, rating and note are the owner's own; other members don't see them. */}
           {!readOnly && venue.visited && (
             <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success-soft px-2.5 py-0.5 text-xs font-medium text-success"><CheckCircle2 size={11} /> Visited</span>
@@ -372,7 +366,7 @@ export function SavedVenueCard({
             </span>
           ))}
           <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
-            {TYPE_ICONS[venue.type] ?? ''} {TYPE_LABELS[venue.type as VenueType] ?? venue.type}
+            {CATEGORY_EMOJI[categoryOf(venue)]} {CATEGORY_LABELS[categoryOf(venue)]}
           </span>
           {tags.map((tag) => (
             <span
@@ -380,7 +374,7 @@ export function SavedVenueCard({
               className="inline-flex items-center gap-1 rounded-full bg-ai-soft px-2 py-0.5 text-xs font-medium text-ai-soft-foreground"
             >
               <Tag size={12} />
-              {tag}
+              {tagLabel(tag)}
             </span>
           ))}
         </div>
@@ -413,7 +407,7 @@ export function SavedVenueCard({
           handleEdit();
         }}
         aria-label="Edit venue"
-        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-brand-yellow bg-transparent text-brand-yellow transition-all hover:bg-brand-yellow/10 active:scale-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        className="absolute right-3 top-3 flex size-11 items-center justify-center rounded-full border border-border bg-card text-primary-text transition-all hover:bg-primary-soft"
       >
         <Pencil size={14} />
       </button>}

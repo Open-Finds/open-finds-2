@@ -1,0 +1,21 @@
+# V5 category and persistence audit — 28 October 2026
+
+Scope: repository definitions/migrations, existing extraction/classification code, device drafts, and the disposable QA backend. Production row values have **not** been inventoried or changed. Do not interpret schema inspection or QA records as a production data audit.
+
+The storage contract is `food | activity | dessert | bar` (`VenueType`, Saved Venues, partner constraints; see `20260921090000_add_bar_venue_type.sql`). Existing tags are arbitrary text arrays. The prior UI represented Nightlife through `nightlife-music` tags. Events have ordered stops and a free-text plan type; stops have no independent category/cuisine/specialty columns. The partner discovery RPC exposes the four-value type and no structured cuisine/specialty tags.
+
+V5 keeps those storage values intact. New Outdoors selections use type `activity` plus `category:outdoors`; Nightlife uses type `bar` plus `category:nightlife`. A single primary category is used for filtering. Explicit correction replaces only category markers and preserves custom tags. Activity is never automatically duplicated into Outdoors; outdoor seating does not make a restaurant an outdoor-adventure venue. Legacy category aliases remain readable. No venue is renamed, deleted or reclassified in bulk.
+
+Canonical cuisine/specialty/attribute IDs are stored as namespaced entries in the existing tags array on explicit new saves/edits. Examples: `cuisine:japanese`, `specialty:pho`, `specialty:banh_mi`, `specialty:korean_bbq`. User custom tags survive. The UI displays readable labels. Cuisine never implies a specialty; broader/narrower relations are explicit (`pho` → `noodle_soup`, not the reverse). Model tag suggestions require explicit venue-name evidence for automatic structured tags. Other metadata can still be reviewed/corrected by the user, but is not silently promoted into structured claims. This conservative boundary means many real venues retain incomplete cuisine/specialty metadata until verified or corrected.
+
+AI mood chips are a separate curated preference library, not permanent tags. Cuisine/specialty/category preferences filter known records first. Occasion/budget/mood guide the existing AI ranking service and are not assertions about a venue's price or suitability. Unknown model recommendation IDs are rejected. No new AI provider or external verification service was added.
+
+Partner records without classification metadata remain in their legacy category; Outdoors/Nightlife filters may have no results. A future additive partner classification/RPC extension needs staging review. Do not infer missing specialties or fabricate partner records to populate those filters.
+
+Old device drafts gain zero Outdoors preferences, blank end time and an empty vibe selection list without clearing their itinerary. Existing event types and stop IDs are retained during editing. Matching saved records restore their category metadata where available; unmatched historical stops remain identified as event stops.
+
+Before any substantial persisted-data normalization, obtain a read-only inventory from the actual target environment using the accompanying SQL. Review uncommon values/custom tags and source evidence before proposing a forward migration. No tag-normalization migration has been prepared or executed.
+
+Optional end time is separate from taxonomy. `20261028120000_optional_event_end.sql` is an **unapplied additive proposal** for nullable `plans.end_time` and `plans.end_date`, a paired-field constraint and a capability flag. The existing share RPC serializes the plan minus ownership identifiers, so the new public event fields will flow through it without widening account privileges. Frontend creation checks the flag before sending these fields. Backends without it preserve the draft and ask the user to clear the optional end time or await the approved update. The earlier six-stop proposal also remains unapplied.
+
+Existing events with no end remain valid. The app does not infer/persist an end from the last stop. Calendar export alone retains a three-hour fallback duration when no explicit end exists; it is not displayed as an actual end time. Cross-timezone scheduling remains limited by the existing local-time event model.

@@ -13,7 +13,8 @@ dist-ssr
 *.local
 
 supabase/.temp
-.env.example
+.env.*
+!.env.example
 .gitignore
 .vscode/*
 !.vscode/extensions.json

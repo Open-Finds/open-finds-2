@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { normalizeTags } from './taxonomy';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -314,6 +315,8 @@ export const isTeam = (role: AppRole) => role !== 'user';
 export const isManagerRole = (role: AppRole) => role === 'manager' || role === 'admin';
 
 export type Plan = {
+  end_time?: string | null;
+  end_date?: string | null;
   id: string;
   /** auth.users id once the plan has been claimed; null for device-only rows. */
   owner_id?: string | null;
@@ -578,9 +581,7 @@ export async function createStops(
     if (countError) throw countError;
     if ((count ?? 0) + stops.length > max) {
       throw new Error(
-        max === 2
-          ? 'Free includes 2 stops on a plan. Upgrade for up to 5.'
-          : `A plan can have up to ${max} stops.`,
+        `A plan can have up to ${max} stops.`,
       );
     }
   }
@@ -692,7 +693,7 @@ export async function deletePlan(id: string) {
 
 export async function updatePlan(
   id: string,
-  updates: Partial<Pick<Plan, 'title' | 'date' | 'location' | 'type' | 'accommodation_name' | 'accommodation_address'>>
+  updates: Partial<Pick<Plan, 'title' | 'date' | 'location' | 'type' | 'accommodation_name' | 'accommodation_address' | 'end_time' | 'end_date'>>
 ) {
   const { data, error } = await supabase
     .from('plans')
@@ -727,7 +728,7 @@ export async function replaceStops(
 
 export async function updateStop(
   id: string,
-  updates: Partial<Pick<Stop, 'name' | 'address' | 'time' | 'sort_order'>>
+  updates: Partial<Pick<Stop, 'name' | 'address' | 'time' | 'sort_order' | 'vibe_link' | 'venue_partner_id'>>
 ) {
   await assertOwnStop(id);
   const { data, error } = await supabase
@@ -1008,7 +1009,7 @@ export async function insertSavedVenue(
 ) {
   const { data, error } = await supabase
     .from('saved_venues')
-    .insert(venue)
+    .insert({ ...venue, tags: normalizeTags(venue.tags ?? []) })
     .select()
     .single();
   if (error) throw error;
@@ -1029,7 +1030,7 @@ export async function updateSavedVenue(
 ) {
   const { data, error } = await supabase
     .from('saved_venues')
-    .update(updates)
+    .update({ ...updates, ...(updates.tags ? { tags: normalizeTags(updates.tags) } : {}) })
     .eq('id', id)
     .select()
     .single();
@@ -1732,7 +1733,7 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
 
   sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey),
+    applicationServerKey: urlBase64ToArrayBuffer(publicKey),
   });
   await savePushSubscription(sub);
   return sub;
@@ -1767,13 +1768,14 @@ function showIOSHomeScreenPrompt(): void {
   setTimeout(() => banner.remove(), 15000);
 }
 
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
+function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = atob(base64);
-  const output = new Uint8Array(rawData.length);
+  const buffer = new ArrayBuffer(rawData.length);
+  const output = new Uint8Array(buffer);
   for (let i = 0; i < rawData.length; ++i) output[i] = rawData.charCodeAt(i);
-  return output;
+  return buffer;
 }
 
 // ── Send Push Notification (edge function) ──
@@ -2426,10 +2428,10 @@ export async function fetchMyCredits(): Promise<number> {
 /* ── Subscription helpers ── */
 
 export const SUBSCRIPTION_PLANS = {
-  free: { label: 'Free', priceCents: 0, maxPlans: 1, maxStopsPerPlan: 2, ads: true },
-  premium_monthly: { label: 'Premium', priceCents: 299, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
-  premium_yearly: { label: 'Premium Yearly', priceCents: 2499, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
-  lifetime: { label: 'Lifetime', priceCents: 3999, maxPlans: Infinity, maxStopsPerPlan: 5, ads: false },
+  free: { label: 'Free', priceCents: 0, maxPlans: 1, maxStopsPerPlan: 6, ads: true },
+  premium_monthly: { label: 'Premium', priceCents: 299, maxPlans: Infinity, maxStopsPerPlan: 6, ads: false },
+  premium_yearly: { label: 'Premium Yearly', priceCents: 2499, maxPlans: Infinity, maxStopsPerPlan: 6, ads: false },
+  lifetime: { label: 'Lifetime', priceCents: 3999, maxPlans: Infinity, maxStopsPerPlan: 6, ads: false },
 } as const;
 
 /** Premium features (trips) are open on any paid tier, and to everyone while testing is unlocked. */
@@ -2439,6 +2441,17 @@ export function hasPremium(tier: SubscriptionTier, premiumUnlocked: boolean): bo
 
 export function getPlanLimits(tier: SubscriptionTier) {
   return SUBSCRIPTION_PLANS[tier] ?? SUBSCRIPTION_PLANS.free;
+}
+
+/** Read-only capability published by the forward six-stop migration. */
+export async function fetchPlannerSixStopSupport(): Promise<boolean> {
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'planner_six_stops').maybeSingle();
+  return !error && data?.value === true;
+}
+
+export async function fetchPlannerTimingSupport(): Promise<boolean> {
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'planner_event_timing').maybeSingle();
+  return !error && data?.value === true;
 }
 
 /**
