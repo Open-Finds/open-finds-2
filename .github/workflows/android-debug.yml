@@ -1,0 +1,105 @@
+name: Android staging APK
+
+on:
+  push:
+    branches: [feature/ai-save-quick-share]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    if: github.ref == 'refs/heads/feature/ai-save-quick-share'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      VITE_SUPABASE_URL: https://crpkzysdtnoomzimibhe.supabase.co
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.UNSAVED_STAGING_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Verify staging client configuration
+        id: staging
+        shell: bash
+        run: |
+          if [[ -z "$VITE_SUPABASE_ANON_KEY" ]]; then
+            echo "::warning::No staging client key configured. This APK can test Android share registration, but cannot sign in or save."
+            echo 'VITE_SUPABASE_ANON_KEY=staging-client-key-not-configured' >> "$GITHUB_ENV"
+            echo 'artifact=the-unsaved-staging-setup-required' >> "$GITHUB_OUTPUT"
+          else
+            node --input-type=module <<'JS'
+            const key = process.env.VITE_SUPABASE_ANON_KEY;
+            const host = new URL(process.env.VITE_SUPABASE_URL).hostname;
+            const ref = host.split('.')[0];
+            if (!key.startsWith('sb_publishable_')) {
+              let claims;
+              try {
+                claims = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString());
+              } catch {
+                throw new Error('Expected a Supabase public client key.');
+              }
+              if (claims.role !== 'anon' || claims.ref !== ref) {
+                throw new Error('Expected an anonymous key for the approved staging project.');
+              }
+            }
+            const response = await fetch(process.env.VITE_SUPABASE_URL + '/auth/v1/settings', {
+              headers: { apikey: key },
+              signal: AbortSignal.timeout(15000),
+            });
+            if (!response.ok) throw new Error('Staging rejected the client key.');
+            JS
+            echo 'artifact=the-unsaved-staging-debug' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install dependencies and build staging web bundle
+        run: |
+          npm ci
+          npm run build
+          npx --no-install cap sync android
+      - name: Prepare Android SDK 35
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'build-tools;34.0.0'
+      - name: Assemble debug APK
+        working-directory: android
+        run: bash gradlew --no-daemon :app:assembleDebug
+      - name: Verify and prepare APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/signing.txt"
+          grep -q 'CN=Android Debug' "$RUNNER_TEMP/signing.txt"
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -q "package: name='com.example.openfinds2.staging'" "$RUNNER_TEMP/badging.txt"
+          "$tools/aapt" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/manifest.txt"
+          grep -q 'android.intent.action.SEND' "$RUNNER_TEMP/manifest.txt"
+          grep -q 'text/plain' "$RUNNER_TEMP/manifest.txt"
+          python - "$apk" <<'PY'
+          import sys
+          import zipfile
+
+          with zipfile.ZipFile(sys.argv[1]) as apk:
+              bundle = b"\n".join(apk.read(name) for name in apk.namelist()
+                                  if name.startswith("assets/public/") and name.endswith(".js"))
+          if b"https://crpkzysdtnoomzimibhe.supabase.co" not in bundle:
+              raise SystemExit("Approved staging origin missing from packaged web bundle")
+          if b"wfrlkifdlgmlbffumglt.supabase.co" in bundle:
+              raise SystemExit("Production Supabase origin found in packaged web bundle")
+          PY
+          mkdir -p artifact
+          cp "$apk" artifact/the-unsaved-staging-debug.apk
+          (cd artifact && sha256sum the-unsaved-staging-debug.apk > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.staging.outputs.artifact }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 14
