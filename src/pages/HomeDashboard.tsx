@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BrandWordmark } from '../components/BrandWordmark';
 import { ArrowRight, Bell, Bookmark, CalendarDays, ChevronRight, Heart, Plus, Utensils } from 'lucide-react';
 import {
   fetchSavedVenues, fetchAllPlans, fetchInvitedPlanIds, fetchPlansByIds, fetchStops, fetchRsvps,
@@ -103,7 +104,7 @@ export function HomeDashboard({
       </Sheet>
 
       <header className="reference-header">
-        <img className="reference-wordmark" src="/brand/home-wordmark.webp" alt="The Unsaved" width="560" height="376" />
+        <BrandWordmark className="reference-wordmark" />
         <button type="button" onClick={onNotifications} className="reference-bell"
           aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}>
           <Bell size={23} />

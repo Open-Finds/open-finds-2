@@ -1,4 +1,5 @@
 import { BRAND } from '../lib/brand';
+import { BrandWordmark } from '../components/BrandWordmark';
 import { useEffect, useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, User, AtSign, Check, X, Loader2, ChevronLeft } from 'lucide-react';
 import {
@@ -174,7 +175,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
           <h1 className="w-full max-w-[208px]">
-            <img src="/brand/home-wordmark.webp" alt={BRAND.name} width="560" height="376" className="h-auto w-full" />
+            <BrandWordmark className="block" />
           </h1>
           <p className="mt-3 font-[Knewave] text-base text-foreground">{BRAND.tagline}</p>
         </div>
