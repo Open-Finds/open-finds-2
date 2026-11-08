@@ -65,7 +65,16 @@ jobs:
           npm run build
           npx --no-install cap sync android
       - name: Prepare Android SDK 35
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'build-tools;34.0.0'
+        run: |
+          sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          if [[ ! -f "$sdk/platforms/android-35/android.jar" ||
+                ! -x "$sdk/build-tools/35.0.0/apksigner" ||
+                ! -d "$sdk/build-tools/34.0.0" ]]; then
+            manager=$(find "$sdk/cmdline-tools" -type f -name sdkmanager -print -quit)
+            test -n "$manager"
+            "$manager" "--sdk_root=$sdk" 'platforms;android-35' 'build-tools;35.0.0' 'build-tools;34.0.0'
+          fi
       - name: Assemble debug APK
         working-directory: android
         run: bash gradlew --no-daemon :app:assembleDebug
