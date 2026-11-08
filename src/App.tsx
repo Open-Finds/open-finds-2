@@ -16,7 +16,10 @@ import { FriendsPage } from './pages/Friends';
 import { NotificationsPage } from './pages/Notifications';
 import { MainNavigation, type AppView } from './components/MainNavigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
-import { takeSharedLink } from './lib/shareTarget';
+import { receiveSharedText, SHARE_RECEIVED, takeSharedLink } from './lib/shareTarget';
+import { listenToNativeShares } from './lib/aiSave';
+import { AiSaveDialog } from './components/AiSaveDialog';
+import { PendingVenuePlan, PublicVenuePage } from './pages/PublicVenue';
 import type { PlannerMode } from './lib/planner';
 import type { SavedVenue } from './lib/supabase';
 import { GuidedTour } from './components/GuidedTour';
@@ -107,16 +110,27 @@ function AppInner() {
   const [plannerCollection, setPlannerCollection] = useState('');
   const [plannerDirty, setPlannerDirty] = useState(false);
   const [pendingView, setPendingView] = useState<View | null>(null);
+  const [pendingPlannerVenue, setPendingPlannerVenue] = useState<SavedVenue>();
   const [openSave, setOpenSave] = useState(false);
   const [incomingShare, setIncomingShare] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile } = useAuth();
   useEffect(() => {
-    if (!session) return;
-    const shared = takeSharedLink();
-    if (shared) { setIncomingShare(shared); setOpenSave(true); setView('venues'); }
-  }, [session]);
-  useEffect(() => { if (view !== 'venues') { setOpenSave(false); setIncomingShare(null); } }, [view]);
+    const listener = listenToNativeShares(receiveSharedText);
+    void listener.catch(console.error);
+    return () => { void listener.then(subscription => subscription?.remove()).catch(() => {}); };
+  }, []);
+  useEffect(() => {
+    if (!session || incomingShare) return;
+    const consume = () => {
+      const shared = takeSharedLink();
+      if (shared) setIncomingShare(shared);
+    };
+    consume();
+    window.addEventListener(SHARE_RECEIVED, consume);
+    return () => window.removeEventListener(SHARE_RECEIVED, consume);
+  }, [session, incomingShare]);
+  useEffect(() => { if (view !== 'venues') setOpenSave(false); }, [view]);
 
   // The walkthrough runs over the app until it's finished or skipped, and
   // again after Settings → Replay Walkthrough. It points at Home's buttons,
@@ -200,6 +214,7 @@ function AppInner() {
   if (route.name === 'trip') return <TripOverviewPage tripId={route.id} />;
   if (route.name === 'trip-day') return <TripDayPage tripId={route.tripId} dayId={route.dayId} />;
   if (route.name === 'trip-setup') return <TripSetupPage />;
+  if (route.name === 'public-venue') return <PublicVenuePage key={route.id} id={route.id} />;
 
   // Venue partner portal + subscription — require auth
   if (route.name === 'venue-portal') {
@@ -246,7 +261,6 @@ function AppInner() {
         await updateDietaryPreferences(dietary);
         await refreshProfile();
       }
-      if (incomingShare) setView('venues');
     } catch { /* ignore */ }
   };
 
@@ -276,6 +290,16 @@ function AppInner() {
     setPlannerMode(mode); setPlannerSeed(seed ? [seed] : []); setPlannerCollection(collection);
     setHomeResetKey((k) => k + 1);
   };
+  const planFromShare = (venue: SavedVenue) => {
+    setIncomingShare(null);
+    if (editPlanId || plannerDirty) {
+      setPendingPlannerVenue(venue);
+      setPendingView('planner');
+      return;
+    }
+    startPlanner('saved', venue);
+  };
+  const closePlannerGuard = () => { setPendingView(null); setPendingPlannerVenue(undefined); };
 
   const openDashboard = (planId: string) => {
     setDashboardId(planId);
@@ -304,7 +328,22 @@ function AppInner() {
     onChangeView: switchView,
     unreadCount,
     onOpenNotifications: () => setShowNotifications(true),
-    guard: <Dialog open={pendingView !== null} onOpenChange={(open) => !open && setPendingView(null)}><DialogContent><DialogHeader><DialogTitle>Leave your planner?</DialogTitle><DialogDescription>Your new-event draft is kept on this device. Unsaved edits to an existing event will be discarded.</DialogDescription></DialogHeader><button className="btn-primary" onClick={() => { const target = pendingView; setPendingView(null); setPlannerDirty(false); if (target) applyView(target); }}>Leave planner</button><button className="btn-outline" onClick={() => setPendingView(null)}>Keep planning</button></DialogContent></Dialog>,
+    guard: <>
+      <Dialog open={pendingView !== null} onOpenChange={open => { if (!open) closePlannerGuard(); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Leave your planner?</DialogTitle><DialogDescription>Your new-event draft is kept on this device. Unsaved edits to an existing event will be discarded.</DialogDescription></DialogHeader>
+          <button className="btn-primary" onClick={() => {
+            closePlannerGuard();
+            setPlannerDirty(false);
+            if (pendingPlannerVenue) startPlanner('saved', pendingPlannerVenue);
+            else if (pendingView) applyView(pendingView);
+          }}>Leave planner</button>
+          <button className="btn-outline" onClick={closePlannerGuard}>Keep planning</button>
+        </DialogContent>
+      </Dialog>
+      {incomingShare && <AiSaveDialog key={incomingShare} link={incomingShare}
+        onClose={() => setIncomingShare(null)} onPlan={planFromShare} />}
+    </>,
   };
 
   if (editPlanId) {
@@ -360,7 +399,8 @@ function AppInner() {
 
   return (
     <Shell {...shellProps} inlineNotifications={view === 'home'}>
-      {tourActive && <GuidedTour initialDietary={dietaryPreferences} onFinish={finishTour} />}
+      {tourActive && !incomingShare && <GuidedTour initialDietary={dietaryPreferences} onFinish={finishTour} />}
+      {!tourActive && <PendingVenuePlan onPlan={planFromShare} />}
       <div key={view === 'home' ? `home-${homeResetKey}` : view} className={`animate-slide-${slideDir}`}>
         {view === 'home' ? (
           <HomeDashboard onPlan={startPlanner} onVenues={() => switchView('venues')} onEvent={openDashboard}
@@ -376,7 +416,7 @@ function AppInner() {
         ) : view === 'settings' ? (
           <SettingsPage onBack={() => switchView('home')} onFriends={() => switchView('friends')} />
         ) : (
-          <VenuesPage initialAdd={openSave} sharedLink={incomingShare} onPlan={(v) => startPlanner('saved', v)}
+          <VenuesPage initialAdd={openSave} onPlan={(v) => startPlanner('saved', v)}
             onPlanCollection={(id) => startPlanner('saved', undefined, id)} />
         )}
       </div>

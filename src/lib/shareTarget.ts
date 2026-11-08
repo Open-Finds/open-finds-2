@@ -9,6 +9,14 @@
  * need be.
  */
 const KEY = 'unsaved_shared_link';
+export const SHARE_RECEIVED = 'unsaved:share-received';
+
+export function receiveSharedText(text: string) {
+  const link = linkFromShare(new URLSearchParams({ text }));
+  if (!link) return;
+  sessionStorage.setItem(KEY, link);
+  window.dispatchEvent(new Event(SHARE_RECEIVED));
+}
 
 /** The first web link in a share. Instagram and TikTok put it in "text", among the caption. */
 export function linkFromShare(params: URLSearchParams): string | null {
