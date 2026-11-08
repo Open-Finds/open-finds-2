@@ -103,13 +103,7 @@ export function HomeDashboard({
       </Sheet>
 
       <header className="reference-header">
-        <div className="reference-wordmark">
-          <svg viewBox="0 0 44 44" width="38" height="38" aria-hidden>
-            <path d="M20 40c-5-7-14-14-14-23a14 14 0 1 1 28 0c0 9-9 16-14 23Z" fill="none" stroke="currentColor" strokeWidth="4" />
-            <path d="m20 8 2.5 5.5 6 .7-4.5 4.1 1.3 5.9-5.3-3-5.3 3 1.3-5.9-4.5-4.1 6-.7Z" fill="currentColor" />
-          </svg>
-          <span>The Unsaved</span>
-        </div>
+        <img className="reference-wordmark" src="/brand/home-wordmark.webp" alt="The Unsaved" width="560" height="376" />
         <button type="button" onClick={onNotifications} className="reference-bell"
           aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}>
           <Bell size={23} />

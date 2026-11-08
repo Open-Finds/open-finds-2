@@ -1,16 +1,13 @@
 /* Dashboard and mobile navigation */
 .reference-home { max-width: 720px; padding-top: max(20px, env(safe-area-inset-top)); }
-.reference-header { display:flex; align-items:center; justify-content:space-between; min-height:64px; padding-inline:5px; }
-.reference-wordmark { position:relative; display:grid; place-items:center; padding:13px 20px 8px 12px; color:hsl(var(--foreground)); }
-.reference-wordmark span { position:relative; font: 400 clamp(25px, 6.8vw, 36px)/1.1 'Knewave', sans-serif; text-transform:uppercase; transform:rotate(-5deg); }
-.reference-wordmark svg { position:absolute; top:-10px; right:5px; color:hsl(var(--primary)); }
-.reference-wordmark::after { content:''; position:absolute; width:46%; height:6px; left:39%; bottom:1px; background:hsl(var(--ai)); clip-path:var(--urban-rip); transform:rotate(-7deg); }
+.reference-header { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:64px; padding-inline:4px; }
+.reference-wordmark { display:block; width:clamp(154px, 53vw, 228px); max-width:calc(100% - 56px); height:auto; }
 .reference-bell,.reference-avatar { position:relative; display:grid; place-items:center; flex:none; }
 .reference-bell { width:44px; height:44px; border-radius:13px; background:hsl(var(--primary-soft)); color:hsl(var(--foreground)); }
 .dark .reference-bell { background:hsl(var(--card)); border:1px solid hsl(var(--border)); }
 .reference-unread { position:absolute; top:-5px; right:-5px; min-width:19px; padding:1px 4px; border-radius:99px; background:hsl(var(--primary)); color:hsl(var(--primary-foreground)); font-size:11px; font-weight:800; }
 .reference-greeting { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:10px 4px 13px; }
-.reference-greeting h1 { font-size:clamp(30px, 8vw, 46px); font-weight:800; line-height:1.1; letter-spacing:-.05em; overflow-wrap:anywhere; }
+.reference-greeting h1 { font-size:clamp(18px, 5.5vw, 24px); font-weight:800; line-height:1.15; letter-spacing:-.035em; overflow-wrap:anywhere; }
 .reference-greeting p { margin-top:6px; font-size:clamp(13px, 3.6vw, 16px); }
 .reference-avatar { width:68px; height:68px; border:2px solid hsl(var(--foreground)); border-radius:50%; background:hsl(var(--primary-soft)); color:hsl(var(--primary-text)); font-size:29px; font-weight:800; }
 .reference-avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:inherit; }
