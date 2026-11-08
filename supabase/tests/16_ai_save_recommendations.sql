@@ -9,6 +9,7 @@ DECLARE
   private_id uuid;
   share_id uuid;
   denied boolean := false;
+  hidden boolean;
   snapshot jsonb;
 BEGIN
   private_id := (save_shared_venue(payload)).id;
@@ -27,7 +28,14 @@ BEGIN
   snapshot := read_venue_recommendation(share_id);
   PERFORM rep('AI4 anonymous snapshot exact fields', snapshot = payload);
   PERFORM rep('AI5 private ID is not a share ID', read_venue_recommendation(private_id) IS NULL);
-  PERFORM rep('AI6 anonymous table access denied', NOT has_table_privilege('anon', 'public.venue_recommendations', 'select'));
+  -- The shared CI fixture grants table privileges to exercise RLS.
+  -- Check the actual visibility of the known row even under those grants.
+  BEGIN
+    SELECT NOT EXISTS (SELECT 1 FROM public.venue_recommendations WHERE id = share_id) INTO hidden;
+  EXCEPTION WHEN insufficient_privilege THEN
+    hidden := true;
+  END;
+  PERFORM rep('AI6 anonymous direct row is hidden', hidden);
   PERFORM rep('AI7 anonymous save denied', NOT has_function_privilege('anon', 'public.save_shared_venue(jsonb)', 'execute'));
 END $$;
 ROLLBACK;
