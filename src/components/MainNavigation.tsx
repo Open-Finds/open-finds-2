@@ -15,7 +15,7 @@ export function MainNavigation({ view, onChange }: { view: AppView; onChange: (v
     </button>)}</div></nav>
     <aside className="ux-sidebar">
       <div className="mb-10 px-3">
-        <img src="/brand/sidebar-orbit.webp" alt="The Unsaved" width="64" height="64" className="block rounded-xl" />
+        <img src="/brand/orbit-standalone.webp" alt="The Unsaved" width="64" height="64" className="block size-16 object-contain" />
       </div>
       <nav aria-label="Desktop primary" className="space-y-2">{[...tabs, { id: 'friends' as const, label: 'Friends', Icon: Users }, { id: 'settings' as const, label: 'Settings', Icon: Settings }].map(({ id, label, Icon }) => <button key={id} onClick={() => onChange(id)} aria-current={view === id ? 'page' : undefined}
         className={`flex min-h-12 w-full items-center gap-3 rounded-md px-4 text-label ${view === id ? 'bg-primary-soft text-primary-text' : 'text-muted-foreground hover:bg-muted'}`}><Icon size={20} />{label}</button>)}</nav>
