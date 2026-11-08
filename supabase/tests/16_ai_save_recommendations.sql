@@ -27,7 +27,7 @@ BEGIN
   snapshot := read_venue_recommendation(share_id);
   PERFORM rep('AI4 anonymous snapshot exact fields', snapshot = payload);
   PERFORM rep('AI5 private ID is not a share ID', read_venue_recommendation(private_id) IS NULL);
-  PERFORM rep('AI6 anonymous table access denied', NOT has_table_privilege('public.venue_recommendations', 'select'));
-  PERFORM rep('AI7 anonymous save denied', NOT has_function_privilege('public.save_shared_venue(jsonb)', 'execute'));
+  PERFORM rep('AI6 anonymous table access denied', NOT has_table_privilege('anon', 'public.venue_recommendations', 'select'));
+  PERFORM rep('AI7 anonymous save denied', NOT has_function_privilege('anon', 'public.save_shared_venue(jsonb)', 'execute'));
 END $$;
 ROLLBACK;
