@@ -208,7 +208,7 @@ export function SettingsPage({ onBack, onFriends }: { onBack: () => void; onFrie
             type="text"
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
-            placeholder="Alex Taylor"
+            placeholder="Your display name"
             className="mb-3 w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
           />
           {nameError && (
@@ -237,7 +237,7 @@ export function SettingsPage({ onBack, onFriends }: { onBack: () => void; onFrie
                 const clean = e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
                 setUsernameInput(clean);
               }}
-              placeholder="alex.taylor"
+              placeholder="your_username"
               className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-11 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             />
           </div>

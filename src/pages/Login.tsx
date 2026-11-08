@@ -108,6 +108,11 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
   };
 
   const switchMode = (m: 'signin' | 'signup') => {
+    if (m === 'signup' && mode !== m) {
+      setEmail('');
+      setPassword('');
+      setShowPassword(false);
+    }
     setMode(m);
     setError(null);
   };
@@ -256,7 +261,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4" noValidate>
+          <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4" autoComplete={mode === 'signup' ? 'off' : undefined} noValidate>
             {mode === 'signup' && (
               <>
                 <div className="flex flex-col gap-2">
@@ -268,8 +273,9 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                       type="text"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Alex Taylor"
-                      autoComplete="name"
+                      placeholder="Your display name"
+                      autoComplete="off"
+                      spellCheck={false}
                       className="pl-11"
                     />
                   </div>
@@ -297,7 +303,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                           } catch { /* ignore */ }
                         }
                       }}
-                      placeholder="alex.taylor"
+                      placeholder="your_username"
                       // Not "username": browsers fill that with a saved
                       // login, which gave a second account the first one's name.
                       autoComplete="off"
@@ -335,7 +341,9 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  autoComplete="email"
+                  autoComplete={mode === 'signup' ? 'off' : 'email'}
+                  autoCapitalize="none"
+                  spellCheck={false}
                   className="pl-11"
                 />
               </div>
