@@ -1,4 +1,3 @@
-import { BrandLogo } from '../components/BrandLogo';
 import { BRAND } from '../lib/brand';
 import { useEffect, useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, User, AtSign, Check, X, Loader2, ChevronLeft } from 'lucide-react';
@@ -174,9 +173,10 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
     <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-10 sm:px-6">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
-          <BrandLogo size={72} withName={false} className="mb-2" />
-          <h1 className="mb-2 text-title text-foreground">The Unsaved</h1>
-          <p className="adventure-display mt-3 text-foreground">{BRAND.tagline}</p>
+          <h1 className="w-full max-w-[208px]">
+            <img src="/brand/home-wordmark.webp" alt={BRAND.name} width="560" height="376" className="h-auto w-full" />
+          </h1>
+          <p className="mt-3 font-[Knewave] text-base text-foreground">{BRAND.tagline}</p>
         </div>
 
         {resetting ? (
