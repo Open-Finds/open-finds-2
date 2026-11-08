@@ -7,6 +7,7 @@ export type Route =
   | { name: 'build' }
   | { name: 'saved' }
   | { name: 'venues' }
+  | { name: 'public-venue'; id: string }
   | { name: 'my-venues' }
   | { name: 'plan'; id: string }
   | { name: 'share'; id: string }
@@ -37,6 +38,9 @@ function parseHash(): Route {
   }
   if (parts[0] === 'saved') return { name: 'saved' };
   if (parts[0] === 'venues') return { name: 'venues' };
+  if (parts[0] === 'venue' && /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(parts[1] ?? '')) {
+    return { name: 'public-venue', id: parts[1] };
+  }
   if (parts[0] === 'my-venues') return { name: 'my-venues' };
   if (parts[0] === 'plan' && parts[1]) {
     const id = parts[1];

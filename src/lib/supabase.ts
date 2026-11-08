@@ -1026,7 +1026,7 @@ export async function deleteSavedVenue(id: string) {
 
 export async function updateSavedVenue(
   id: string,
-  updates: Partial<Pick<SavedVenue, 'name' | 'address' | 'type' | 'tags' | 'collection' | 'visited' | 'personal_note' | 'rating'>>
+  updates: Partial<Pick<SavedVenue, 'name' | 'address' | 'type' | 'tags' | 'collection' | 'visited' | 'personal_note' | 'rating' | 'lat' | 'lon'>>
 ) {
   const { data, error } = await supabase
     .from('saved_venues')
