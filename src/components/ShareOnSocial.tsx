@@ -53,6 +53,7 @@ export function ShareOnSocialDialog({
           {message} <span className="text-muted-foreground">{url}</span>
         </p>
         <div className="grid gap-3">
+          <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer" className={OPTION}>Facebook</a>
           <button
             onClick={copy}
             className="btn-primary w-full"
@@ -72,9 +73,10 @@ export function ShareOnSocialDialog({
           </a>
           {canShare && (
             <button onClick={shareMore} className={OPTION}>
-              <Share2 size={18} /> Instagram, Messages & more
+              <Share2 size={18} /> Instagram, Messages &amp; more
             </button>
           )}
+          {!canShare && <button onClick={copy} className={OPTION}>Instagram · copy invitation to share manually</button>}
         </div>
       </DialogContent>
     </Dialog>

@@ -9,10 +9,12 @@ export function StopCard({
   stop,
   index,
   onSaved,
+  canEdit = true,
 }: {
   stop: Stop;
   index: number;
   onSaved: (updated: Stop) => void;
+  canEdit?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(stop.name);
@@ -59,13 +61,13 @@ export function StopCard({
   if (!editing) {
     return (
       <div className="relative rounded-lg border border-border bg-card p-4">
-        <button
+        {canEdit && <button
           onClick={startEdit}
           aria-label="Edit stop"
-          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-brand-yellow bg-transparent text-brand-yellow transition-all hover:bg-brand-yellow/10 active:scale-90"
+          className="absolute right-3 top-3 flex size-11 items-center justify-center rounded-full border border-border bg-card text-primary-text transition-all hover:bg-primary-soft"
         >
           <Pencil size={13} strokeWidth={2.5} />
-        </button>
+        </button>}
         <div className="flex items-center gap-3 pr-8">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-border bg-background text-sm font-bold text-foreground">
             {index + 1}

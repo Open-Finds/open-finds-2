@@ -76,6 +76,9 @@ Deno.serve(async (req: Request) => {
       return json(req, { error: "A JSON body is required" }, 400);
     }
     const { messages, model, temperature, response_format, purpose, use_credit } = body as Record<string, unknown>;
+    if (purpose !== "extract" && purpose !== "discover") {
+      return json(req, { error: "purpose must be extract or discover" }, 400);
+    }
 
     const validated = validateMessages(messages);
     if (!validated.ok) return json(req, { error: validated.error }, 400);
@@ -84,7 +87,12 @@ Deno.serve(async (req: Request) => {
     // then one more for each credit they choose to spend (earned by reviewing
     // sponsored venues). Paid accounts keep a high hourly ceiling so a loop
     // cannot run the bill up.
-    const purposeName = purpose === "extract" || purpose === "discover" ? purpose : null;
+    const purposeName = purpose;
+    // A shared ceiling cannot be bypassed by switching purpose or spending credits.
+    const hourly = await consumeRateLimit("ai-total", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS, { failClosed: true });
+    if (!hourly.available) return json(req, { error: "AI usage checks are temporarily unavailable" }, 503);
+    if (!hourly.allowed) return json(req, { error: "Rate limit reached. Try again shortly.", code: "rate_limit" }, 429,
+      { "Retry-After": String(hourly.retryAfter) });
     let tier = "free";
     if (purposeName) {
       const db = serviceClient();
@@ -104,7 +112,9 @@ Deno.serve(async (req: Request) => {
       auth.user.id,
       dailyFree ? 3 : RATE_LIMIT,
       dailyFree ? 60 * 60 * 24 : RATE_WINDOW_SECONDS,
+      { failClosed: true },
     );
+    if (!limit.available) return json(req, { error: "AI usage checks are temporarily unavailable" }, 503);
     let spentCredit = false;
     if (!limit.allowed && dailyFree && use_credit === true) {
       const { data: left, error: spendError } = await serviceClient().rpc("spend_credit", {

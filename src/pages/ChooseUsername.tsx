@@ -1,3 +1,4 @@
+import { BrandLogo } from '../components/BrandLogo';
 import { useState } from 'react';
 import { AtSign, Check, Loader2, User, X } from 'lucide-react';
 import { checkUsernameAvailable, upsertProfile } from '../lib/supabase';
@@ -59,7 +60,7 @@ export function ChooseUsernamePage() {
     <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-10 sm:px-6">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
-          <img src="/the-unsaved-mark.png" alt="" width={72} height={72} />
+          <BrandLogo size={72} withName={false} />
           <h1 className="mt-3 text-title text-foreground">One last thing</h1>
           <p className="mt-2 text-sm text-muted-foreground">Pick a username so friends can find you.</p>
         </div>
@@ -78,7 +79,7 @@ export function ChooseUsernamePage() {
                 id="choose-display-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="e.g. Robert Bui"
+                placeholder="Alex Taylor"
                 autoComplete="name"
                 className="pl-11"
               />
@@ -96,7 +97,7 @@ export function ChooseUsernamePage() {
                   setAvailable(null);
                 }}
                 onBlur={() => check(username.trim())}
-                placeholder="e.g. robbui"
+                placeholder="alex.taylor"
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}

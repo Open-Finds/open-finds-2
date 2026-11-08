@@ -1,5 +1,7 @@
 # The Unsaved — AI implementation guide
 
+> Active feature direction (28 October 2026): the Urban Adventure brief supersedes the historical colour/typography overrides below. Current brand tokens live in `src/theme.css`; shared artwork paths live in `src/lib/brand.ts`. Read `docs/URBAN-ADVENTURE-PLAN.md` and `public/brand/README.md`. Preserve the existing logo artwork, functional sans-serif UI, V5 planner and backend integrations.
+
 Use this guide when Claude or another coding agent builds with The Unsaved design system.
 
 ## In this repository (read first)

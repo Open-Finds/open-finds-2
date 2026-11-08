@@ -136,7 +136,7 @@ export function CheckoutDialog({
 }
 
 const PLAN_BLURB: Record<PaidTier, string> = {
-  premium_monthly: 'Unlimited plans and AI, up to 5 stops, no ads',
+  premium_monthly: 'Unlimited plans and AI, up to 6 stops, no ads',
   premium_yearly: 'Everything in Premium, two months free',
   lifetime: 'Everything in Premium, paid once',
 };

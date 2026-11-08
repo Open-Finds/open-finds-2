@@ -76,8 +76,8 @@ export async function sendPush(db: SupabaseClient, userIds: string[], message: P
   const staleEndpoints: string[] = [];
   for (const sub of subs) {
     try {
-      const pushSub = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } } as unknown as PushSubscription;
-      await appServer.subscribe(pushSub).pushTextMessage(payload, { urgency: "normal" });
+      const pushSub: webpush.PushSubscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } };
+      await appServer.subscribe(pushSub).pushTextMessage(payload, { urgency: webpush.Urgency.Normal });
       sent++;
     } catch (err) {
       failed++;

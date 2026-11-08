@@ -250,7 +250,6 @@
   .btn-ghost,
   .btn-ai,
   .btn-brand,
-  .btn-info,
   .btn-ai-soft,
   .btn-destructive {
     @apply inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-md px-5 text-base transition-[background-color,color,border-color,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:active:scale-100;
@@ -268,7 +267,7 @@
     @apply text-foreground hover:bg-muted;
   }
   .btn-ai {
-    @apply bg-ai text-ai-foreground hover:bg-ai/90;
+    @apply bg-ai text-ai-foreground hover:bg-ai/95;
   }
   /* Jacky's additions (2026-10-15): info for saving a venue, soft violet for
      Settings' actions. The main planning action was the logo's ring, then
@@ -276,18 +275,15 @@
   .btn-brand {
     @apply bg-primary-gradient font-semibold text-primary-foreground hover:bg-primary-gradient-hover active:bg-primary-gradient-active;
   }
-  .btn-info {
-    @apply bg-info text-info-foreground hover:bg-info/90;
-  }
   .btn-ai-soft {
     @apply bg-ai-soft text-ai-soft-foreground hover:bg-ai-soft/80 dark:bg-ai dark:text-ai-foreground dark:hover:bg-ai/90;
   }
   .btn-destructive {
     @apply bg-destructive text-destructive-foreground hover:bg-destructive/90;
   }
-  /* Add a tag, new collection: the logo's yellow, outlined, see-through middle. */
+  /* Add a tag, new collection: purple secondary outlines. */
   .btn-add {
-    @apply inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border-2 border-brand-yellow bg-transparent text-brand-yellow transition-[background-color,transform] duration-150 hover:bg-brand-yellow/10 active:scale-95;
+    @apply inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border-2 border-accent-highlight bg-transparent text-accent-highlight transition-[background-color,transform] duration-150 hover:bg-accent-highlight/10 active:scale-95;
   }
   .btn-sm {
     @apply h-9 px-3 text-sm;

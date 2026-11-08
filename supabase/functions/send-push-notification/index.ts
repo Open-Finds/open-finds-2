@@ -1,190 +1,130 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireUser, serviceClient } from "../_shared/auth.ts";
+import { json, preflight } from "../_shared/cors.ts";
+import { consumeRateLimit } from "../_shared/ratelimit.ts";
 import { sendPush } from "../_shared/webpush.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const isId = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
+type Db = ReturnType<typeof serviceClient>;
+type Note = { user_id: string; type: string; title: string; body: string; data: Record<string, unknown>; event: string };
 
-interface PushRequestBody {
-  user_id?: string;
-  user_ids?: string[];
-  plan_id?: string;
-  rsvp_name?: string;
-  rsvp_status?: string;
-  title: string;
-  body?: string;
-  data?: Record<string, unknown>;
-  type?: string;
+// Authorize the whole batch before any side effect. Ignore caller text/URLs.
+async function socialNotes(db: Db, body: Record<string, unknown>, caller: string): Promise<Note[] | null> {
+  const raw = body.user_ids ?? (body.user_id ? [body.user_id] : []);
+  if (!Array.isArray(raw) || !raw.length || raw.length > 100 || !raw.every(isId)) return null;
+  const recipients = [...new Set(raw)];
+  const notes: Note[] = [];
+  if (body.type === "friend_request" || body.type === "friend_accepted") {
+    const pending = body.type === "friend_request";
+    for (const recipient of recipients) {
+      if (recipient === caller) return null;
+      const { data: row, error } = await db.from("friendships").select("id")
+        .eq("requester_id", pending ? caller : recipient)
+        .eq("addressee_id", pending ? recipient : caller)
+        .eq("status", pending ? "pending" : "accepted").maybeSingle();
+      if (error) throw error;
+      if (!row) return null;
+      notes.push({ user_id: recipient, type: body.type,
+        title: pending ? "New friend request" : "Friend request accepted",
+        body: pending ? "Someone wants to be your friend" : "You are now friends",
+        data: { from_user_id: caller }, event: body.type + ":" + row.id + ":" + recipient });
+    }
+    return notes;
+  }
+  if (body.type !== "plan_invite") return null;
+  const data = body.data as Record<string, unknown> | null;
+  if (!data || !isId(data.plan_id)) return null;
+  const planId = data.plan_id;
+  const { data: plan, error: planError } = await db.from("plans").select("owner_id").eq("id", planId).maybeSingle();
+  if (planError) throw planError;
+  if (!plan || plan.owner_id !== caller) return null;
+  const { data: invites, error: inviteError } = await db.from("plan_invites")
+    .select("id, invited_user_id, group_id").eq("plan_id", planId).eq("invited_by", caller);
+  if (inviteError) throw inviteError;
+  const groupIds = (invites ?? []).filter((i) => i.group_id).map((i) => i.group_id);
+  const members = groupIds.length
+    ? await db.from("friend_group_members").select("group_id, user_id").in("group_id", groupIds)
+    : { data: [], error: null };
+  if (members.error) throw members.error;
+  for (const recipient of recipients) {
+    const invite = (invites ?? []).find((i) => i.invited_user_id === recipient
+      || (i.group_id && members.data?.some((m) => m.group_id === i.group_id && m.user_id === recipient)));
+    if (!invite) return null;
+    notes.push({ user_id: recipient, type: "plan_invite", title: "New event invite",
+      body: invite.group_id ? "Your group has been invited to an event" : "You have been invited to an event",
+      data: { plan_id: planId, from_user_id: caller, url: "/#/plan/" + planId },
+      event: "plan_invite:" + invite.id + ":" + recipient });
+  }
+  return notes;
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-
+export async function handleRequest(req: Request): Promise<Response> {
+  const pre = preflight(req);
+  if (pre) return pre;
+  if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
   try {
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const apiKey = req.headers.get("apikey") ?? "";
-    if (!authHeader && !apiKey) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json(req, { error: "A JSON object is required" }, 400);
+    const guest = body.plan_id !== undefined || body.rsvp_name !== undefined;
+    let caller: string | null = null;
+    if (!guest) {
+      const auth = await requireUser(req);
+      if (!auth.ok) return json(req, { error: auth.error }, auth.status);
+      caller = auth.user.id;
+      const limit = await consumeRateLimit("push-caller", caller, 60, 3600, { failClosed: true });
+      if (!limit.available) return json(req, { error: "Notification checks unavailable" }, 503);
+      if (!limit.allowed) return json(req, { error: "Rate limit reached" }, 429);
     }
-
-    const body = await req.json() as PushRequestBody;
-
-    // Create an authenticated client to verify the caller's session.
-    // For authenticated requests (friend invites, etc.) the Authorization
-    // header carries the user's JWT. For guest RSVP requests only the
-    // anon apikey is present, so we validate the plan_id server-side.
-    const isGuestRsvp = !!(body.plan_id && body.rsvp_name);
-
-    if (!isGuestRsvp) {
-      // Authenticated flow — verify the JWT and extract the caller's user ID.
-      const token = authHeader.replace("Bearer ", "");
-      if (!token || token === apiKey) {
-        return new Response(JSON.stringify({ error: "Authentication required" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const authClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: `Bearer ${token}` } } }
-      );
-      const { data: { user }, error: userErr } = await authClient.auth.getUser();
-      if (userErr || !user) {
-        return new Response(JSON.stringify({ error: "Invalid session" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Resolve target user IDs and the notification text. Guest pushes have
-    // their text composed server-side; only the authenticated path may supply it.
-    let userIds: string[] = [];
-    let resolvedTitle = "";
-    let resolvedBody = "";
-    let resolvedType = "general";
-    let resolvedData: Record<string, unknown> | null = null;
-
-    if (isGuestRsvp) {
-      // Guest RSVP flow — unauthenticated, so nothing the caller sends is
-      // trusted as display text. We verify the RSVP genuinely exists and then
-      // compose the notification ourselves; previously title/body came
-      // straight from the request, which made this an open channel for
-      // pushing arbitrary text to any host whose plan id was known.
-      // plans.user_id is the host's device id, not an account; notifications
-      // and push subscriptions are keyed by the account in owner_id.
-      const { data: plan } = await supabase
-        .from("plans")
-        .select("owner_id")
-        .eq("id", body.plan_id)
-        .maybeSingle();
-      if (!plan) {
-        return new Response(JSON.stringify({ error: "Plan not found" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const guestName = (body.rsvp_name ?? "").trim().slice(0, 80);
-      if (!guestName) {
-        return new Response(JSON.stringify({ error: "rsvp_name is required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // The RSVP must already be on record. This ties a push to a real action
-      // rather than letting anyone with a plan id generate notifications.
-      const { data: rsvpRow } = await supabase
-        .from("rsvps")
-        .select("id, status")
-        .eq("plan_id", body.plan_id)
-        .eq("name", guestName)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!rsvpRow) {
-        return new Response(JSON.stringify({ error: "No matching RSVP for this plan" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const isIn = (rsvpRow as { status?: string }).status === "in";
-      resolvedTitle = isIn ? `${guestName} is coming!` : `${guestName} can't make it`;
-      resolvedBody = isIn
-        ? `${guestName} just RSVP'd "I'm In" to your plan.`
-        : `${guestName} just declined your plan.`;
-      resolvedType = "rsvp";
-      // The host's view of the plan: who's coming.
-      resolvedData = { type: "rsvp", plan_id: body.plan_id, url: `/#/plan/${body.plan_id}/dashboard` };
-
-      if (!plan.owner_id) {
-        // A plan made before the host signed in has no account to notify.
-        return new Response(JSON.stringify({ sent: 0, failed: 0, total: 0, notified: false }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      userIds = [plan.owner_id];
+    const db = serviceClient();
+    let notes: Note[] | null;
+    if (guest) {
+      if (!isId(body.plan_id) || typeof body.rsvp_name !== "string" || !body.rsvp_name.trim()
+        || body.rsvp_name.trim().length > 80) return json(req, { error: "A valid plan and RSVP name are required" }, 400);
+      const name = body.rsvp_name.trim();
+      const limit = await consumeRateLimit("push-guest-plan", body.plan_id, 120, 3600, { failClosed: true });
+      if (!limit.available) return json(req, { error: "Notification checks unavailable" }, 503);
+      if (!limit.allowed) return json(req, { error: "Rate limit reached" }, 429);
+      const { data: plan, error: planError } = await db.from("plans").select("owner_id").eq("id", body.plan_id).maybeSingle();
+      if (planError) throw planError;
+      const { data: rsvp, error: rsvpError } = await db.from("rsvps").select("id, status")
+        .eq("plan_id", body.plan_id).eq("name", name).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (rsvpError) throw rsvpError;
+      if (!plan || !rsvp || !["in", "declined"].includes(rsvp.status)) return json(req, { error: "No matching RSVP" }, 403);
+      if (!plan.owner_id) return json(req, { sent: 0, failed: 0, total: 0, notified: false });
+      const coming = rsvp.status === "in";
+      notes = [{ user_id: plan.owner_id, type: "rsvp",
+        title: coming ? name + " is coming!" : name + " can't make it",
+        body: coming ? name + ' just RSVP\'d "I\'m In" to your plan.' : name + " just declined your plan.",
+        data: { type: "rsvp", plan_id: body.plan_id, url: "/#/plan/" + body.plan_id + "/dashboard" },
+        event: "rsvp:" + rsvp.id + ":" + rsvp.status }];
     } else {
-      userIds = body.user_ids ?? (body.user_id ? [body.user_id] : []);
-      resolvedTitle = (body.title ?? "").slice(0, 200);
-      resolvedBody = (body.body ?? "").slice(0, 500);
-      resolvedType = body.type ?? body.data?.type as string | undefined ?? "general";
-      resolvedData = body.data ?? null;
+      notes = await socialNotes(db, body, caller!);
     }
-
-    if (userIds.length === 0 || !resolvedTitle) {
-      return new Response(JSON.stringify({ error: "Unable to resolve notification target" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!notes) return json(req, { error: "Notification event or recipients are not authorized" }, 403);
+    let sent = 0;
+    let failed = 0;
+    let notified = 0;
+    for (const note of notes) {
+      // Atomic existing RPC provides seven-day replay suppression across
+      // edge instances without a schema change. On outages, fail closed.
+      const claim = await consumeRateLimit("push-event", note.event, 1, 7 * 86400, { failClosed: true });
+      if (!claim.available) return json(req, { error: "Notification checks unavailable" }, 503);
+      if (!claim.allowed) continue;
+      const { event: _event, ...record } = note;
+      void _event;
+      const { error } = await db.from("notifications").insert(record);
+      if (error) throw error;
+      notified++;
+      const result = await sendPush(db, [note.user_id], { title: note.title, body: note.body, data: note.data });
+      sent += result.sent;
+      failed += result.failed;
     }
-
-    // The in-app notification is the reliable channel and is written first,
-    // unconditionally. Push is best-effort on top of it: previously a missing
-    // VAPID key returned 500 *before* this insert, so an unconfigured push
-    // silently cost the host their in-app notification too.
-    const notifications = userIds.map((uid) => ({
-      user_id: uid,
-      type: resolvedType,
-      title: resolvedTitle,
-      body: resolvedBody || null,
-      data: resolvedData,
-    }));
-    const { error: insertErr } = await supabase.from("notifications").insert(notifications);
-    if (insertErr) {
-      console.error("[push] in-app notification insert failed", insertErr.message);
-    }
-
-    const result = await sendPush(supabase, userIds, {
-      title: resolvedTitle,
-      body: resolvedBody,
-      data: resolvedData ?? {},
-    });
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json(req, { sent, failed, total: sent + failed, notified });
+  } catch (error) {
+    console.error("[push] notification failed", error instanceof Error ? error.message : "unknown error");
+    return json(req, { error: "Could not send notification" }, 500);
   }
-});
+}
+
+Deno.serve(handleRequest);

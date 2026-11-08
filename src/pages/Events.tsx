@@ -6,7 +6,6 @@ import {
   fetchRsvps,
   fetchStops,
   markPlanCanceled,
-  deletePlan,
   getGuestName,
   fetchConfirmedPlanIds,
   fetchPlansByIds,
@@ -20,6 +19,8 @@ import {
 import { navigate } from '../lib/router';
 import { hasCached, useCachedState } from '../lib/cache';
 import { LoadError } from '../components/LoadError';
+import { EventCalendar } from '../components/EventCalendar';
+import { localDate } from '../lib/planner';
 import { CalendarDays, MapPin, Users, ChevronRight, Trash2, X, Compass } from 'lucide-react';
 
 type PlanWithMeta = Plan & {
@@ -37,10 +38,12 @@ type TripWithMeta = Trip & {
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function EventsPage({
-  onOpenPlan,
+  onOpenPlan, onPlan,
 }: {
-  onOpenPlan: (planId: string) => void;
+  onOpenPlan: (planId: string) => void; onPlan?: () => void;
 }) {
+  const [calendarView, setCalendarView] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   // Remembered between visits; the fresh lists load behind them.
   const [upcoming, setUpcoming] = useCachedState<PlanWithMeta[]>('events:upcoming', []);
   const [canceled, setCanceled] = useCachedState<PlanWithMeta[]>('events:canceled', []);
@@ -65,17 +68,17 @@ export function EventsPage({
   };
 
   /*
-    Requests that don't depend on each other go out together, and tidying up
-    old events (auto-cancel past ones, delete month-old cancelled ones) no
-    longer holds the screen: it used to be several round trips one after
-    another before anything showed.
+    Independent reads run together. Viewing this page never modifies plans. Legacy
+    automatic cancellation and deletion have been removed; history is retained.
+    The screen can render before background trip enrichment completes.
+
   */
   const load = useCallback(async () => {
     if (!hasCached('events:upcoming')) setLoading(true);
     setFailed(false);
     try {
       const today = new Date();
-      const todayStr = today.toISOString().slice(0, 10);
+      const todayStr = localDate(today);
 
       // Signed-in users already get hosted + invited plans; guest-name RSVP
       // matching is only for anonymous RSVP discovery.
@@ -95,16 +98,8 @@ export function EventsPage({
         fetchPlansByIds(invitedOnlyIds),
       ]);
 
-      const pastActive = hostedActive.filter((p) => p.date < todayStr);
       const isOld = (p: Plan) => today.getTime() - parseLocalDate(p.date).getTime() > THIRTY_DAYS_MS;
-      const oldCanceled = hostedCanceled.filter(isOld);
-      // Tidy up in the background.
-      if (pastActive.length || oldCanceled.length) {
-        void Promise.all([
-          ...pastActive.map((p) => markPlanCanceled(p.id)),
-          ...oldCanceled.map((p) => deletePlan(p.id)),
-        ]).catch(() => { /* retried on the next visit */ });
-      }
+      // Viewing events must never cancel plans or delete historical user data.
 
       // Upcoming: active plans from today on. Cancelled: cancelled in the last
       // 30 days, plus anything active whose date has passed.
@@ -269,9 +264,11 @@ export function EventsPage({
   );
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-background px-6 pt-8 pb-24">
+    <div className="ux-page">
       <div className="mx-auto w-full">
-        <h1 className="mb-6 text-title text-foreground">Upcoming Events</h1>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 pr-24"><h1 className="text-title">Events</h1><div className="flex gap-1 rounded-md bg-muted p-1"><button className={`min-h-11 rounded-sm px-4 text-small ${calendarView ? 'bg-card text-primary-text' : 'text-muted-foreground'}`} aria-pressed={calendarView} onClick={() => setCalendarView(true)}>Month</button><button className={`min-h-11 rounded-sm px-4 text-small ${!calendarView ? 'bg-card text-primary-text' : 'text-muted-foreground'}`} aria-pressed={!calendarView} onClick={() => { setCalendarView(false); setSelectedDate(null); }}>List</button></div></div>
+        {calendarView && <EventCalendar dates={[...upcoming, ...canceled].map((p) => p.date)} selected={selectedDate} onSelect={setSelectedDate} />}
+        {selectedDate && ![...upcoming, ...canceled].some((p) => p.date === selectedDate) && <div className="mb-5 rounded-lg border border-border bg-card p-5"><h2 className="text-heading">Nothing planned yet.</h2><p className="my-3 text-small text-muted-foreground">Pick a day, then invite your people.</p><button className="btn-primary" onClick={onPlan}>Start planning</button></div>}
 
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
@@ -282,7 +279,7 @@ export function EventsPage({
             {upcoming.length === 0 && canceled.length === 0 && trips.length === 0 ? (
               <div className="rounded-lg border border-border bg-card p-8 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No events yet. Start planning from the Home tab.
+                  Your next good night starts here.
                 </p>
               </div>
             ) : (
@@ -303,7 +300,7 @@ export function EventsPage({
                         Single Events
                       </h2>
                     )}
-                    {upcoming.map(renderPlanCard)}
+                    {upcoming.filter((p) => !selectedDate || p.date === selectedDate).map(renderPlanCard)}
                   </div>
                 )}
 
@@ -318,10 +315,10 @@ export function EventsPage({
                 {canceled.length > 0 && (
                   <div className="mt-8">
                     <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                      Canceled
+                      Past & canceled
                     </h2>
                     <div className="space-y-3 opacity-60">
-                      {canceled.map(renderPlanCard)}
+                      {canceled.filter((p) => !selectedDate || p.date === selectedDate).map(renderPlanCard)}
                     </div>
                   </div>
                 )}

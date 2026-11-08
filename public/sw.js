@@ -28,8 +28,16 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   // The app routes on the hash (/#/plan/…); older notifications sent bare
   // paths (/plan/…), which would land on the home page.
-  let url = event.notification.data?.url ?? "/";
-  if (url.startsWith("/") && !url.startsWith("/#")) url = "/#" + url;
+  // Older notifications may contain caller-supplied data. Never let a tap
+  // navigate to another origin, credentials or a non-web scheme.
+  let url = "/";
+  try {
+    const target = new URL(event.notification.data?.url ?? "/", self.location.origin);
+    if (target.origin === self.location.origin && !target.username && !target.password) {
+      url = target.pathname + target.search + target.hash;
+      if (url !== "/" && !url.startsWith("/#")) url = "/#" + url;
+    }
+  } catch { /* malformed destination: go home */ }
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((clients) => {
       for (const client of clients) {

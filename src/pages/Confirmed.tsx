@@ -14,6 +14,7 @@ import { useCountdown, formatCountdown } from '../lib/countdown';
 import { MapPin, PartyPopper, Clock, Smartphone, Check } from 'lucide-react';
 import { appBase, buildInviteMessage, shareOrCopy } from '../lib/invite';
 import { mapsDirectionsUrl } from '../lib/maps';
+import { planToCalendarEvent } from '../lib/calendar';
 
 function getRsvpIdFromHash() {
   const hash = window.location.hash;
@@ -60,7 +61,8 @@ export function ConfirmedPage({ id }: { id: string }) {
     };
   }, [id]);
 
-  const countdown = useCountdown(plan?.date ?? '2099-01-01');
+  const event = plan ? planToCalendarEvent(plan, stops) : null;
+  const countdown = useCountdown(event?.start.toISOString() ?? '2099-01-01');
 
   if (loading) {
     return (

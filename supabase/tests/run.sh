@@ -19,7 +19,21 @@ trap cleanup EXIT
 
 echo "→ starting $IMAGE"
 docker run -d --name "$NAME" -e POSTGRES_PASSWORD=test -e POSTGRES_DB=postgres "$IMAGE" >/dev/null
-for _ in $(seq 1 60); do docker exec "$NAME" pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+# The image starts a Unix-only bootstrap server, then restarts. Wait for the
+# final TCP listener so the first psql command cannot race that restart.
+ready=false
+for _ in $(seq 1 60); do
+  if docker exec "$NAME" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
+    ready=true
+    break
+  fi
+  sleep 1
+done
+if [ "$ready" != true ]; then
+  echo "Postgres did not become ready within 60 seconds" >&2
+  docker logs "$NAME" >&2
+  exit 1
+fi
 
 docker exec "$NAME" psql -U postgres -q -c "CREATE DATABASE $DB;" >/dev/null
 docker cp supabase/tests/00_platform_stub.sql "$NAME":/tmp/stub.sql >/dev/null

@@ -43,7 +43,7 @@ Deno.serve(async (req: Request) => {
     const auth = await requireUser(req);
     if (!auth.ok) return json(req, { error: auth.error }, auth.status);
 
-    const limit = await consumeRateLimit("travel-times", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS);
+    const limit = await consumeRateLimit("travel-times", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS, { failClosed: true });
     if (!limit.allowed) {
       return json(
         req,
@@ -53,11 +53,19 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { origin, destinations } = await req.json();
+    const body = await req.json();
+    if (body.action === "capabilities") {
+      await getGoogleMapsApiKey();
+      return json(req, { modes: ["driving", "walking", "transit"], provider: "Google Maps", liveTraffic: false });
+    }
+    const { origin, destinations, mode = "driving" } = body;
+    if (!["driving", "walking", "transit"].includes(mode)) return json(req, { error: "Unsupported travel mode" }, 400);
+    const validCoord = (lat: unknown, lon: unknown) => typeof lat === "number" && typeof lon === "number" && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+    if (typeof origin === "object" && origin && !validCoord(origin.lat, origin.lon)) return json(req, { error: "Invalid origin coordinates" }, 400);
     if (!origin) {
       return json(req, { error: "origin is required" }, 400);
     }
-    if (!Array.isArray(destinations) || destinations.length === 0) {
+    if (!Array.isArray(destinations) || destinations.length === 0 || destinations.length > MAX_DESTINATIONS) {
       return json(req, { error: "destinations must be a non-empty array" }, 400);
     }
 
@@ -77,8 +85,9 @@ Deno.serve(async (req: Request) => {
       originCoord = { lat: origin.lat, lng: origin.lon };
     } else if (typeof origin === "string" && origin.trim()) {
       const found = await geocodeAU(origin, apiKey);
-      originCoord = found.coord;
+      originCoord = found.coord && validCoord(found.coord.lat, found.coord.lng) ? found.coord : null;
       originAddress = found.formattedAddress;
+      if (body.originIsVenue === true && !found.types?.some((t) => ["street_address", "premise", "subpremise", "establishment", "point_of_interest", "park"].includes(t))) originCoord = null;
       if (!originCoord) {
         const originError = found.status === "ZERO_RESULTS" ? "not_found" : "unavailable";
         return json(req, { distances: results, originError });
@@ -92,12 +101,15 @@ Deno.serve(async (req: Request) => {
     // few at a time rather than one after another.
     const wanted = (destinations as Destination[]).slice(0, MAX_DESTINATIONS);
     const destCoords: (Coord | null)[] = await mapLimit(wanted, 5, async (dest) => {
-      if (typeof dest === "object" && dest.lat != null && dest.lon != null) {
-        return { lat: dest.lat, lng: dest.lon };
+      if (typeof dest === "object" && dest && validCoord(dest.lat, dest.lon)) {
+        return { lat: dest.lat!, lng: dest.lon! };
       }
       const addr = typeof dest === "string" ? dest : dest?.address;
       if (typeof addr !== "string" || !addr.trim()) return null;
-      return (await geocodeAU(addr, apiKey)).coord;
+      const found = await geocodeAU(addr, apiKey);
+      // A city/postcode centre is not a verified venue coordinate.
+      if (!found.types?.some((t) => ["street_address", "premise", "subpremise", "establishment", "point_of_interest", "park"].includes(t))) return null;
+      return found.coord && validCoord(found.coord.lat, found.coord.lng) ? found.coord : null;
     });
     destCoords.forEach((c, i) => {
       if (c) {
@@ -116,9 +128,9 @@ Deno.serve(async (req: Request) => {
         `https://maps.googleapis.com/maps/api/distancematrix/json` +
         `?origins=${originCoord.lat},${originCoord.lng}` +
         `&destinations=${batch.map(({ c }) => `${c.lat},${c.lng}`).join("|")}` +
-        `&mode=driving&units=metric&key=${apiKey}`;
+        `&mode=${mode}${mode === "transit" ? "&departure_time=now" : ""}&units=metric&key=${apiKey}`;
       try {
-        const res = await fetch(dmUrl);
+        const res = await fetch(dmUrl, { signal: AbortSignal.timeout(12000) });
         if (!res.ok) {
           console.error("[travel-times] Distance Matrix HTTP", res.status);
           continue;
@@ -132,7 +144,7 @@ Deno.serve(async (req: Request) => {
         if (!Array.isArray(elements)) continue;
         batch.forEach(({ i, c }, k) => {
           const el = elements[k];
-          if (el?.status === "OK" && typeof el.duration?.value === "number") {
+          if (el?.status === "OK" && typeof el.duration?.value === "number" && Number.isFinite(el.duration.value) && el.duration.value >= 0) {
             results[i] = {
               durationSeconds: el.duration.value,
               durationText: formatDuration(el.duration.value),
@@ -148,7 +160,7 @@ Deno.serve(async (req: Request) => {
     }
 
     return json(req, {
-      distances: results,
+      distances: results, mode, verifiedCoordinates: true, verifiedOrigin: body.originIsVenue === true, provider: "Google Maps", liveTraffic: false,
       origin: { lat: originCoord.lat, lon: originCoord.lng, address: originAddress },
     });
   } catch (err) {

@@ -30,16 +30,14 @@ type CalendarEvent = {
  */
 export function planToCalendarEvent(plan: Plan, stops: Stop[]): CalendarEvent {
   const ordered = [...stops].sort((a, b) => a.sort_order - b.sort_order || a.time.localeCompare(b.time));
-  const firstTime = ordered[0]?.time ?? DEFAULT_START;
-  const lastTime = ordered[ordered.length - 1]?.time ?? null;
+  const firstTime = ordered[0]?.time.slice(0, 5) ?? DEFAULT_START;
 
   const start = new Date(`${plan.date}T${firstTime}:00`);
   let end: Date;
-  if (lastTime && lastTime > firstTime) {
-    // Give the final stop an hour rather than ending the event the minute it starts.
-    end = new Date(`${plan.date}T${lastTime}:00`);
-    end = new Date(end.getTime() + 60 * 60 * 1000);
+  if (plan.end_time && plan.end_date) {
+    end = new Date(`${plan.end_date}T${plan.end_time.slice(0, 5)}:00`);
   } else {
+    // Export-only default duration, never displayed or persisted as an event end.
     end = new Date(start.getTime() + DEFAULT_DURATION_HOURS * 60 * 60 * 1000);
   }
 

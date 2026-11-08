@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins, SunMoon } from 'lucide-react';
-import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isTeam, SUBSCRIPTION_PLANS } from '../lib/supabase';
+import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isTeam, SUBSCRIPTION_PLANS, subscribeToPush } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../lib/router';
 import { ScrollHint } from '../components/ScrollHint';
@@ -23,7 +23,9 @@ const DIETARY_OPTIONS = [
   { key: 'pescatarian', label: 'Pescatarian' },
 ];
 
-export function SettingsPage({ onBack }: { onBack: () => void }) {
+export function SettingsPage({ onBack, onFriends }: { onBack: () => void; onFriends?: () => void }) {
+  const [privacy, setPrivacy] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState('');
   const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, premiumUnlocked, isVenuePartner, role } = useAuth();
   const currentEmail = session?.user.email ?? '';
 
@@ -165,7 +167,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <div className="relative min-h-screen overflow-y-auto bg-background px-6 pt-20 pb-24">
+    <div className="ux-page relative pt-20">
       <button
         onClick={onBack}
         aria-label="Back"
@@ -178,6 +180,8 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         <h1 className="text-title text-foreground">Settings</h1>
         <p className="mt-1 mb-8 text-sm text-muted-foreground">{currentEmail}</p>
 
+        {onFriends && <button type="button" onClick={onFriends} className="btn-outline mb-6">Friends and group collections</button>}
+
         {/* Appearance */}
         <section className="mb-6 rounded-lg border border-border bg-card p-5">
           <h2 className="mb-4 flex items-center gap-2 text-caption text-muted-foreground">
@@ -187,6 +191,14 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           <p className="mt-3 text-small text-muted-foreground">System follows your phone or computer's light or dark setting.</p>
         </section>
 
+        <section className="mb-6 space-y-3" aria-label="Privacy and permissions"><h2 className="text-caption text-muted-foreground">Your preferences</h2>
+          <button className="ux-next w-full text-left" onClick={() => setPrivacy(true)}><ShieldCheck size={19} /><span className="flex-1 text-label">Privacy &amp; shared links</span><ChevronRight size={17} /></button>
+          <button className="ux-next w-full text-left" onClick={async () => { try { const sub = await subscribeToPush(); setPermissionStatus(sub ? 'Browser notifications are enabled.' : 'Notifications are unavailable or permission was not granted. Check your browser settings.'); } catch { setPermissionStatus('Notifications could not be enabled. Your browser may require permission or an installed app.'); } }}><HelpCircle size={19} /><span className="flex-1 text-label">Enable browser notifications</span><ChevronRight size={17} /></button>
+          <button className="ux-next w-full text-left" onClick={async () => { try { const permission = await navigator.permissions.query({ name: 'geolocation' }); setPermissionStatus(`Location permission: ${permission.state}. The planner asks only when you choose current location.`); } catch { setPermissionStatus('Location permissions are managed by your browser. The planner can always use a typed postcode.'); } }}><SunMoon size={19} /><span className="flex-1 text-label">Location permissions</span><ChevronRight size={17} /></button>
+          {permissionStatus && <p role="status" className="text-small text-primary-text">{permissionStatus}</p>}
+        </section>
+        <Dialog open={privacy} onOpenChange={setPrivacy}><DialogContent><DialogHeader><DialogTitle>Privacy &amp; sharing</DialogTitle><DialogDescription>Choose carefully where you share your plans.</DialogDescription></DialogHeader><p className="text-small">Your venue library is account-scoped. Shared collections let their members view the venues shared there. Anyone holding an event link can see its details and RSVP; a guest display name never grants editing rights. Link expiry and revocation are not available yet.</p></DialogContent></Dialog>
+        <details className="mb-6 rounded-lg border border-border bg-card p-4"><summary className="min-h-11 cursor-pointer text-label">Profile &amp; account <span className="block text-small font-normal text-muted-foreground">Name, username, dietary preferences, email and security</span></summary><div className="mt-5">
         {/* Display name */}
         <section className="mb-6 rounded-lg border border-border bg-card p-5">
           <h2 className="mb-4 flex items-center gap-2 text-caption text-muted-foreground">
@@ -196,7 +208,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             type="text"
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
-            placeholder="e.g. Robert Bui"
+            placeholder="Alex Taylor"
             className="mb-3 w-full rounded-md border border-input bg-card dark:bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
           />
           {nameError && (
@@ -225,7 +237,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                 const clean = e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
                 setUsernameInput(clean);
               }}
-              placeholder="e.g. robbui"
+              placeholder="alex.taylor"
               className="w-full rounded-md border border-input bg-card dark:bg-background py-3 pl-11 pr-4 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             />
           </div>
@@ -352,6 +364,8 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           </button>
         </section>
 
+        </div></details>
+        <section className="mb-6 rounded-lg border border-border bg-card p-4"><h2 className="text-caption text-muted-foreground">Support</h2><details className="mt-3"><summary className="min-h-11 cursor-pointer text-label">Help &amp; feedback</summary><p className="mt-2 text-small text-muted-foreground">Save places from links in Venues. Use Plan to combine saved places and Our Picks, then invite friends after confirming. If a service fails, keep your draft and retry. Feedback contact details have not been configured yet.</p></details><p className="mt-3 text-small text-muted-foreground">Terms &amp; privacy documents are not available yet.</p></section>
         {/* Credits: earned by reviewing sponsored venues */}
         {credits != null && (
           <section className="mb-6 rounded-lg border border-border bg-card p-5">

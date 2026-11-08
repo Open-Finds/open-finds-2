@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 
 export type Route =
   | { name: 'home' }
+  | { name: 'events' | 'friends' | 'settings' | 'planner' | 'discover' }
   | { name: 'create' }
   | { name: 'build' }
   | { name: 'saved' }
@@ -29,6 +30,7 @@ function parseHash(): Route {
   const parts = pathOnly.split('/').filter(Boolean);
 
   if (parts.length === 0) return { name: 'home' };
+  if (parts[0] === 'events' || parts[0] === 'friends' || parts[0] === 'settings' || parts[0] === 'planner' || parts[0] === 'discover') return { name: parts[0] };
   if (parts[0] === 'create') {
     if (parts[1] === 'build') return { name: 'build' };
     return { name: 'create' };

@@ -27,7 +27,7 @@ BEGIN
   PERFORM rep('U1 unlocked: free account can start a second plan', ok);
 
   BEGIN
-    FOR i IN 1..5 LOOP
+    FOR i IN 1..6 LOOP
       INSERT INTO stops (plan_id, name, address, time, sort_order)
       VALUES ('15151515-0000-0000-0000-000000000001', 'S' || i, i || ' George St', '18:00', i);
     END LOOP;
@@ -35,16 +35,18 @@ BEGIN
   EXCEPTION WHEN others THEN
     ok := false;
   END;
-  PERFORM rep('U2 unlocked: free plan takes 5 stops', ok);
+  PERFORM rep('U2 unlocked: free plan takes 6 stops', ok AND
+    (SELECT count(*) FROM stops WHERE plan_id='15151515-0000-0000-0000-000000000001')=6);
 
   BEGIN
     INSERT INTO stops (plan_id, name, address, time, sort_order)
-    VALUES ('15151515-0000-0000-0000-000000000001', 'S6', '6 George St', '18:00', 6);
+    VALUES ('15151515-0000-0000-0000-000000000001', 'S7', '7 George St', '18:00', 7);
     ok := false;
   EXCEPTION WHEN others THEN
-    ok := position('limited to 5' in SQLERRM) > 0;
+    ok := position('up to 6 stops' in SQLERRM) > 0;
   END;
-  PERFORM rep('U3 unlocked: still no sixth stop', ok);
+  PERFORM rep('U3 unlocked: still no seventh stop', ok AND
+    (SELECT count(*) FROM stops WHERE plan_id='15151515-0000-0000-0000-000000000001')=6);
 
   PERFORM rep('U4 unlocked: tier itself is untouched',
     (SELECT COALESCE(subscription_tier, 'free') FROM profiles WHERE id = '15151515-1515-1515-1515-151515151515') = 'free');

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { tagLabel } from '../lib/taxonomy';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Search, Plus, X, Loader2, Check, Link2, Sparkles, Folder, FolderPlus, Trash2, Pencil, ChevronLeft, MapPin, Share2, Users, UserMinus, Crown } from 'lucide-react';
 import {
   fetchSavedVenues,
@@ -24,7 +25,8 @@ import { UserFacingError, extractVenuesFromLink, type ExtractedVenueItem } from 
 import { geocodeAddress } from '../lib/apiKeys';
 import { navigate } from '../lib/router';
 import { SavedVenueCard } from '../components/SavedVenueCard';
-import { VenueTypeSelect } from '../components/ui/select';
+import { CategoryPicker } from '../components/CategoryPicker';
+import { matchesTaxonomy, CATEGORY_SHORT } from '../lib/taxonomy';
 import { ShareCollectionModal } from '../components/ShareCollectionModal';
 import { DuplicateVenueDialog, type PendingDuplicate } from '../components/DuplicateVenueDialog';
 import { findSimilarVenues } from '../lib/venueMatch';
@@ -33,8 +35,13 @@ import { TRIPS_ENABLED } from '../lib/features';
 import { hasCached, useCachedState } from '../lib/cache';
 import { LoadError } from '../components/LoadError';
 import { AddressInput } from '../components/AddressInput';
+import { VenueDetails } from '../components/VenueDetails';
+import { CATEGORIES, CATEGORY_LABELS } from '../lib/planner';
+import { categoriesOf } from '../lib/taxonomy';
 
-export function VenuesPage() {
+export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanCollection }: {
+  initialAdd?: boolean; sharedLink?: string | null; onPlan?: (venue: SavedVenue) => void; onPlanCollection?: (id: string) => void;
+}) {
   // Remembered between visits; the fresh copy loads behind it.
   const [venues, setVenues] = useCachedState<SavedVenue[]>('venues', []);
   const [collections, setCollections] = useCachedState<Collection[]>('venues:collections', []);
@@ -44,7 +51,10 @@ export function VenuesPage() {
   const [search, setSearch] = useState('');
   const [dietaryFilter, setDietaryFilter] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(initialAdd || !!sharedLink);
+  const [detail, setDetail] = useState<SavedVenue | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const sharedHandled = useRef(false);
 
   // Collection management state
   const [showNewCollection, setShowNewCollection] = useState(false);
@@ -99,7 +109,7 @@ export function VenuesPage() {
   }, []);
 
   // Add form state
-  const [linkInput, setLinkInput] = useState('');
+  const [linkInput, setLinkInput] = useState(sharedLink ?? '');
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [type, setType] = useState<VenueType>('food');
@@ -171,11 +181,11 @@ export function VenuesPage() {
         const inAddress = v.address.toLowerCase().includes(q);
         const inTags = (v.tags ?? []).some((t) => t.toLowerCase().includes(q));
         const inCollection = (v.collection ?? '').toLowerCase().includes(q);
-        return inName || inAddress || inTags || inCollection;
+        return inName || inAddress || inTags || inCollection || matchesTaxonomy({ ...v, tags: v.tags ?? [] }, q);
       });
     }
-    return result;
-  }, [venues, search, dietaryFilter, openCollectionId, memberships, sharedVenues, myId]);
+    return result.filter((v) => categoryFilter === 'all' || categoriesOf(v).includes(categoryFilter as import("../lib/taxonomy").Category));
+  }, [venues, search, dietaryFilter, openCollectionId, memberships, sharedVenues, myId, categoryFilter]);
 
   const resetForm = () => {
     setName('');
@@ -268,8 +278,8 @@ export function VenuesPage() {
     }
   };
 
-  const handleExtract = async () => {
-    const link = linkInput.trim();
+  const handleExtract = useCallback(async (incoming?: string) => {
+    const link = (incoming ?? linkInput).trim();
     if (!link) {
       setError('Paste a link first.');
       return;
@@ -298,7 +308,11 @@ export function VenuesPage() {
     } finally {
       setExtracting(false);
     }
-  };
+  }, [linkInput]);
+  useEffect(() => {
+    if (!sharedLink || sharedHandled.current) return;
+    sharedHandled.current = true; setShowAddForm(true); void handleExtract(sharedLink);
+  }, [sharedLink, handleExtract]);
 
   const toggleItem = (idx: number) => {
     setSelectedItems((prev) => {
@@ -434,7 +448,11 @@ export function VenuesPage() {
   };
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-background px-6 pt-8 pb-24">
+    <div className="ux-page">
+      {detail && <VenueDetails venue={detail} owned={detail.user_id === myId} onClose={() => setDetail(null)}
+        onPlan={() => { onPlan?.(detail); setDetail(null); }} onEdit={() => { setEditingId(detail.id); setDetail(null); }}
+        onSaved={(updated) => { setDetail(updated); setVenues((prev) => prev.map((v) => v.id === updated.id ? updated : v)); }} />}
+      <div className="mb-5 grid grid-cols-3 gap-2 pt-12" aria-label="Venue categories"><button className={`col-span-3 min-h-11 rounded-full border px-3 text-small ${categoryFilter === 'all' ? 'border-primary bg-primary-soft text-primary-text' : 'border-border'}`} onClick={() => setCategoryFilter('all')}>All venues</button>{CATEGORIES.map((c) => <button key={c} aria-pressed={categoryFilter === c} className={`min-h-11 rounded-full border px-3 text-small ${categoryFilter === c ? 'border-primary bg-primary-soft text-primary-text' : 'border-border'}`} onClick={() => setCategoryFilter(c)} aria-label={CATEGORY_LABELS[c]}>{CATEGORY_SHORT[c]}</button>)}</div>
       <DuplicateVenueDialog
         pending={dupPending}
         onAddAnyway={() => dupProceed?.all()}
@@ -492,6 +510,7 @@ export function VenuesPage() {
                 <MapPin size={16} /> Plan a Trip <Crown size={13} aria-label="Premium" />
               </button>}
             </div>
+            <button className="btn-primary mb-5 w-full" onClick={() => onPlanCollection?.(openCollection.id)} disabled={!onPlanCollection}><Plus size={16} />Plan from this collection</button>
             <div className="relative mb-4">
               <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <input
@@ -520,6 +539,7 @@ export function VenuesPage() {
               ) : (
                 filtered.map((v) => (
                   <SavedVenueCard
+                    onOpen={() => setDetail(v)}
                     key={v.id}
                     venue={v}
                     readOnly={v.user_id !== myId}
@@ -545,9 +565,9 @@ export function VenuesPage() {
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-3 pr-14">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <h1 className="text-title text-foreground">My Venues</h1>
+                <h1 className="text-title text-foreground">Saved Venues</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Your saved spots, searchable and filterable.
                 </p>
@@ -557,10 +577,10 @@ export function VenuesPage() {
                   setShowAddForm(!showAddForm);
                   if (!showAddForm) resetForm();
                 }}
-                className={`${showAddForm ? 'btn-outline' : 'btn-info'} btn-sm shrink-0`}
+                className={`${showAddForm ? 'btn-outline' : 'btn-primary'} btn-sm shrink-0`}
               >
                 {showAddForm ? <X size={18} /> : <Plus size={18} />}
-                {showAddForm ? 'Close' : 'Add Venue'}
+                {showAddForm ? 'Close' : 'Save Venues'}
               </button>
             </div>
 
@@ -582,7 +602,7 @@ export function VenuesPage() {
                 {/* Link extraction */}
                 <div className="mb-4">
                   <label className="mb-2 block text-sm font-medium text-muted-foreground">
-                    Paste a link to extract details
+                    Paste a social or venue link
                   </label>
                   <div className="relative">
                     <Link2 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
@@ -595,14 +615,14 @@ export function VenuesPage() {
                     />
                   </div>
                   <button
-                    onClick={handleExtract}
+                    onClick={() => void handleExtract()}
                     disabled={extracting}
                     className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background py-2.5 text-sm font-medium text-foreground transition-all active:scale-[0.98] disabled:opacity-50"
                   >
                     {extracting ? (
                       <><Loader2 size={18} className="animate-spin" /> Extracting...</>
                     ) : (
-                      <><Sparkles size={18} /> Extract Venue</>
+                      <><Sparkles size={18} />Save Venues</>
                     )}
                   </button>
                 </div>
@@ -643,7 +663,7 @@ export function VenuesPage() {
                     <button
                       onClick={handleSaveMulti}
                       disabled={savingMulti || selectedItems.size === 0}
-                      className="btn-info mt-4 w-full"
+                      className="btn-primary mt-4 w-full"
                     >
                       {savingMulti ? (
                         <><Loader2 size={18} className="animate-spin" /> Saving...</>
@@ -679,7 +699,7 @@ export function VenuesPage() {
                     </div>
                     <div className="mb-3">
                       <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Type</label>
-                      <VenueTypeSelect value={type} onChange={setType} />
+                      <CategoryPicker type={type} tags={tags} onChange={(value) => { setType(value.type); setTags(value.tags); }} />
                     </div>
                     <div className="mb-4">
                       <label className="mb-1.5 block text-sm font-medium text-muted-foreground">
@@ -715,7 +735,7 @@ export function VenuesPage() {
                               key={tag}
                               className="inline-flex items-center gap-1 rounded-full bg-ai-soft px-2.5 py-1 text-xs font-medium text-ai-soft-foreground"
                             >
-                              {tag}
+                              {tagLabel(tag)}
                               <button
                                 onClick={() => removeTag(tag)}
                                 type="button"
@@ -731,7 +751,7 @@ export function VenuesPage() {
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="btn-info btn-lg w-full"
+                      className="btn-primary btn-lg w-full"
                     >
                       {saving ? 'Saving...' : 'Save Venue'}
                     </button>
@@ -842,7 +862,7 @@ export function VenuesPage() {
                               <>
                                 <button
                                   onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }}
-                                  className="ml-0.5 text-brand-yellow transition-opacity hover:text-brand-yellow/80 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                  className="ml-0.5 text-accent-highlight transition-opacity hover:text-accent-highlight/80 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                   aria-label="Rename collection"
                                 >
                                   <Pencil size={10} />
@@ -940,6 +960,7 @@ export function VenuesPage() {
               ) : (
                 filtered.map((v) => (
                   <SavedVenueCard
+                    onOpen={() => setDetail(v)}
                     key={v.id}
                     venue={v}
                     isEditing={editingId === v.id}

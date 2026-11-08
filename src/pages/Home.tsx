@@ -1,3 +1,4 @@
+import { brandAssets } from '../lib/brand';
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -157,7 +158,7 @@ const DIETARY_OPTIONS: { key: string; label: string }[] = [
 function Logo({ size = 96 }: { size?: number }) {
   return (
     <img
-      src="/the-unsaved-mark.png"
+      src={brandAssets.mark}
       width={size}
       height={size}
       alt=""
@@ -1042,7 +1043,7 @@ export function HomePage({
               <button
                 onClick={qaHandleSaveMulti}
                 disabled={qaSavingMulti || qaSelectedItems.size === 0}
-                className="btn-info mt-4 w-full"
+                className="btn-primary mt-4 w-full"
               >
                 {qaSavingMulti ? (
                   <><Loader2 size={18} className="animate-spin" /> Saving...</>
@@ -1164,7 +1165,7 @@ export function HomePage({
               <button
                 onClick={handleQuickAddSave}
                 disabled={qaSaving}
-                className="btn-info btn-lg w-full"
+                className="btn-primary btn-lg w-full"
               >
                 {qaSaving ? 'Saving...' : 'Save Venue'}
               </button>

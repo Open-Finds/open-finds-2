@@ -393,7 +393,7 @@ function Approvals({
             <PartnerCard key={p.id} p={p}>
               {isAdmin && <Button size="sm" variant="secondary" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>}
               {isAdmin && <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onReject(p)}><X /> Reject</Button>}
-              <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-brand-yellow" /> Edit</Button>
+              <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-accent-highlight" /> Edit</Button>
             </PartnerCard>
           ))}
         </div>
@@ -486,7 +486,7 @@ function Venues({
                 {isAdmin && status !== 'live' && status !== 'paused' && (
                   <Button size="sm" variant="secondary" disabled={busyId === p.id} onClick={() => onApprove(p)}><Check /> Approve</Button>
                 )}
-                <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-brand-yellow" /> Edit</Button>
+                <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onEdit(p)}><Pencil className="text-accent-highlight" /> Edit</Button>
                 {(status === 'live' || status === 'paused') && (
                   <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => onTogglePause(p)}>
                     {p.active ? <><Pause /> Pause</> : <><Play /> Resume</>}

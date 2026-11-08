@@ -127,7 +127,7 @@ export function MyVenuesPage() {
                             <span>{p.impressions} appearances · {p.visits} visits · {money(p.total_billed_cents)} billed</span>
                             <RatingLine average={p.average_rating} count={p.review_count} />
                           </p>
-                          <Button size="sm" variant="outline" onClick={() => setEditing(p)}><Pencil className="text-brand-yellow" /> Edit</Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditing(p)}><Pencil className="text-accent-highlight" /> Edit</Button>
                         </div>
                       </li>
                     );

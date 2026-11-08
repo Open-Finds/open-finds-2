@@ -1,3 +1,4 @@
+import { BRAND } from '../lib/brand';
 import { useEffect, useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, User, AtSign, Check, X, Loader2, ChevronLeft } from 'lucide-react';
 import {
@@ -172,9 +173,10 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
     <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-10 sm:px-6">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
-          <img src="/the-unsaved-mark.png" alt="" width={88} height={88} className="mb-1" />
-          <h1 className="mb-2 text-display text-foreground">The Unsaved</h1>
-          <p className="text-body text-muted-foreground">Turn reels into real life!</p>
+          <h1 className="w-full max-w-[208px]">
+            <img src="/brand/home-wordmark.webp" alt={BRAND.name} width="560" height="376" className="h-auto w-full" />
+          </h1>
+          <p className="mt-3 font-[Knewave] text-base text-foreground">{BRAND.tagline}</p>
         </div>
 
         {resetting ? (
@@ -265,7 +267,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                       type="text"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="e.g. Robert Bui"
+                      placeholder="Alex Taylor"
                       autoComplete="name"
                       className="pl-11"
                     />
@@ -294,7 +296,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
                           } catch { /* ignore */ }
                         }
                       }}
-                      placeholder="e.g. robbui"
+                      placeholder="alex.taylor"
                       // Not "username": browsers fill that with a saved
                       // login, which gave a second account the first one's name.
                       autoComplete="off"
