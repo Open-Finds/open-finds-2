@@ -79,8 +79,8 @@ export function ChooseUsernamePage() {
                 id="choose-display-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Alex Taylor"
-                autoComplete="name"
+                placeholder="Your display name"
+                autoComplete="off"
                 className="pl-11"
               />
             </div>
@@ -97,7 +97,7 @@ export function ChooseUsernamePage() {
                   setAvailable(null);
                 }}
                 onBlur={() => check(username.trim())}
-                placeholder="alex.taylor"
+                placeholder="your_username"
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
