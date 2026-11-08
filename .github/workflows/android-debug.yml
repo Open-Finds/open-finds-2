@@ -56,7 +56,7 @@ jobs:
               signal: AbortSignal.timeout(15000),
             });
             if (!response.ok) throw new Error('Staging rejected the client key.');
-            JS
+          JS
             echo 'artifact=the-unsaved-staging-debug' >> "$GITHUB_OUTPUT"
           fi
       - name: Install dependencies and build staging web bundle
