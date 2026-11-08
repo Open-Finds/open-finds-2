@@ -37,7 +37,7 @@ create table public.venue_recommendations (
   snapshot jsonb not null
 );
 alter table public.venue_recommendations enable row level security;
-revoke all on public.venue_recommendations from anon, authenticated;
+revoke all on public.venue_recommendations from public, anon, authenticated;
 
 create function public.publish_venue_recommendation(p_venue_id uuid)
 returns uuid
