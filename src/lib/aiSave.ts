@@ -48,6 +48,9 @@ export async function identifySharedVenue(input: string) {
 export async function publishVenue(venue: SavedVenue): Promise<string> {
   const { data, error } = await supabase.rpc('publish_venue_recommendation', { p_venue_id: venue.id });
   if (error || typeof data !== 'string') throw error ?? new Error('No share link returned.');
+  if (import.meta.env.VITE_SUPABASE_URL === 'https://crpkzysdtnoomzimibhe.supabase.co') {
+    return new URL('/#/venue/' + data, window.location.origin).href;
+  }
   return APP_URL + '/v/' + data;
 }
 

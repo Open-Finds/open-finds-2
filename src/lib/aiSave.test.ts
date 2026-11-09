@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { guestSave, identifySharedVenue, readGuestSave, sendRecommendation, sourceUrl } from './aiSave';
+import { guestSave, identifySharedVenue, publishVenue, readGuestSave, sendRecommendation, sourceUrl } from './aiSave';
 
 const mocks = vi.hoisted(() => ({ extract: vi.fn(), match: vi.fn(), rpc: vi.fn(), copy: vi.fn() }));
 vi.mock('./openai', () => ({ extractVenuesFromLink: mocks.extract }));
@@ -14,6 +14,7 @@ afterEach(() => {
   localStorage.clear();
   vi.restoreAllMocks();
   vi.resetAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('share venue persistence', () => {
@@ -47,6 +48,15 @@ describe('share venue persistence', () => {
     mocks.match.mockResolvedValue({ address: venue.address, lat: 1, lon: 2 });
     mocks.rpc.mockResolvedValue({ data: null, error: new Error('Write failed') });
     await expect(identifySharedVenue(link)).rejects.toThrow('Write failed');
+  });
+
+  it('links a staging recommendation to the staging guest route', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://crpkzysdtnoomzimibhe.supabase.co');
+    mocks.rpc.mockResolvedValue({ data: 'recommendation-id', error: null });
+
+    await expect(publishVenue({ ...venue, id: 'saved-id' } as Parameters<typeof publishVenue>[0]))
+      .resolves.toBe(window.location.origin + '/#/venue/recommendation-id');
+    expect(mocks.rpc).toHaveBeenCalledWith('publish_venue_recommendation', { p_venue_id: 'saved-id' });
   });
 
   it('persists guest saves and overwrites the same recommendation key', () => {
