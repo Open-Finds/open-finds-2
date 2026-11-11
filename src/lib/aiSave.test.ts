@@ -55,7 +55,7 @@ describe('share venue persistence', () => {
     mocks.rpc.mockResolvedValue({ data: 'recommendation-id', error: null });
 
     await expect(publishVenue({ ...venue, id: 'saved-id' } as Parameters<typeof publishVenue>[0]))
-      .resolves.toBe('https://open-finds-2-bnuk-git-feature-ai-save-quick-share-date-planner.vercel.app/venue/recommendation-id');
+      .resolves.toBe(window.location.origin + '/#/venue/recommendation-id');
     expect(mocks.rpc).toHaveBeenCalledWith('publish_venue_recommendation', { p_venue_id: 'saved-id' });
   });
 
