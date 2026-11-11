@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     const maps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(venue.name + ', ' + venue.address);
     const reel = httpsLink(venue.link);
     const photo = staging && id === '497dfa0b-29bf-446d-a272-f8a9211d53bd'
-      ? 'https://assets.foodhub.com/static/1b02396053de04a56d39e106a58e5560/img/1635712784php0CwJ6H.jpg'
+      ? 'https://tb-static.uber.com/prod/image-proc/processed_images/0e733286e4a4d55d86d5eb6acaacb847/1651207c9cb2a7942b37b3f3e4a0b899.jpeg'
       : origin + '/icon-512.png';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
