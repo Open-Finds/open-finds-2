@@ -16,12 +16,15 @@ import { FriendsPage } from './pages/Friends';
 import { NotificationsPage } from './pages/Notifications';
 import { MainNavigation, type AppView } from './components/MainNavigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
-import { receiveSharedText, SHARE_RECEIVED, takeSharedLink } from './lib/shareTarget';
-import { listenToNativeShares } from './lib/aiSave';
+import { SHARE_RECEIVED, takeSharedLink } from './lib/shareTarget';
+import { nativeShare, type AndroidShare } from './lib/aiSave';
+import { AndroidShareSheet, PendingAndroidSharePlan } from './components/AndroidShareSheet';
+import { Capacitor } from '@capacitor/core';
+import { stagingSupabase } from './lib/publicRecommendation.js';
 import { AiSaveDialog } from './components/AiSaveDialog';
 import { PendingVenuePlan, PublicVenuePage } from './pages/PublicVenue';
-import type { PlannerMode } from './lib/planner';
-import type { SavedVenue } from './lib/supabase';
+import { categoryOf, savedCandidate, venueKey, type PlannerMode, type PlannerVenue } from './lib/planner';
+import type { SharedVenue } from './lib/aiSave';
 import { GuidedTour } from './components/GuidedTour';
 import { CreditPrompt } from './components/CreditPrompt';
 import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isSigningUp } from './lib/supabase';
@@ -106,20 +109,15 @@ function AppInner() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [homeResetKey, setHomeResetKey] = useState(0);
   const [plannerMode, setPlannerMode] = useState<PlannerMode | undefined>();
-  const [plannerSeed, setPlannerSeed] = useState<SavedVenue[]>([]);
+  const [plannerSeed, setPlannerSeed] = useState<PlannerVenue[]>([]);
   const [plannerCollection, setPlannerCollection] = useState('');
   const [plannerDirty, setPlannerDirty] = useState(false);
   const [pendingView, setPendingView] = useState<View | null>(null);
-  const [pendingPlannerVenue, setPendingPlannerVenue] = useState<SavedVenue>();
+  const [pendingPlannerVenue, setPendingPlannerVenue] = useState<PlannerVenue>();
   const [openSave, setOpenSave] = useState(false);
   const [incomingShare, setIncomingShare] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile } = useAuth();
-  useEffect(() => {
-    const listener = listenToNativeShares(receiveSharedText);
-    void listener.catch(console.error);
-    return () => { void listener.then(subscription => subscription?.remove()).catch(() => {}); };
-  }, []);
+  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile, premiumUnlocked } = useAuth();
   useEffect(() => {
     if (!session || incomingShare) return;
     const consume = () => {
@@ -223,6 +221,9 @@ function AppInner() {
   }
   if (route.name === 'subscription') {
     if (!session) return <LoginPage />;
+    if (import.meta.env.VITE_SUPABASE_URL === stagingSupabase && (!profileLoaded || premiumUnlocked)) {
+      return <main className="p-6"><p>Subscriptions are paused during testing.</p><button className="btn-outline mt-4" onClick={() => navigate('/')}>Go home</button></main>;
+    }
     return <SubscriptionPage onBack={() => navigate('/')} />;
   }
   // Blank screen while session loads — avoids flash of login page for returning users
@@ -285,19 +286,25 @@ function AppInner() {
     if (editPlanId || (plannerDirty && (view === 'planner' || view === 'discover') && v !== view)) { setPendingView(v); return; }
     applyView(v);
   };
-  const startPlanner = (mode?: PlannerMode, seed?: SavedVenue, collection = '') => {
+  const startPlanner = (mode?: PlannerMode, seed?: PlannerVenue, collection = '') => {
     applyView('planner');
     setPlannerMode(mode); setPlannerSeed(seed ? [seed] : []); setPlannerCollection(collection);
     setHomeResetKey((k) => k + 1);
   };
-  const planFromShare = (venue: SavedVenue) => {
+  const planFromShare = (venue: SharedVenue) => {
+    const stop: PlannerVenue = {
+      id: `shared:${venueKey(venue)}`,
+      name: venue.name, address: venue.address, link: venue.link, category: categoryOf(venue),
+      lat: venue.lat ?? null, lon: venue.lon ?? null, tags: venue.tags ?? [],
+      source: 'external', entityKind: 'venue',
+    };
     setIncomingShare(null);
     if (editPlanId || plannerDirty) {
-      setPendingPlannerVenue(venue);
+      setPendingPlannerVenue(stop);
       setPendingView('planner');
       return;
     }
-    startPlanner('saved', venue);
+    startPlanner('saved', stop);
   };
   const closePlannerGuard = () => { setPendingView(null); setPendingPlannerVenue(undefined); };
 
@@ -401,9 +408,10 @@ function AppInner() {
     <Shell {...shellProps} inlineNotifications={view === 'home'}>
       {tourActive && !incomingShare && <GuidedTour initialDietary={dietaryPreferences} onFinish={finishTour} />}
       {!tourActive && <PendingVenuePlan onPlan={planFromShare} />}
+      {!tourActive && Capacitor.getPlatform() === 'android' && <PendingAndroidSharePlan owner={session.user.id} onPlan={planFromShare} />}
       <div key={view === 'home' ? `home-${homeResetKey}` : view} className={`animate-slide-${slideDir}`}>
         {view === 'home' ? (
-          <HomeDashboard onPlan={startPlanner} onVenues={() => switchView('venues')} onEvent={openDashboard}
+          <HomeDashboard onPlan={(mode, seed) => startPlanner(mode, seed ? savedCandidate(seed) : undefined)} onVenues={() => switchView('venues')} onEvent={openDashboard}
             onEvents={() => switchView('events')} onSettings={() => switchView('settings')}
             unreadCount={unreadCount} onNotifications={shellProps.onOpenNotifications} onSave={() => { setOpenSave(true); switchView('venues'); }} />
         ) : view === 'planner' || view === 'discover' ? (
@@ -416,7 +424,7 @@ function AppInner() {
         ) : view === 'settings' ? (
           <SettingsPage onBack={() => switchView('home')} onFriends={() => switchView('friends')} />
         ) : (
-          <VenuesPage initialAdd={openSave} onPlan={(v) => startPlanner('saved', v)}
+          <VenuesPage initialAdd={openSave} onPlan={(v) => startPlanner('saved', savedCandidate(v))}
             onPlanCollection={(id) => startPlanner('saved', undefined, id)} />
         )}
       </div>
@@ -425,6 +433,29 @@ function AppInner() {
 }
 
 function App() {
+  const android = Capacitor.getPlatform() === 'android';
+  const [share, setShare] = useState<AndroidShare | null | undefined>(android ? undefined : null);
+  useEffect(() => {
+    if (!android) return;
+    document.documentElement.classList.add('android-share-window');
+    let active = true;
+    const show = (value: Partial<AndroidShare>) => {
+      if (!active) return;
+      if (value.id) setShare({ ...value, id: value.id });
+      else {
+        document.documentElement.classList.remove('android-share-window');
+        setShare(null);
+      }
+    };
+    void nativeShare.getShare().then(show).catch(() => show({}));
+    return () => {
+      active = false;
+      document.documentElement.classList.remove('android-share-window');
+    };
+  }, [android]);
+  if (share === undefined) return null;
+  if (share) return <AuthProvider compact><AndroidShareSheet initialShare={share} /><CreditPrompt /></AuthProvider>;
+
   return (
     <div className="app-shell">
       <AuthProvider>

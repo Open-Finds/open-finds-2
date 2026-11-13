@@ -13,13 +13,41 @@ vi.mock('../lib/openai', () => ({ rankExistingVenues: async () => [] }));
 vi.mock('../lib/apiKeys', () => ({ geocodeAddress: async () => ({ lat: -33.8, lon: 151.2 }) }));
 vi.mock('../lib/discovery', () => ({ discoverVenues: mocks.discover }));
 vi.mock('../lib/useTravel', () => ({ useTravelModes: () => mocks.modes, useDiscoveryTravel: (_owner: string, _origin: unknown, venues: import('../lib/planner').PlannerVenue[]) => ({ busy: mocks.routesBusy, seconds: mocks.routesUnavailable ? {} : Object.fromEntries(venues.map((v, i) => [venueKey(v), mocks.routeSeconds[v.id] ?? (i === 6 ? 2400 : 600)])), coords: {} }), useItineraryTravel: () => ({ busy: false, legs: [480, 720, 300, 180, 400] }) }));
-import { venueKey } from '../lib/planner';
+import { emptyDraft, persistPlannerDraft, plannerReducer, venueKey, type PlannerVenue } from '../lib/planner';
 import { UnifiedPlanner } from './UnifiedPlanner';
 const saved = Array.from({ length: 7 }, (_, i) => ({ id: `v${i}`, name: `Fixture Café ${i}`, address: `${i + 1} Test Rd`, type: 'food', link: null,
   user_id: 'qa', lat: -33.8, lon: 151.2, tags: [], visited: false, personal_note: null, rating: null, collection: null, created_at: '' }));
 const done = vi.fn();
 beforeEach(() => { localStorage.clear(); mocks.routesUnavailable = false; mocks.routesBusy = false; mocks.routeSeconds = {}; mocks.modes = ['driving', 'walking']; mocks.track.mockReset().mockResolvedValue(undefined); mocks.publicSave.mockReset().mockResolvedValue(undefined); mocks.publicReviews.mockReset().mockResolvedValue([]); mocks.discover.mockReset(); mocks.discover.mockResolvedValue([]); mocks.save.mockReset(); mocks.timing.mockResolvedValue(true); HTMLElement.prototype.scrollIntoView = vi.fn(); mocks.premium.mockReturnValue(true); mocks.saved.mockResolvedValue(saved); mocks.picks.mockResolvedValue([{ id: 'p1', business_name: 'Fixture partner', address: '8 Test Rd', type: 'bar', lat: null, lon: null, review_count: 2, average_rating: 4.5, can_review: true, reviewed_by_me: false, instagram_link: null, website: null }]); mocks.confirm.mockResolvedValue('new-event'); mocks.support.mockResolvedValue(true); });
 const renderPlanner = () => render(<UnifiedPlanner onDone={done} onCancel={vi.fn()} onDirty={vi.fn()} />);
+
+it('preselects a shared venue in the itinerary without saving it to the library', async () => {
+  await act(async () => render(<UnifiedPlanner onDone={done} onCancel={vi.fn()} onDirty={vi.fn()} seed={[{
+    id: 'shared:test', name: 'Shared Cafe', address: '1 Test St', category: 'food', link: null,
+    source: 'external', entityKind: 'venue', lat: 1, lon: 2, tags: [],
+  }]} />));
+  expect(within(screen.getByLabelText('Selected itinerary')).getByRole('button', { name: 'Remove Shared Cafe' })).toBeInTheDocument();
+  await waitFor(() => expect(mocks.saved).toHaveBeenCalled());
+  expect(mocks.save).not.toHaveBeenCalled();
+});
+it('keeps a full draft and lets the user make room for the shared venue', async () => {
+  const shared: PlannerVenue = {
+    id: 'shared:test', name: 'Shared Cafe', address: '1 Test St', category: 'food', link: null,
+    source: 'external', entityKind: 'venue', lat: 1, lon: 2, tags: [],
+  };
+  let draft = emptyDraft();
+  for (let i = 0; i < 6; i++) {
+    draft = plannerReducer(draft, { type: 'add', venue: { ...shared, id: String(i), name: `Existing ${i}` } });
+  }
+  persistPlannerDraft('qa', draft);
+  await act(async () => render(<UnifiedPlanner onDone={done} onCancel={vi.fn()} onDirty={vi.fn()} seed={[shared]} />));
+  expect(screen.getByRole('button', { name: 'Add shared venue' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Existing 0' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add shared venue' }));
+  expect(screen.getByRole('button', { name: 'Remove Shared Cafe' })).toBeInTheDocument();
+  expect(mocks.save).not.toHaveBeenCalled();
+});
+
 async function start() {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText('Event name'), 'QA night');

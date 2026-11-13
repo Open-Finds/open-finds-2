@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, User, Mail, Lock, LogOut, Check, AtSign, HelpCircle, Utensils, Building2, Crown, ChevronRight, ShieldCheck, Coins, SunMoon } from 'lucide-react';
+import { stagingSupabase } from '../lib/publicRecommendation.js';
 import { signOut, upsertProfile, updateUserEmail, updateUserPassword, checkUsernameAvailable, resetOnboarding, updateDietaryPreferences, fetchMyCredits, isTeam, SUBSCRIPTION_PLANS, subscribeToPush } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { navigate } from '../lib/router';
@@ -26,10 +27,11 @@ const DIETARY_OPTIONS = [
 export function SettingsPage({ onBack, onFriends }: { onBack: () => void; onFriends?: () => void }) {
   const [privacy, setPrivacy] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState('');
-  const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, premiumUnlocked, isVenuePartner, role } = useAuth();
+  const { session, displayName, username, refreshProfile, setOnboardingCompleted, dietaryPreferences, subscriptionTier, premiumUnlocked, profileLoaded, isVenuePartner, role } = useAuth();
   const currentEmail = session?.user.email ?? '';
 
   // Null until loaded, or if credits aren't available yet: the card stays hidden.
+  const hideBilling = import.meta.env.VITE_SUPABASE_URL === stagingSupabase && (!profileLoaded || premiumUnlocked);
   const [credits, setCredits] = useState<number | null>(null);
   useEffect(() => {
     fetchMyCredits().then(setCredits, () => setCredits(null));
@@ -367,7 +369,7 @@ export function SettingsPage({ onBack, onFriends }: { onBack: () => void; onFrie
         </div></details>
         <section className="mb-6 rounded-lg border border-border bg-card p-4"><h2 className="text-caption text-muted-foreground">Support</h2><details className="mt-3"><summary className="min-h-11 cursor-pointer text-label">Help &amp; feedback</summary><p className="mt-2 text-small text-muted-foreground">Save places from links in Venues. Use Plan to combine saved places and Our Picks, then invite friends after confirming. If a service fails, keep your draft and retry. Feedback contact details have not been configured yet.</p></details><p className="mt-3 text-small text-muted-foreground">Terms &amp; privacy documents are not available yet.</p></section>
         {/* Credits: earned by reviewing sponsored venues */}
-        {credits != null && (
+        {!hideBilling && credits != null && (
           <section className="mb-6 rounded-lg border border-border bg-card p-5">
             <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
               <Coins size={13} /> Credits
@@ -377,13 +379,13 @@ export function SettingsPage({ onBack, onFriends }: { onBack: () => void; onFrie
               <span className="text-title text-foreground" aria-label={`${credits} credits`}>{credits}</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              Review a sponsored venue to earn 1 credit. When you've used today's free AI extractions or Something New searches, spend a credit for one more. Credits never expire.
+              Review a sponsored venue to earn 1 credit. When a free AI action reaches its daily allowance, spend a credit for one more. Credits never expire.
             </p>
           </section>
         )}
 
         {/* Subscription */}
-        <section className="mb-6 rounded-lg border border-border bg-card p-5">
+        {!hideBilling && <section className="mb-6 rounded-lg border border-border bg-card p-5">
           <h2 className="mb-3 flex items-center gap-2 text-caption text-muted-foreground">
             <Crown size={13} /> Subscription
           </h2>
@@ -402,7 +404,7 @@ export function SettingsPage({ onBack, onFriends }: { onBack: () => void; onFrie
             <span className="flex items-center gap-2"><Crown size={16} /> Manage Subscription</span>
             <ChevronRight size={18} />
           </button>
-        </section>
+        </section>}
 
         {/* Venue Partner Portal */}
         <section className="mb-6 rounded-lg border border-border bg-card p-5">

@@ -45,7 +45,7 @@ function GoogleMark() {
   );
 }
 
-export function LoginPage({ onBack }: { onBack?: () => void }) {
+export function LoginPage({ onBack, compact = false }: { onBack?: () => void; compact?: boolean }) {
   const { refreshProfile } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -56,17 +56,19 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(authLinkError ? EXPIRED_LINK : null);
+  const [confirmationPending, setConfirmationPending] = useState(false);
   // "Forgot password?": ask for the email, send the reset link.
   const [resetting, setResetting] = useState(Boolean(authLinkError));
   const [resetSent, setResetSent] = useState(false);
   const [liveProviders, setLiveProviders] = useState<Set<OAuthProvider>>(new Set());
-  const socialProviders = SOCIAL_PROVIDERS.filter((p) => p.allowed && liveProviders.has(p.id));
+  const socialProviders = compact ? [] : SOCIAL_PROVIDERS.filter((p) => p.allowed && liveProviders.has(p.id));
 
   useEffect(() => {
+    if (compact) return;
     let live = true;
     void fetchEnabledSignInProviders().then((set) => { if (live) setLiveProviders(set); });
     return () => { live = false; };
-  }, []);
+  }, [compact]);
 
   // An expired email link leaves #error=… in the address; tidy it once shown.
   useEffect(() => {
@@ -115,6 +117,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
     }
     setMode(m);
     setError(null);
+    setConfirmationPending(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,8 +147,14 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
         }
         setSigningUp(true);
         try {
-          await signUp(email.trim(), password);
-          await signIn(email.trim(), password);
+          const { session } = await signUp(email.trim(), password, displayName.trim(), cleanUsername);
+          if (!session) {
+            setPassword('');
+            setShowPassword(false);
+            setMode('signin');
+            setConfirmationPending(true);
+            return;
+          }
           await upsertProfile(displayName.trim(), cleanUsername);
         } finally {
           setSigningUp(false);
@@ -159,6 +168,8 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
       const msg = err instanceof Error ? err.message : 'Something went wrong.';
       if (msg.includes('Invalid login credentials')) {
         setError('Incorrect email or password.');
+      } else if (msg.includes('Email not confirmed')) {
+        setConfirmationPending(true);
       } else if (msg.includes('User already registered')) {
         setError('An account with this email already exists. Sign in instead.');
       } else if (msg.includes('Password should be at least')) {
@@ -176,7 +187,7 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
   return (
     // Phones fill the viewport; larger screens centre a bounded card instead
     // of stretching the form across the width of a monitor.
-    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-10 sm:px-6">
+    <div className={compact ? 'flex flex-col items-center' : 'flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-10 sm:px-6'}>
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
           <h1 className="w-full max-w-[208px]">
@@ -238,6 +249,12 @@ export function LoginPage({ onBack }: { onBack?: () => void }) {
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
           </Tabs>
+
+          {confirmationPending && (
+            <p role="status" className="mt-5 rounded-md border border-border bg-primary-soft px-4 py-3 text-sm text-primary-soft-foreground">
+              Check your inbox for the confirmation email. Open the link in your browser, then return here and sign in with your email and password.
+            </p>
+          )}
 
           {error && (
             <div

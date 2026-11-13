@@ -1,16 +1,12 @@
-import { findVenueAddress } from './apiKeys';
-import { extractVenuesFromLink, type ExtractedVenueItem } from './openai';
+import { isGoogleMapsLink, verifyVenuePlace } from './apiKeys';
+import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
 import { supabase, type SavedVenue, type VenueType } from './supabase';
-import { APP_URL, copyToClipboard } from './invite';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { shareOrCopy } from './invite';
+import { recommendationOrigin, recommendationPath, stagingSupabase } from './publicRecommendation.js';
 
 export type PublicVenue = { name: string; address: string; type: VenueType; link: string | null };
 
-const nativeShare = registerPlugin<{
-  send(options: { text: string }): Promise<void>;
-  take(): Promise<{ text?: string }>;
-  addListener(event: 'incoming', listener: () => void): Promise<{ remove(): Promise<void> }>;
-}>('UnsavedShare');
+export { nativeShare, type AndroidShare } from './nativeShare';
 
 export function sourceUrl(input: string): string {
   const url = new URL(input);
@@ -32,32 +28,99 @@ export async function saveSharedVenue(venue: PublicVenue, link: string, position
   return data as SavedVenue;
 }
 
-export async function identifySharedVenue(input: string) {
-  const link = sourceUrl(input);
-  const candidates = await extractVenuesFromLink(link);
-  const candidate = candidates.length === 1 ? candidates[0] : undefined;
-  if (!candidate?.name.trim() || !candidate.address.trim()) return { candidates };
-  const match = await findVenueAddress(candidate.name, candidate.address);
-  const comparableAddress = (address: string) => address.toLowerCase()
-    .replace(/,\s*australia$/i, '').replace(/[.,]/g, '').replace(/\s+/g, ' ').trim();
-  if (!match || comparableAddress(candidate.address) !== comparableAddress(match.address)) return { candidates };
-  const saved = await saveSharedVenue({ ...candidate, address: match.address, link }, link, match);
-  return { saved, candidates };
+export type SharedVenue = PublicVenue & { lat?: number | null; lon?: number | null; tags?: string[] };
+
+export type SharedVenueProgress = {
+  checkedSaved?: boolean;
+  identification?: VenueExtractionProgress;
+  candidates?: ExtractedVenueItem[];
+  verified?: SharedVenue;
+};
+
+export type SharedVenueResult = {
+  candidates: ExtractedVenueItem[];
+  saved?: SavedVenue;
+  venue?: SharedVenue;
+  issue?: { stage: 'identify' | 'verify' | 'lookup'; cause?: unknown; retryable: boolean };
+};
+
+async function previouslySaved(link: string): Promise<SavedVenue | undefined> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Sign in to save this venue.');
+  const { data, error } = await supabase.from('saved_venues').select('*')
+    .eq('user_id', session.user.id).eq('link', link).limit(2);
+  if (error) throw error;
+  return data?.length === 1 ? data[0] as SavedVenue : undefined;
 }
 
-export async function publishVenue(venue: SavedVenue): Promise<string> {
-  const { data, error } = await supabase.rpc('publish_venue_recommendation', { p_venue_id: venue.id });
-  if (error || typeof data !== 'string') throw error ?? new Error('No share link returned.');
-  if (import.meta.env.VITE_SUPABASE_URL === 'https://crpkzysdtnoomzimibhe.supabase.co') {
-    return 'https://open-finds-2-bnuk-git-feature-ai-save-quick-share-date-planner.vercel.app/venue/' + data;
+export async function identifySharedVenue(input: string, progress: SharedVenueProgress = {}): Promise<SharedVenueResult> {
+  let stage: NonNullable<SharedVenueResult['issue']>['stage'] = 'identify';
+  try {
+    const link = sourceUrl(input);
+    const mapsLink = isGoogleMapsLink(link);
+    if (!progress.checkedSaved) {
+      // An exact-source hit is the current account's previous choice.
+      stage = 'lookup';
+      const saved = await previouslySaved(link);
+      if (saved) {
+        const { name, address, type, lat, lon, tags } = saved;
+        return { saved, venue: { name, address, type, link, lat, lon, tags: tags ?? [] }, candidates: [] };
+      }
+      progress.checkedSaved = true;
+    }
+    stage = 'identify';
+    if (!mapsLink && !progress.candidates) {
+      progress.identification ??= {};
+      progress.candidates = await extractVenuesFromLink(link, { verifySeparately: true, progress: progress.identification });
+    }
+    if (!progress.verified) {
+      stage = 'verify';
+      const candidates = progress.candidates ?? [];
+      if (!mapsLink && !candidates.length) {
+        progress.candidates = undefined;
+        return { candidates, issue: { stage: 'identify', retryable: true } };
+      }
+      const candidate = candidates.length === 1 ? candidates[0] : undefined;
+      const details = mapsLink && !candidate ? { url: link } : candidate?.address && !candidate.requiresManualCorrection
+        ? {
+          name: candidate.name, address: candidate.address, outdoor: candidate.type === 'activity',
+          addressFromSource: hasSourceAddress(progress.identification, candidate.address),
+        } : null;
+      const match = details ? await verifyVenuePlace(details) : null;
+      if (!match) return { candidates, issue: { stage, retryable: false } };
+      progress.verified = {
+        name: match.name, address: match.address, link,
+        type: match.type ?? candidate?.type ?? 'activity', lat: match.lat, lon: match.lon, tags: candidate?.tags ?? [],
+      };
+      progress.candidates ??= [{ ...progress.verified, order: 1, tags: [] }];
+    }
+    return { venue: progress.verified, candidates: progress.candidates ?? [] };
+  } catch (cause) {
+    return { candidates: progress.candidates ?? [], issue: { stage, cause, retryable: true } };
   }
-  return APP_URL + '/v/' + data;
+}
+
+export function shareRecommendationOrigin(): string | null {
+  return recommendationOrigin(import.meta.env.VITE_SUPABASE_URL === stagingSupabase,
+    import.meta.env.VITE_RECOMMENDATION_ORIGIN, import.meta.env.VITE_STAGING_RECOMMENDATION_ORIGIN);
+}
+
+export async function publishVenue({ name, address, type, link }: PublicVenue, savedVenueId?: string): Promise<string> {
+  const origin = shareRecommendationOrigin();
+  if (!origin) throw new Error('Public recommendation URL is unavailable.');
+  const { data, error } = savedVenueId
+    ? await supabase.rpc('publish_venue_recommendation', { p_venue_id: savedVenueId })
+    : await supabase.rpc('publish_standalone_venue_recommendation', { p_venue: { name, address, type, link } });
+  if (error || typeof data !== 'string') throw error ?? new Error('No share link returned.');
+  return origin + recommendationPath(data, import.meta.env.VITE_SUPABASE_URL === stagingSupabase);
 }
 
 export async function readPublicVenue(id: string): Promise<PublicVenue | null> {
   const { data, error } = await supabase.rpc('read_venue_recommendation', { p_id: id });
   if (error) throw error;
-  return data as PublicVenue | null;
+  if (!data) return null;
+  const { name, address, type, link } = data;
+  return { name, address, type, link };
 }
 
 export function guestSave(id: string, venue: PublicVenue): void {
@@ -72,39 +135,8 @@ export function readGuestSave(id: string): PublicVenue | null {
   }
 }
 
-export async function sendRecommendation(message: string, url: string): Promise<'shared' | 'copied' | 'cancelled'> {
-  const text = [message.trim(), url].filter(Boolean).join('\n');
-  if (Capacitor.getPlatform() === 'android') {
-    await nativeShare.send({ text });
-    return 'shared';
-  }
-  if (navigator.share) {
-    try {
-      await navigator.share({ text });
-      return 'shared';
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled';
-      throw error;
-    }
-  }
-  if (!await copyToClipboard(text)) throw new Error('Could not copy the recommendation.');
-  return 'copied';
-}
-
-export async function listenToNativeShares(onText: (text: string) => void) {
-  if (Capacitor.getPlatform() !== 'android') return;
-  const drain = async () => {
-    const { text } = await nativeShare.take();
-    if (text) onText(text);
-  };
-  const listener = await nativeShare.addListener('incoming', () => { void drain().catch(console.error); });
-  try {
-    await drain();
-    return listener;
-  } catch (error) {
-    await listener.remove();
-    throw error;
-  }
+export function sendRecommendation(message: string, url: string) {
+  return shareOrCopy('Venue recommendation', message, url);
 }
 
 export type { ExtractedVenueItem };

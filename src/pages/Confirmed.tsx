@@ -12,7 +12,7 @@ import { Timeline, RsvpList } from '../components/Shared';
 import { AddToCalendar } from '../components/AddToCalendar';
 import { useCountdown, formatCountdown } from '../lib/countdown';
 import { MapPin, PartyPopper, Clock, Smartphone, Check } from 'lucide-react';
-import { appBase, buildInviteMessage, shareOrCopy } from '../lib/invite';
+import { getShareUrl, buildInviteMessage, shareOrCopy } from '../lib/invite';
 import { mapsDirectionsUrl } from '../lib/maps';
 import { planToCalendarEvent } from '../lib/calendar';
 
@@ -79,12 +79,16 @@ export function ConfirmedPage({ id }: { id: string }) {
     );
   }
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
-  const shareUrl = `${appBase()}#/plan/${id}/rsvp`;
+  const shareUrl = plan.canceled ? "" : getShareUrl(id);
   const multiStopMapsUrl = mapsDirectionsUrl(stops.map((s) => s.address), plan.location) ?? '#';
 
   const handleInviteFriend = async () => {
     const message = buildInviteMessage(plan);
-    await shareOrCopy(plan.title, message, shareUrl);
+    const url = shareUrl;
+    if (!url) return;
+    try {
+      if (await shareOrCopy(plan.title, message, url) === "cancelled") return;
+    } catch { return; }
     setInviteCopied(true);
     setTimeout(() => setInviteCopied(false), 2000);
   };
@@ -113,7 +117,7 @@ export function ConfirmedPage({ id }: { id: string }) {
         >
           <MapPin size={18} /> Open in Maps
         </a>
-        <button onClick={handleInviteFriend} className="btn-primary flex items-center justify-center gap-2">
+        <button disabled={!shareUrl} onClick={handleInviteFriend} className="btn-primary flex items-center justify-center gap-2">
           {inviteCopied ? <Check size={18} /> : <Smartphone size={18} />}
           {inviteCopied ? 'Copied!' : 'Invite a Friend'}
         </button>

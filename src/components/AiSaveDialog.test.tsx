@@ -1,81 +1,87 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiSaveDialog } from './AiSaveDialog';
-import type { SavedVenue } from '../lib/supabase';
+import type { SharedVenueResult } from '../lib/aiSave';
 
 const mocks = vi.hoisted(() => ({
   identifySharedVenue: vi.fn(), publishVenue: vi.fn(), saveSharedVenue: vi.fn(), sendRecommendation: vi.fn(),
+  shareRecommendationOrigin: () => 'https://www.theunsaved.app',
 }));
 vi.mock('../lib/aiSave', () => mocks);
 vi.mock('../lib/supabase', () => ({ updateSavedVenue: vi.fn() }));
 vi.mock('../lib/openai', () => ({ UserFacingError: Error }));
 
-const saved = { id: 'saved', name: 'Test cafe', address: '1 Test St' } as SavedVenue;
 const link = 'https://www.instagram.com/reel/test/';
+const venue = { name: 'Test cafe', address: '1 Test St', type: 'food' as const, link, lat: 1, lon: 2 };
+const saved = { ...venue, id: 'saved' };
+const candidate = { ...venue, order: 1, tags: [] };
 
-function start() {
-  let complete!: (result: { saved?: SavedVenue; candidates: [] }) => void;
-  mocks.identifySharedVenue.mockReturnValue(new Promise(resolve => { complete = resolve; }));
+async function start(result: SharedVenueResult = { venue, candidates: [candidate] }) {
+  mocks.identifySharedVenue.mockResolvedValueOnce(result);
   const onClose = vi.fn();
   const onPlan = vi.fn();
-  render(<AiSaveDialog link={link} onClose={onClose} onPlan={onPlan} />);
-  return { onClose, onPlan, finish: (venue?: SavedVenue) => act(async () => complete({ saved: venue, candidates: [] })) };
+  await act(async () => render(<AiSaveDialog link={link} onClose={onClose} onPlan={onPlan} />));
+  return { onClose, onPlan };
 }
 
-describe('AI Save', () => {
-  beforeEach(() => { vi.resetAllMocks(); vi.useFakeTimers(); });
-  afterEach(() => vi.useRealTimers());
+describe('Shared venue actions', () => {
+  beforeEach(() => vi.resetAllMocks());
 
-  it('starts the dismissal timer only after saving', async () => {
-    const flow = start();
-    act(() => vi.advanceTimersByTime(5000));
-    expect(flow.onClose).not.toHaveBeenCalled();
-    await flow.finish(saved);
-    act(() => vi.advanceTimersByTime(2999));
-    expect(flow.onClose).not.toHaveBeenCalled();
-    act(() => vi.advanceTimersByTime(1));
-    expect(flow.onClose).toHaveBeenCalledOnce();
-  });
-
-  it('queues Plan Event and passes the persisted venue to the planner', async () => {
-    const flow = start();
-    fireEvent.click(screen.getByRole('button', { name: 'Plan Event' }));
-    expect(flow.onPlan).not.toHaveBeenCalled();
-    await flow.finish(saved);
-    expect(flow.onPlan).toHaveBeenCalledOnce();
-    expect(flow.onPlan).toHaveBeenCalledWith(saved);
-    act(() => vi.advanceTimersByTime(5000));
-    expect(flow.onClose).not.toHaveBeenCalled();
-  });
-
-  it('opens the queued composer after saving and keeps it open on cancellation', async () => {
-    mocks.publishVenue.mockResolvedValue('https://www.theunsaved.app/v/id');
-    mocks.sendRecommendation.mockResolvedValue('cancelled');
-    const flow = start();
-    fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
-    expect(mocks.publishVenue).not.toHaveBeenCalled();
-    await flow.finish(saved);
-    expect(mocks.publishVenue).toHaveBeenCalledWith(saved);
-    expect(screen.getByLabelText('Message (optional)')).toHaveValue("Let's check this out! 🤩");
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Share recommendation' })));
-    expect(mocks.sendRecommendation).toHaveBeenCalledWith("Let's check this out! 🤩", 'https://www.theunsaved.app/v/id');
-    act(() => vi.advanceTimersByTime(5000));
-    expect(flow.onClose).not.toHaveBeenCalled();
-  });
-
-  it('requires correction and keeps a queued action pending without a saved venue', async () => {
-    const flow = start();
-    fireEvent.click(screen.getByRole('button', { name: 'Plan Event' }));
-    await flow.finish();
-    expect(screen.getByLabelText('Venue name')).toBeInTheDocument();
-    expect(flow.onPlan).not.toHaveBeenCalled();
-    expect(flow.onClose).not.toHaveBeenCalled();
-  });
-
-  it('allows manual dismissal during extraction', () => {
-    const flow = start();
+  it('lets the user close after verification without writing', async () => {
+    const flow = await start();
+    expect(screen.getByRole('button', { name: 'Save Venue' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(flow.onClose).toHaveBeenCalledOnce();
     expect(flow.onPlan).not.toHaveBeenCalled();
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+    expect(mocks.publishVenue).not.toHaveBeenCalled();
+  });
+
+  it('saves explicitly and retries a failed write with the same verified venue', async () => {
+    mocks.saveSharedVenue.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce(saved);
+    await start();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not save');
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    expect(screen.getByRole('button', { name: 'Saved to My Venues' })).toBeDisabled();
+    expect(mocks.saveSharedVenue.mock.calls).toEqual([[venue, link], [venue, link]]);
+    expect(mocks.identifySharedVenue).toHaveBeenCalledOnce();
+    expect(mocks.publishVenue).not.toHaveBeenCalled();
+  });
+
+  it('publishes without saving and reuses the URL after a cancelled share', async () => {
+    const url = 'https://www.theunsaved.app/v/id';
+    mocks.publishVenue.mockResolvedValue(url);
+    mocks.sendRecommendation.mockResolvedValue('cancelled');
+    await start();
+    fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
+    expect(mocks.publishVenue).not.toHaveBeenCalled();
+    for (let i = 0; i < 2; i++) {
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Share recommendation' })));
+    }
+    expect(mocks.publishVenue).toHaveBeenCalledOnce();
+    expect(mocks.publishVenue).toHaveBeenCalledWith(venue);
+    expect(mocks.sendRecommendation).toHaveBeenLastCalledWith(expect.any(String), url);
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('passes the verified venue to planning without publishing or saving', async () => {
+    const flow = await start();
+    fireEvent.click(screen.getByRole('button', { name: 'Create Plan' }));
+    expect(flow.onPlan).toHaveBeenCalledOnce();
+    expect(flow.onPlan).toHaveBeenCalledWith(venue);
+    expect(mocks.publishVenue).not.toHaveBeenCalled();
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('retains the verification retry and allows manual correction', async () => {
+    await start({ candidates: [candidate], issue: { stage: 'verify', retryable: true } });
+    expect(screen.getByLabelText('Venue name')).toHaveValue(venue.name);
+    expect(screen.queryByRole('button', { name: 'Quick Share' })).not.toBeInTheDocument();
+    mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry verification' })));
+    expect(mocks.identifySharedVenue.mock.calls[0][1]).toBe(mocks.identifySharedVenue.mock.calls[1][1]);
+    expect(screen.getByRole('button', { name: 'Create Plan' })).toBeEnabled();
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
   });
 });

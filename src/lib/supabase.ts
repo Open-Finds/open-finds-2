@@ -3,6 +3,9 @@ import { normalizeTags } from './taxonomy';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const stagingEmailRedirect = supabaseUrl === 'https://crpkzysdtnoomzimibhe.supabase.co'
+  ? 'https://open-finds-2-bnuk-git-feature-ai-save-quick-share-date-planner.vercel.app/'
+  : undefined;
 
 // Catches Safari private-mode SecurityError so the app never crashes on startup,
 // while still persisting sessions normally in regular browsers.
@@ -112,8 +115,15 @@ let signingUp = false;
 export const isSigningUp = () => signingUp;
 export const setSigningUp = (on: boolean) => { signingUp = on; };
 
-export async function signUp(email: string, password: string) {
-  const { data, error } = await supabase.auth.signUp({ email, password });
+export async function signUp(email: string, password: string, displayName: string, username: string) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: stagingEmailRedirect,
+      data: { signup_display_name: displayName, signup_username: username },
+    },
+  });
   if (error) throw error;
   return data;
 }
@@ -128,7 +138,7 @@ export async function signIn(email: string, password: string) {
 export async function sendPasswordReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     // No hash route here: the reset link appends its own #access_token=….
-    redirectTo: `${window.location.origin}/`,
+    redirectTo: stagingEmailRedirect ?? `${window.location.origin}/`,
   });
   if (error) throw error;
 }

@@ -277,6 +277,22 @@ export async function findVenueAddress(
   }
 }
 
+export async function verifyVenuePlace(
+  input: { url: string } | { name: string; address: string; outdoor?: boolean; addressFromSource?: boolean },
+): Promise<{ name: string; address: string; lat: number; lon: number; type?: VenueType | null } | null> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
+    method: 'POST',
+    headers: await edgeAuthHeaders(),
+    body: JSON.stringify({ ...input, verify: true }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) throw new Error('Place verification is temporarily unavailable.');
+  const data = await res.json();
+  if (data?.verified !== true || !data.name || !data.address ||
+    !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) return null;
+  return { ...data, address: tidyAddress(data.address) };
+}
+
 export async function geocodeAddress(address: string): Promise<{ lat: number; lon: number } | null> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/geocode`, {

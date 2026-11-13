@@ -115,12 +115,16 @@ export function TripOverviewPage({ tripId }: { tripId: string }) {
 
   const handleInvite = async () => {
     const message = `Join my trip "${trip.name}" to ${trip.destination}! ${trip.num_days} day${trip.num_days === 1 ? '' : 's'} of fun. RSVP to each stop here:`;
-    const link = `${appBase()}#/trip/${tripId}/rsvp`;
-    await shareOrCopy(trip.name, message, link);
+    const base = appBase();
+    if (!base) return;
+    const link = `${base}#/trip/${tripId}/rsvp`;
+    try { await shareOrCopy(trip.name, message, link); } catch { setShowShareCopied(false); }
   };
 
   const handleShare = async () => {
-    const link = `${appBase()}#/trip/${tripId}`;
+    const base = appBase();
+    if (!base) return;
+    const link = `${base}#/trip/${tripId}`;
     const message = `Check out our trip "${trip.name}" to ${trip.destination}! ${link}`;
     try {
       await navigator.clipboard.writeText(message);

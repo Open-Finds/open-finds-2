@@ -48,7 +48,7 @@ const AuthContext = createContext<AuthContextType>({
   setOnboardingCompleted: () => {},
 });
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children, compact = false }: { children: ReactNode; compact?: boolean }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       setMonitoringUser(data.session?.user.id ?? null);
       setCacheOwner(data.session?.user.id ?? null);
-      if (data.session?.user.id) {
+      if (data.session?.user.id && !compact) {
         loadProfile(data.session.user.id);
         claimForSession();
       } else {
@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCacheOwner(s?.user.id ?? null);
       setProfileLoaded(false);
       (async () => {
-        if (s?.user.id) {
+        if (s?.user.id && !compact) {
           await loadProfile(s.user.id);
           await claimForSession();
         } else {
@@ -148,12 +148,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [compact]);
 
   // A role given while the app is open (someone just made a worker) shows up
   // as soon as they come back to the app, with no need to sign in again.
   // Only the role: a failed check changes nothing.
   useEffect(() => {
+    if (compact) return;
     const check = async () => {
       if (document.visibilityState !== 'visible') return;
       const { data: { session: s } } = await supabase.auth.getSession();
@@ -169,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', check);
       window.removeEventListener('focus', check);
     };
-  }, []);
+  }, [compact]);
 
   return (
     <AuthContext.Provider value={{ session, loading, profileLoaded, displayName, username, onboardingCompleted, dietaryPreferences, subscriptionTier, subscriptionStatus, subscriptionRenewsAt, premiumUnlocked, isVenuePartner, role, passwordRecovery, endPasswordRecovery: () => setPasswordRecovery(false), refreshProfile, setOnboardingCompleted: setOnboardingCompletedState }}>

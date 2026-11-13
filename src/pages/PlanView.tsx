@@ -13,7 +13,7 @@ import {
 import { Timeline, RsvpList, BackButton } from '../components/Shared';
 import { InviteFriendsModal } from '../components/InviteFriendsModal';
 import { CalendarDays, MapPin, Send, LayoutDashboard, Smartphone, Share2, UserPlus } from 'lucide-react';
-import { appBase, buildInviteMessage, shareOrCopy } from '../lib/invite';
+import { getShareUrl, buildInviteMessage, shareOrCopy } from '../lib/invite';
 
 export function PlanViewPage({ id }: { id: string }) {
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -74,7 +74,11 @@ export function PlanViewPage({ id }: { id: string }) {
 
   const handleInviteFriend = async () => {
     const message = buildInviteMessage(plan);
-    await shareOrCopy(plan.title, message, `${appBase()}#/plan/${id}/rsvp`);
+    const url = plan.canceled ? "" : getShareUrl(id);
+    if (!url) return;
+    try {
+      if (await shareOrCopy(plan.title, message, url) === "cancelled") return;
+    } catch { return; }
     setInviteCopied(true);
     setTimeout(() => setInviteCopied(false), 2000);
   };
@@ -137,7 +141,7 @@ export function PlanViewPage({ id }: { id: string }) {
           <UserPlus size={18} /> Invite Friends
         </button>
         <button
-          onClick={handleInviteFriend}
+          disabled={plan.canceled || !getShareUrl(id)} onClick={handleInviteFriend}
           className="btn-outline w-full"
         >
           <Smartphone size={18} /> {inviteCopied ? 'Copied!' : 'Copy Invite Link'}
@@ -203,29 +207,15 @@ export function SharePage({ id }: { id: string }) {
     );
   }
 
-  const shareUrl = `${appBase()}#/plan/${id}`;
+  const shareUrl = plan.canceled ? "" : getShareUrl(id);
   const shareMessage = `You're invited to ${plan.title} by ${plan.host_name}! Open here: ${shareUrl}`;
   const confirmedCount = rsvps.filter((r) => r.status === 'in').length;
 
   const handleCopy = async () => {
+    if (!shareUrl) return;
     try {
-      await navigator.clipboard.writeText(shareMessage);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: plan.title,
-          text: shareMessage,
-          url: shareUrl,
-        });
-      } catch {
-        // user cancelled
-      }
-    }
+      if (await shareOrCopy(plan.title, shareMessage, shareUrl) === 'copied') setCopied(true);
+    } catch { setCopied(false); }
   };
 
   return (
@@ -238,16 +228,14 @@ export function SharePage({ id }: { id: string }) {
       </p>
 
       <div className="card mt-6 break-all text-sm text-muted-foreground">
-        {shareMessage}
+        {shareUrl ? shareMessage : 'Public sharing is unavailable.'}
       </div>
 
-      <button onClick={handleCopy} className="btn-primary mt-4 w-full">
+      <button disabled={!shareUrl} onClick={handleCopy} className="btn-primary mt-4 w-full">
         <Share2 size={18} /> {copied ? 'Copied!' : 'Copy Link'}
       </button>
       <p className="mt-2 text-center text-xs text-muted-foreground">
-        {typeof navigator.share === 'function'
-          ? 'Opens share sheet for WhatsApp, Telegram, Instagram...'
-          : 'Link copied to clipboard'}
+        {shareUrl ? 'Share with another app or copy the link.' : 'Public sharing is unavailable.'}
       </p>
 
       <section className="mt-8">
