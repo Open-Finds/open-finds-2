@@ -25,6 +25,8 @@ INSERT INTO saved_venues (id, name, address, type, user_id) VALUES
  ('b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b0b0b0','Bob Bar','2 St','bar','66666666-6666-6666-6666-666666666666');
 INSERT INTO collection_venues (collection_id, venue_id, added_by)
 VALUES ('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0','a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a0a0a0','55555555-5555-5555-5555-555555555555');
+UPDATE saved_venues SET personal_note = 'Private fixture note', visited = true, rating = 4
+WHERE id = 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a0a0a0';
 
 -- Before sharing: Bob sees nothing.
 SET ROLE authenticated;
@@ -65,8 +67,16 @@ BEGIN
   v := get_collection_venues('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0');
   PERFORM rep('S6 member sees owner venue via RPC',
     jsonb_array_length(v)=1 AND v->0->>'name'='Alice Cafe');
+  PERFORM rep('S6a private details are filtered',
+    v->0->'personal_note' = 'null'::jsonb
+      AND v->0->'rating' = 'null'::jsonb
+      AND v->0->'visited' = 'false'::jsonb);
   PERFORM rep('S7 owner venue stays out of My Venues',
     (SELECT count(*) FROM saved_venues WHERE id='a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a0a0a0')=0);
+  PERFORM set_config('request.jwt.claim.sub','55555555-5555-5555-5555-555555555555',true);
+  PERFORM rep('S7a saver still sees private note',
+    get_collection_venues('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0')->0->>'personal_note' = 'Private fixture note');
+  PERFORM set_config('request.jwt.claim.sub','66666666-6666-6666-6666-666666666666',true);
 
   -- Bob adds his own venue.
   INSERT INTO collection_venues (collection_id, venue_id)
