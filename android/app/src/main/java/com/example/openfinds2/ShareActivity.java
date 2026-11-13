@@ -50,7 +50,7 @@ public class ShareActivity extends MainActivity {
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle state) {
+    public void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         state.putString("shareId", shareId);
         state.putString("sharedText", sharedText);
