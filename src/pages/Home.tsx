@@ -924,7 +924,7 @@ export function HomePage({
     }
   };
 
-  const shareUrl = plan ? getShareUrl(plan.id) : '#';
+  const shareUrl = plan && !plan.canceled ? getShareUrl(plan.id) : '';
 
   // Mounted on every page that can save a venue. Radix portals it to <body>,
   // so its position in the tree doesn't matter — only that it's rendered.

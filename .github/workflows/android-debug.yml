@@ -1,0 +1,178 @@
+name: Android staging APK
+
+on:
+  push:
+    branches: [feature/ai-save-quick-share]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    if: github.ref == 'refs/heads/feature/ai-save-quick-share'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      VITE_SUPABASE_URL: https://crpkzysdtnoomzimibhe.supabase.co
+      VITE_STAGING_RECOMMENDATION_ORIGIN: ${{ vars.UNSAVED_STAGING_RECOMMENDATION_ORIGIN || 'https://open-finds-2-bnuk-git-feature-ai-save-quick-share-date-planner.vercel.app' }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.UNSAVED_STAGING_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Verify staging client configuration
+        shell: bash
+        run: |
+          if [[ -z "$VITE_SUPABASE_ANON_KEY" ]]; then
+            echo "::error::Configure UNSAVED_STAGING_SUPABASE_ANON_KEY before building the staging APK."
+            exit 1
+          fi
+          node --input-type=module <<'JS'
+          const key = process.env.VITE_SUPABASE_ANON_KEY;
+          const host = new URL(process.env.VITE_SUPABASE_URL).hostname;
+          const ref = host.split('.')[0];
+          if (!key.startsWith('sb_publishable_')) {
+            let claims;
+            try {
+              claims = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString());
+            } catch {
+              throw new Error('Expected a Supabase public client key.');
+            }
+            if (claims.role !== 'anon' || claims.ref !== ref) {
+              throw new Error('Expected an anonymous key for the approved staging project.');
+            }
+          }
+          const response = await fetch(process.env.VITE_SUPABASE_URL + '/auth/v1/settings', {
+            headers: { apikey: key },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!response.ok) throw new Error('Staging rejected the client key.');
+
+          const stagingHost = new URL(process.env.VITE_STAGING_RECOMMENDATION_ORIGIN || 'about:blank');
+          const hostname = stagingHost.hostname;
+          if (stagingHost.protocol !== 'https:' || !hostname.includes('.') ||
+              /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(hostname) ||
+              ['theunsaved.app', 'www.theunsaved.app', 'open-finds-2.vercel.app'].includes(hostname) ||
+              stagingHost.pathname !== '/' || stagingHost.search || stagingHost.hash ||
+              stagingHost.port || stagingHost.username || stagingHost.password) {
+            throw new Error('Configure the approved public staging recommendation origin before building.');
+          }
+          const fixtureId = '497dfa0b-29bf-446d-a272-f8a9211d53bd';
+          const fixture = await fetch(new URL('/venue/' + fixtureId, stagingHost), {
+            redirect: 'error', signal: AbortSignal.timeout(15000),
+          });
+          const fixtureHtml = await fixture.text();
+          if (!fixture.ok || !fixtureHtml.includes('Gorilla Smokers') ||
+              !fixtureHtml.includes(stagingHost.origin + '/venue/' + fixtureId)) {
+            throw new Error('Staging recommendation host did not serve the known staging venue.');
+          }
+          const missingId = '00000000-0000-0000-0000-000000000000';
+          const guestPage = await fetch(new URL('/venue/' + missingId, stagingHost), {
+            redirect: 'error', signal: AbortSignal.timeout(15000),
+          });
+          if (guestPage.status !== 404 || (await guestPage.text()).trim() !== 'Recommendation not found') {
+            throw new Error('Staging recommendation route did not return the expected guest response.');
+          }
+          const origin = 'https://localhost';
+          for (const name of ['ai-proxy', 'extract-venue-meta', 'geocode', 'resolve-place']) {
+            const preflight = await fetch(process.env.VITE_SUPABASE_URL + '/functions/v1/' + name, {
+              method: 'OPTIONS',
+              headers: {
+                Origin: origin,
+                'Access-Control-Request-Method': 'POST',
+                'Access-Control-Request-Headers': 'authorization,apikey,content-type',
+              },
+              signal: AbortSignal.timeout(15000),
+            });
+            const allowedOrigin = preflight.headers.get('access-control-allow-origin');
+            const allowedHeaders = preflight.headers.get('access-control-allow-headers')?.toLowerCase().split(/,\s*/) ?? [];
+            if (!preflight.ok || (allowedOrigin !== origin && allowedOrigin !== '*') ||
+                !['authorization', 'apikey', 'content-type'].every(header => allowedHeaders.includes(header))) {
+              throw new Error(`Staging function ${name} rejected Android preflight (${preflight.status}).`);
+            }
+          }
+
+          // The anonymous read RPC should accept a valid but nonexistent recommendation ID.
+          const publicRead = await fetch(process.env.VITE_SUPABASE_URL + '/rest/v1/rpc/read_venue_recommendation', {
+            method: 'POST',
+            headers: { apikey: key, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_id: '00000000-0000-0000-0000-000000000000' }),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!publicRead.ok || await publicRead.json() !== null) {
+            throw new Error('Staging public recommendation RPC failed its anonymous read check.');
+          }
+          JS
+      - name: Install dependencies and build staging web bundle
+        run: |
+          npm ci
+          npm run build
+          npx --no-install cap sync android
+      - name: Prepare Android SDK 35
+        run: |
+          sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          if [[ ! -f "$sdk/platforms/android-35/android.jar" ||
+                ! -x "$sdk/build-tools/35.0.0/apksigner" ||
+                ! -d "$sdk/build-tools/34.0.0" ]]; then
+            manager=$(find "$sdk/cmdline-tools" -type f -name sdkmanager -print -quit)
+            test -n "$manager"
+            "$manager" "--sdk_root=$sdk" 'platforms;android-35' 'build-tools;35.0.0' 'build-tools;34.0.0'
+          fi
+      - name: Assemble debug APK
+        working-directory: android
+        run: bash gradlew --no-daemon :app:assembleDebug
+      - name: Verify and prepare APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/signing.txt"
+          grep -q 'CN=Android Debug' "$RUNNER_TEMP/signing.txt"
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -q "package: name='com.example.openfinds2.staging'" "$RUNNER_TEMP/badging.txt"
+          "$tools/aapt" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/manifest.txt"
+          grep -q 'android.intent.action.SEND' "$RUNNER_TEMP/manifest.txt"
+          grep -q 'text/plain' "$RUNNER_TEMP/manifest.txt"
+          python - "$apk" <<'PY'
+          import base64
+          import json
+          import re
+          import sys
+          import zipfile
+
+          with zipfile.ZipFile(sys.argv[1]) as apk:
+              bundle = b"\n".join(apk.read(name) for name in apk.namelist()
+                                  if name.startswith("assets/public/") and name.endswith(".js"))
+          if b"https://crpkzysdtnoomzimibhe.supabase.co" not in bundle:
+              raise SystemExit("Approved staging origin missing from packaged web bundle")
+          if b"wfrlkifdlgmlbffumglt.supabase.co" in bundle:
+              raise SystemExit("Production Supabase origin found in packaged web bundle")
+          if re.search(rb"(?:sk-or-v1-[a-fA-F0-9]{64}|AIza[A-Za-z0-9_-]{35}|sb_secret_[A-Za-z0-9_-]+)", bundle):
+              raise SystemExit("A private credential pattern was found in the packaged web bundle")
+          for payload in re.findall(rb"eyJ[A-Za-z0-9_-]+\.(eyJ[A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+", bundle):
+              try:
+                  claims = json.loads(base64.urlsafe_b64decode(payload + b"=" * (-len(payload) % 4)))
+              except ValueError:
+                  continue
+              if isinstance(claims, dict) and claims.get("role") == "service_role":
+                  raise SystemExit("A Supabase service-role token was found in the packaged web bundle")
+          PY
+          mkdir -p artifact
+          cp "$apk" artifact/the-unsaved-staging-debug.apk
+          (cd artifact && sha256sum the-unsaved-staging-debug.apk > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: the-unsaved-staging-debug
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 14

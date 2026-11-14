@@ -404,3 +404,14 @@ input[type='date']::-webkit-calendar-picker-indicator {
   z-index: 100;
   pointer-events: none;
 }
+.ai-save-trace {
+  animation: ai-save-trace 1.5s linear infinite;
+}
+
+@keyframes ai-save-trace {
+  to { stroke-dashoffset: -100; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-save-trace { animation: none; stroke-dasharray: none; }
+}

@@ -17,7 +17,8 @@ export function ShareIntoApp() {
   const [installed, setInstalled] = useState(isInstalled());
   useEffect(() => onInstallChange(() => { setInstallable(canInstall()); setInstalled(isInstalled()); }), []);
 
-  const shortcutUrl = `${appBase()}?url=`;
+  const base = appBase();
+  const shortcutUrl = `${base}?url=`;
   const step = 'flex gap-3 text-sm text-muted-foreground';
   const num = 'flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary-text';
 
@@ -30,7 +31,7 @@ export function ShareIntoApp() {
         Tap <span className="text-foreground">Share</span> on a reel or TikTok and send it straight here. No copying and pasting.
       </p>
 
-      {isIOS() ? (
+      {isIOS() && !base ? <p>Staging sharing is unavailable.</p> : isIOS() ? (
         <ol className="space-y-2.5">
           <li className={step}><span className={num}>1</span><span>Open the <span className="text-foreground">Shortcuts</span> app and tap <span className="text-foreground">+</span>.</span></li>
           <li className={step}><span className={num}>2</span><span>Tap the <span className="text-foreground">ⓘ</span> (or the shortcut's name) and turn on <span className="text-foreground">Show in Share Sheet</span>.</span></li>
