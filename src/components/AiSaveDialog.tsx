@@ -7,12 +7,13 @@ import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
 import { fallbackImage } from '../lib/publicRecommendation.js';
 
-export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialProgress, onProgress }: {
+export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
   link: string;
   onClose: () => void;
   onPlan: (venue: SharedVenue) => void;
   compact?: boolean;
   initialProgress?: SharedVenueProgress;
+  onSaved?: () => void;
   onProgress?: (progress: SharedVenueProgress) => void;
 }) {
   const [attempt, retry] = useState(0);
@@ -95,6 +96,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         })
         : await saveSharedVenue(details, details.link ?? link);
       setSaved(row);
+      onSaved?.();
       if (editing) {
         setVenue(undefined);
         setIssue(undefined);
@@ -175,7 +177,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         <label className="grid gap-1 text-sm">Venue name<Input required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
         <label className="grid gap-1 text-sm">Address<Input required maxLength={500} value={address} onChange={event => setAddress(event.target.value)} /></label>
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy || saving || !validDetails || correctionSaved}>{correctionSaved ? 'Saved to My Venues' : saved ? 'Save changes' : 'Save Venue'}</Button>
+          <Button type="submit" disabled={busy || saving || !validDetails || correctionSaved}>{correctionSaved ? 'Saved to My Venues' : saved ? 'Save changes manually' : 'Save without verification'}</Button>
           <Button type="button" variant="outline" disabled={busy || saving || !validDetails} onClick={verifyCorrection}>Verify details</Button>
           {issue?.retryable && <Button type="button" variant="outline" disabled={busy || saving} onClick={retryLookup}>
             {issue.stage === 'identify' ? 'Retry identification' : issue.stage === 'verify' ? 'Retry verification' : 'Retry lookup'}

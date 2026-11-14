@@ -115,6 +115,7 @@ function AppInner() {
   const [pendingView, setPendingView] = useState<View | null>(null);
   const [pendingPlannerVenue, setPendingPlannerVenue] = useState<PlannerVenue>();
   const [openSave, setOpenSave] = useState(false);
+  const [venueSaveVersion, setVenueSaveVersion] = useState(0);
   const [incomingShare, setIncomingShare] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile, premiumUnlocked } = useAuth();
@@ -349,7 +350,8 @@ function AppInner() {
         </DialogContent>
       </Dialog>
       {incomingShare && <AiSaveDialog key={incomingShare} link={incomingShare}
-        onClose={() => setIncomingShare(null)} onPlan={planFromShare} />}
+        onClose={() => setIncomingShare(null)} onPlan={planFromShare}
+        onSaved={() => setVenueSaveVersion(version => version + 1)} />}
     </>,
   };
 
@@ -424,7 +426,7 @@ function AppInner() {
         ) : view === 'settings' ? (
           <SettingsPage onBack={() => switchView('home')} onFriends={() => switchView('friends')} />
         ) : (
-          <VenuesPage initialAdd={openSave} onPlan={(v) => startPlanner('saved', savedCandidate(v))}
+          <VenuesPage saveVersion={venueSaveVersion} initialAdd={openSave} onSaveLink={setIncomingShare} onPlan={(v) => startPlanner('saved', savedCandidate(v))}
             onPlanCollection={(id) => startPlanner('saved', undefined, id)} />
         )}
       </div>

@@ -144,6 +144,9 @@ jobs:
           grep -q 'android.intent.action.SEND' "$RUNNER_TEMP/manifest.txt"
           grep -q 'text/plain' "$RUNNER_TEMP/manifest.txt"
           python - "$apk" <<'PY'
+          import base64
+          import json
+          import re
           import sys
           import zipfile
 
@@ -154,6 +157,15 @@ jobs:
               raise SystemExit("Approved staging origin missing from packaged web bundle")
           if b"wfrlkifdlgmlbffumglt.supabase.co" in bundle:
               raise SystemExit("Production Supabase origin found in packaged web bundle")
+          if re.search(rb"(?:sk-or-v1-[a-fA-F0-9]{64}|AIza[A-Za-z0-9_-]{35}|sb_secret_[A-Za-z0-9_-]+)", bundle):
+              raise SystemExit("A private credential pattern was found in the packaged web bundle")
+          for payload in re.findall(rb"eyJ[A-Za-z0-9_-]+\.(eyJ[A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+", bundle):
+              try:
+                  claims = json.loads(base64.urlsafe_b64decode(payload + b"=" * (-len(payload) % 4)))
+              except ValueError:
+                  continue
+              if isinstance(claims, dict) and claims.get("role") == "service_role":
+                  raise SystemExit("A Supabase service-role token was found in the packaged web bundle")
           PY
           mkdir -p artifact
           cp "$apk" artifact/the-unsaved-staging-debug.apk
