@@ -2,6 +2,7 @@ import { isGoogleMapsLink, verifyVenuePlace } from './apiKeys';
 import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
 import { supabase, type SavedVenue, type VenueType } from './supabase';
 import { shareOrCopy } from './invite';
+import { ProviderUnavailableError, type ProviderReason } from './providerErrors';
 import { recommendationOrigin, recommendationPath, stagingSupabase } from './publicRecommendation.js';
 
 export type PublicVenue = { name: string; address: string; type: VenueType; link: string | null };
@@ -37,11 +38,27 @@ export type SharedVenueProgress = {
   verified?: SharedVenue;
 };
 
+/**
+ * Why AI Save stopped short of a verified venue.
+ * - a ProviderReason: the service could not run or refused the call. This says
+ *   nothing about the venue, so the screen must not call it unverified.
+ * - 'needs_review': nothing was checked yet (several candidates, an ambiguous
+ *   caption, or no usable address); the user has to confirm the details first.
+ * - 'no_match': Google Places answered and did not match one exact venue.
+ * No reason (older callers, other failures) keeps the previous generic wording.
+ */
+export type SharedVenueIssue = {
+  stage: 'identify' | 'verify' | 'lookup';
+  cause?: unknown;
+  retryable: boolean;
+  reason?: ProviderReason | 'needs_review' | 'no_match';
+};
+
 export type SharedVenueResult = {
   candidates: ExtractedVenueItem[];
   saved?: SavedVenue;
   venue?: SharedVenue;
-  issue?: { stage: 'identify' | 'verify' | 'lookup'; cause?: unknown; retryable: boolean };
+  issue?: SharedVenueIssue;
 };
 
 async function previouslySaved(link: string): Promise<SavedVenue | undefined> {
@@ -54,7 +71,7 @@ async function previouslySaved(link: string): Promise<SavedVenue | undefined> {
 }
 
 export async function identifySharedVenue(input: string, progress: SharedVenueProgress = {}): Promise<SharedVenueResult> {
-  let stage: NonNullable<SharedVenueResult['issue']>['stage'] = 'identify';
+  let stage: SharedVenueIssue['stage'] = 'identify';
   try {
     const link = sourceUrl(input);
     const mapsLink = isGoogleMapsLink(link);
@@ -86,8 +103,9 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
           name: candidate.name, address: candidate.address, outdoor: candidate.type === 'activity',
           addressFromSource: hasSourceAddress(progress.identification, candidate.address),
         } : null;
-      const match = details ? await verifyVenuePlace(details) : null;
-      if (!match) return { candidates, issue: { stage, retryable: false } };
+      if (!details) return { candidates, issue: { stage, retryable: false, reason: 'needs_review' } };
+      const match = await verifyVenuePlace(details);
+      if (!match) return { candidates, issue: { stage, retryable: false, reason: 'no_match' } };
       progress.verified = {
         name: match.name, address: match.address, link,
         type: match.type ?? candidate?.type ?? 'activity', lat: match.lat, lon: match.lon, tags: candidate?.tags ?? [],
@@ -96,7 +114,12 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
     }
     return { venue: progress.verified, candidates: progress.candidates ?? [] };
   } catch (cause) {
-    return { candidates: progress.candidates ?? [], issue: { stage, cause, retryable: true } };
+    const candidates = progress.candidates ?? [];
+    if (cause instanceof ProviderUnavailableError) {
+      // Retrying the identical request can never succeed once it was already seen.
+      return { candidates, issue: { stage, cause, retryable: cause.reason !== 'duplicate', reason: cause.reason } };
+    }
+    return { candidates, issue: { stage, cause, retryable: true } };
   }
 }
 

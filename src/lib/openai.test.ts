@@ -33,6 +33,53 @@ it('reports an extraction rate limit without prompting for a credit', async () =
   }
 });
 
+/**
+ * AI Save must tell "the service refused or failed" from "this link has no
+ * venue". Without that, a gate or budget refusal reads as a bad venue.
+ */
+describe('AI Save provider failures', () => {
+  const link = 'https://www.instagram.com/reel/test/';
+  const strict = { verifySeparately: true } as const;
+
+  it.each([
+    [401, 'auth'], [403, 'unavailable'], [409, 'busy'], [429, 'limit'], [503, 'unavailable'],
+  ])('reports a metadata refusal (HTTP %i) as a provider problem and does not guess a venue', async (status, reason) => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: 'refused' }, { status }));
+    await expect(extractVenuesFromLink(link, strict)).rejects.toMatchObject({ name: 'ProviderUnavailableError', reason, status });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('keeps going when the link itself was rejected as invalid (HTTP 400)', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: 'bad url' }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
+    await expect(extractVenuesFromLink(link, strict)).resolves.toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports an unreachable metadata service as a provider problem', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(extractVenuesFromLink(link, strict)).rejects.toMatchObject({ name: 'ProviderUnavailableError', reason: 'unavailable' });
+  });
+
+  it('reports an AI refusal as a provider problem instead of a generic error', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Great cafe' }))
+      .mockResolvedValueOnce(Response.json({ error: 'refused', code: 'staging_providers_disabled' }, { status: 503 }));
+    await expect(extractVenuesFromLink(link, strict)).rejects.toMatchObject({
+      name: 'ProviderUnavailableError', reason: 'unavailable', status: 503, code: 'staging_providers_disabled',
+    });
+  });
+
+  it('still lets other callers carry on without metadata when the metadata service refuses', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: 'refused' }, { status: 429 }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
+    await expect(extractVenuesFromLink(link)).resolves.toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
 it('uses one complete first-party structured venue without asking AI', async () => {
   const link = 'https://test.example/venue';
   const schema = {

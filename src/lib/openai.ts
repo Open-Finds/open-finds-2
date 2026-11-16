@@ -3,6 +3,7 @@ import type { VenueType, SavedVenue, PlanHistoryEntry } from './supabase';
 import { areaOf, findVenueAddress, hasStreetNumber, isAustralianAddress, isGoogleMapsLink, resolveGoogleMapsLink } from './apiKeys';
 import { findSimilarVenues, type KnownVenue } from './venueMatch';
 import { edgeAuthHeaders } from './edgeAuth';
+import { asProviderError, providerFailure } from './providerErrors';
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -65,7 +66,15 @@ async function callAI(
     body: JSON.stringify(useCredit ? { ...body, use_credit: true } : body),
   });
 
-  let res = await send(false);
+  // AI Save (purpose 'extract') must tell a provider problem from a bad venue,
+  // so its failures are typed. Other AI features keep their existing errors.
+  const typed = purpose === 'extract';
+  let res: Response;
+  try {
+    res = await send(false);
+  } catch (error) {
+    throw typed ? asProviderError(error) : error;
+  }
   if (res.status === 429 && askToSpendCredit) {
     const info = await res.clone().json().catch(() => null) as { code?: string } | null;
     if (info?.code === 'daily_limit' && await askToSpendCredit(purpose)) {
@@ -79,6 +88,7 @@ async function callAI(
       if (info?.code === 'daily_limit') throw new DailyLimitError();
       throw new UserFacingError('Too many AI requests. Try again shortly.');
     }
+    if (typed) throw await providerFailure(res, 'AI request failed');
     const text = await res.text().catch(() => '');
     throw new Error(`AI request failed (${res.status}). ${text.slice(0, 200)}`);
   }
@@ -158,7 +168,13 @@ type MetaResult = {
   fetched: boolean;
 };
 
-async function fetchPageMeta(url: string): Promise<MetaResult | null> {
+/**
+ * Page metadata for a link. Without `strict`, any failure just means "no
+ * metadata" and callers carry on. With it (AI Save), a refused or failed call
+ * is reported, so a provider problem is not mistaken for a link with no venue.
+ * A 400 still means the link itself was rejected.
+ */
+async function fetchPageMeta(url: string, strict = false): Promise<MetaResult | null> {
   try {
     const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-venue-meta`;
     const res = await fetch(apiUrl, {
@@ -166,11 +182,15 @@ async function fetchPageMeta(url: string): Promise<MetaResult | null> {
       headers: await edgeAuthHeaders(),
       body: JSON.stringify({ url }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (strict && res.status !== 400) throw await providerFailure(res);
+      return null;
+    }
     const data = await res.json();
     if (data.error) return null;
     return data as MetaResult;
-  } catch {
+  } catch (error) {
+    if (strict) throw asProviderError(error);
     return null;
   }
 }
@@ -415,7 +435,7 @@ export async function extractVenuesFromLink(
   }
 
   // Step 1: Fetch real page metadata via edge function
-  const meta = options?.progress?.metadata ?? await fetchPageMeta(link);
+  const meta = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately);
   if (options?.progress && meta && (meta.fetched || meta.oembedTitle || meta.ogDescription || meta.metaDescription)) options.progress.metadata = meta;
   const caption = options?.verifySeparately ? readSocialCaption(meta) : undefined;
   if (caption?.name && caption.address && caption.type) {

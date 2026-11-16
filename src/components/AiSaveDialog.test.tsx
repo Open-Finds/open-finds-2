@@ -74,6 +74,51 @@ describe('Shared venue actions', () => {
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['unavailable', 'temporarily unavailable'],
+    ['limit', 'reached its limit'],
+    ['busy', 'busy with another request'],
+    ['auth', 'sign in again'],
+  ] as const)('words a %s provider problem as a service problem and keeps manual saving open', async (reason, text) => {
+    await start({ candidates: [candidate], issue: { stage: 'verify', retryable: true, reason } });
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(text);
+    expect(alert).not.toHaveTextContent(/could not verify|could not match|could not identify/i);
+    expect(screen.getByRole('button', { name: 'Retry verification' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save without verification' })).toBeEnabled();
+    expect(screen.getByLabelText('Address')).toHaveValue(venue.address);
+  });
+
+  it('words a provider problem during identification as a service problem, not a missing venue', async () => {
+    await start({ candidates: [], issue: { stage: 'identify', retryable: true, reason: 'limit' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('reached its limit');
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/could not identify/i);
+    expect(screen.getByRole('button', { name: 'Retry identification' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save without verification' })).toBeDisabled();
+  });
+
+  it('offers no retry for an exact request the backend already saw, but still allows editing and saving', async () => {
+    await start({ candidates: [candidate], issue: { stage: 'verify', retryable: false, reason: 'duplicate' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('already checked');
+    expect(screen.queryByRole('button', { name: /^Retry/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save without verification' })).toBeEnabled();
+  });
+
+  it('says nothing was checked yet when the details need review, and lets the user verify or save', async () => {
+    await start({ candidates: [candidate], issue: { stage: 'verify', retryable: false, reason: 'needs_review' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('could not confirm it automatically');
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/could not match/i);
+    expect(screen.getByRole('button', { name: 'Verify details' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save without verification' })).toBeEnabled();
+  });
+
+  it('says Google Places found no exact match only after it was actually asked', async () => {
+    await start({ candidates: [candidate], issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('Google Places could not match this exact venue');
+    expect(screen.getByRole('button', { name: 'Verify details' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save without verification' })).toBeEnabled();
+  });
+
   it('retains the verification retry and allows manual correction', async () => {
     await start({ candidates: [candidate], issue: { stage: 'verify', retryable: true } });
     expect(screen.getByLabelText('Venue name')).toHaveValue(venue.name);

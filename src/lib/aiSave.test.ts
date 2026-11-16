@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { guestSave, identifySharedVenue, publishVenue, readGuestSave, saveSharedVenue, sendRecommendation, sourceUrl } from './aiSave';
+import { ProviderUnavailableError } from './providerErrors';
 
 const mocks = vi.hoisted(() => ({ extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn() }));
 vi.mock('./openai', () => ({ extractVenuesFromLink: mocks.extract, hasSourceAddress: () => false }));
@@ -68,10 +69,59 @@ describe('share venue persistence', () => {
     const candidate = { ...venue, requiresManualCorrection: true };
     mocks.extract.mockResolvedValue([candidate]);
     await expect(identifySharedVenue(link)).resolves.toEqual({
-      candidates: [candidate], issue: { stage: 'verify', retryable: false },
+      candidates: [candidate], issue: { stage: 'verify', retryable: false, reason: 'needs_review' },
     });
     expect(mocks.match).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('asks for review, without calling Google, when there are several candidates', async () => {
+    mocks.lookup.mockResolvedValue({ data: [], error: null });
+    mocks.extract.mockResolvedValue([venue, { ...venue, name: 'Other' }]);
+    const result = await identifySharedVenue(link);
+    expect(result.issue).toEqual({ stage: 'verify', retryable: false, reason: 'needs_review' });
+    expect(result.candidates).toHaveLength(2);
+    expect(mocks.match).not.toHaveBeenCalled();
+  });
+
+  it('reports a Google answer that matched nothing as no match', async () => {
+    mocks.lookup.mockResolvedValue({ data: [], error: null });
+    mocks.extract.mockResolvedValue([venue]);
+    mocks.match.mockResolvedValue(null);
+    await expect(identifySharedVenue(link)).resolves.toMatchObject({
+      issue: { stage: 'verify', retryable: false, reason: 'no_match' },
+    });
+  });
+
+  it.each(['auth', 'busy', 'limit', 'unavailable'] as const)(
+    'reports a %s provider problem during verification as retryable, never as no match', async (reason) => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([venue]);
+      mocks.match.mockRejectedValue(new ProviderUnavailableError(reason, 503));
+      const result = await identifySharedVenue(link);
+      expect(result.issue).toMatchObject({ stage: 'verify', retryable: true, reason });
+      expect(result.candidates).toEqual([venue]);
+      expect(mocks.rpc).not.toHaveBeenCalled();
+    });
+
+  it('does not offer a retry for an exact request the backend already saw', async () => {
+    mocks.lookup.mockResolvedValue({ data: [], error: null });
+    mocks.extract.mockResolvedValue([venue]);
+    mocks.match.mockRejectedValue(new ProviderUnavailableError('duplicate', 409, 'duplicate_request'));
+    await expect(identifySharedVenue(link)).resolves.toMatchObject({
+      issue: { stage: 'verify', retryable: false, reason: 'duplicate' },
+    });
+  });
+
+  it('reports a provider problem during identification as a service problem, not a missing venue', async () => {
+    mocks.lookup.mockResolvedValue({ data: [], error: null });
+    mocks.extract.mockRejectedValueOnce(new ProviderUnavailableError('limit', 429, 'budget_exhausted'));
+    await expect(identifySharedVenue(link)).resolves.toMatchObject({
+      candidates: [], issue: { stage: 'identify', retryable: true, reason: 'limit' },
+    });
+    mocks.extract.mockResolvedValueOnce([]);
+    const none = await identifySharedVenue(link);
+    expect(none.issue).toEqual({ stage: 'identify', retryable: true });
   });
 
   it('reuses identification after a verification failure, and reuses verification after a write failure', async () => {

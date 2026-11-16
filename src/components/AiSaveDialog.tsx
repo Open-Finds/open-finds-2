@@ -7,6 +7,15 @@ import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
 import { fallbackImage } from '../lib/publicRecommendation.js';
 
+/** What the user sees when AI Save could not run. Manual entry and saving stay available in every case. */
+const serviceProblem = {
+  auth: 'Please sign in again to use AI Save. You can also enter the details yourself.',
+  busy: 'AI Save is busy with another request. Try again in a moment, or enter the details yourself.',
+  duplicate: 'These exact details were already checked. Change something and verify again, or save them as entered.',
+  limit: 'AI Save has reached its limit for now. Try again later, or enter the details yourself.',
+  unavailable: 'AI Save is temporarily unavailable. Try again, or enter the details yourself.',
+} as const;
+
 export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
   link: string;
   onClose: () => void;
@@ -57,12 +66,16 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
       setEditing(!result.venue);
       setIssue(result.issue);
       if (!result.issue) return;
-      const { stage, cause, retryable } = result.issue;
-      if (stage === 'lookup') setError('Could not check your saved venues. Try again or enter the details.');
-      if (stage === 'verify') setError(retryable
+      const { stage, cause, retryable, reason } = result.issue;
+      // A service problem is never worded as a verdict on the venue.
+      if (reason && reason in serviceProblem) setError(serviceProblem[reason as keyof typeof serviceProblem]);
+      else if (reason === 'needs_review') setError('We found this from the link but could not confirm it automatically. Check the details, then tap Verify details.');
+      else if (reason === 'no_match') setError('Google Places could not match this exact venue. Check the name and address, then verify again or save it as entered.');
+      else if (stage === 'lookup') setError('Could not check your saved venues. Try again or enter the details.');
+      else if (stage === 'verify') setError(retryable
         ? 'Place verification is temporarily unavailable. Try again or enter the details.'
         : 'Could not verify one exact venue. Check the name and location before saving.');
-      if (stage === 'identify') setError(cause instanceof UserFacingError
+      else setError(cause instanceof UserFacingError
         ? cause.message : 'Could not identify a venue from this link. Try again or enter the details.');
     }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };

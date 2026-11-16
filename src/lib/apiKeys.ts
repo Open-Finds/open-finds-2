@@ -1,4 +1,5 @@
 import { edgeAuthHeaders } from './edgeAuth';
+import { ProviderUnavailableError, asProviderError, providerFailure } from './providerErrors';
 import type { VenueType } from './supabase';
 
 /** The starting point typed in couldn't be found. The message is for the user. */
@@ -280,14 +281,21 @@ export async function findVenueAddress(
 export async function verifyVenuePlace(
   input: { url: string } | { name: string; address: string; outdoor?: boolean; addressFromSource?: boolean },
 ): Promise<{ name: string; address: string; lat: number; lon: number; type?: VenueType | null } | null> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
-    method: 'POST',
-    headers: await edgeAuthHeaders(),
-    body: JSON.stringify({ ...input, verify: true }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) throw new Error('Place verification is temporarily unavailable.');
-  const data = await res.json();
+  // Anything that stops the check from running is a provider problem, not a
+  // verdict on the venue: only a completed answer without `verified: true` is "no match".
+  let res: Response;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({ ...input, verify: true }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    throw asProviderError(error);
+  }
+  if (!res.ok) throw await providerFailure(res);
+  const data = await res.json().catch(() => { throw new ProviderUnavailableError('unavailable', res.status); });
   if (data?.verified !== true || !data.name || !data.address ||
     !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) return null;
   return { ...data, address: tidyAddress(data.address) };
