@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { assertPublicUrl, safeFetch, followRedirects } from './urlguard';
 
+// urlguard reaches providerFetch, whose module imports the Supabase client; no database is used here.
+vi.mock('./auth.ts', () => ({ requireUser: vi.fn(), serviceClient: vi.fn() }));
+
 describe('server fetch destination guard', () => {
   it.each(['http://127.0.0.1/', 'http://2130706433/', 'http://0x7f000001/',
     'http://[::ffff:127.0.0.1]/', 'http://[::ffff:a9fe:a9fe]/', 'http://[fe90::1]/',

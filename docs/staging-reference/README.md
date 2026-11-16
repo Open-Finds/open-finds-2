@@ -13,6 +13,14 @@ This folder preserves code that was running on the staging Supabase project
 | Captured | 2026-11-16, read-only, from the staging project |
 | File | `resolve-place.deployed-v20.js` (a bundled build output, not the original TypeScript) |
 
+## Status: now also in source
+The behaviour in this file is now in `supabase/functions/resolve-place/index.ts` and
+`supabase/functions/_shared/stagingProviders.ts`, and described in
+`docs/STAGING-PROVIDER-CONTROLS.md`. The source matches this file except for imports, one
+extracted constant and equivalent rewrites (checked by compiling both and diffing). This
+file stays as the audit copy of what was deployed. `staging_provider_control.reference.sql`
+records the ledger's database side.
+
 ## Why it is kept
 The repository's `supabase/functions/resolve-place/index.ts` at `a7893c2` has no
 `verify` path, but the app at `a7893c2` calls it with `verify: true` and requires
