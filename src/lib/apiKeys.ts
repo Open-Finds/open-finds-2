@@ -147,12 +147,12 @@ export function isGoogleMapsLink(url: string): boolean {
   }
 }
 
-export async function resolveGoogleMapsLink(url: string): Promise<ResolvedPlace | null> {
+export async function resolveGoogleMapsLink(url: string, attemptId?: string): Promise<ResolvedPlace | null> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
       method: 'POST',
       headers: await edgeAuthHeaders(),
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, ...(attemptId ? { attempt_id: attemptId } : {}) }),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -280,6 +280,7 @@ export async function findVenueAddress(
 
 export async function verifyVenuePlace(
   input: { url: string } | { name: string; address: string; outdoor?: boolean; addressFromSource?: boolean },
+  attemptId?: string,
 ): Promise<{ name: string; address: string; lat: number; lon: number; type?: VenueType | null } | null> {
   // Anything that stops the check from running is a provider problem, not a
   // verdict on the venue: only a completed answer without `verified: true` is "no match".
@@ -288,7 +289,7 @@ export async function verifyVenuePlace(
     res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
       method: 'POST',
       headers: await edgeAuthHeaders(),
-      body: JSON.stringify({ ...input, verify: true }),
+      body: JSON.stringify({ ...input, verify: true, ...(attemptId ? { attempt_id: attemptId } : {}) }),
       signal: AbortSignal.timeout(15_000),
     });
   } catch (error) {

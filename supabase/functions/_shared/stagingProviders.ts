@@ -20,6 +20,14 @@
  *
  * The deployed copies differ slightly per function, because each was deployed
  * from a different revision of this file. `StagingVariant` records each.
+ *
+ * Two access modes (see docs/STAGING-PROVIDER-CONTROLS.md):
+ *  - listed (the default, and what is deployed): test accounts only, with the
+ *    staging_provider_* ledger.
+ *  - open (STAGING_PROVIDER_ACCESS=open, and only for the three AI Save
+ *    functions): any signed-in user, with a testing allowance of AI Save
+ *    attempts per rolling window, claimed in the database by
+ *    claim_ai_save_attempt. It never touches the ledger. Off unless set.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { requireUser, serviceClient } from "./auth.ts";
@@ -49,6 +57,8 @@ export type StagingVariant = {
   ai: "gpt-4o-mini" | "gpt-5-nano-exa";
   /** A failed metadata fetch comes back as an empty 502/504 response instead of throwing. */
   metadataFailureResponse: boolean;
+  /** May run in open mode. Only the three AI Save functions can; geocode and discover-venues never do. */
+  openAccess: boolean;
 };
 
 const ANDROID: Flag = "STAGING_ANDROID_PROVIDERS_ENABLED";
@@ -57,28 +67,28 @@ const GENERAL: Flag = "STAGING_PROVIDER_ENABLED";
 export const RESOLVE_PLACE: StagingVariant = {
   activationFlag: GENERAL, enableFlag: "STAGING_RESOLVE_PLACE_ENABLED", startup: "general-disabled",
   startupError: "Staging providers must remain disabled", saltedDigest: false, extractPurposeOnly: false,
-  ai: "gpt-4o-mini", metadataFailureResponse: false,
+  ai: "gpt-4o-mini", metadataFailureResponse: false, openAccess: true,
 };
 export const AI_PROXY: StagingVariant = {
   activationFlag: ANDROID, enableFlag: ANDROID, startup: "general-disabled",
   startupError: "General staging providers must remain disabled", saltedDigest: true, extractPurposeOnly: true,
-  ai: "gpt-5-nano-exa", metadataFailureResponse: false,
+  ai: "gpt-5-nano-exa", metadataFailureResponse: false, openAccess: true,
 };
 export const EXTRACT_VENUE_META: StagingVariant = {
   activationFlag: ANDROID, enableFlag: ANDROID, startup: "android-boolean",
   startupError: "Invalid Android staging activation", saltedDigest: true, extractPurposeOnly: false,
-  ai: "gpt-4o-mini", metadataFailureResponse: true,
+  ai: "gpt-4o-mini", metadataFailureResponse: true, openAccess: true,
 };
 export const GEOCODE: StagingVariant = {
   activationFlag: ANDROID, enableFlag: ANDROID, startup: "general-disabled",
   startupError: "General staging providers must remain disabled", saltedDigest: false, extractPurposeOnly: false,
-  ai: "gpt-4o-mini", metadataFailureResponse: false,
+  ai: "gpt-4o-mini", metadataFailureResponse: false, openAccess: false,
 };
 /** Deployed discover-venues can never be enabled: its boot check requires the flag it needs to be "true" to be "false". */
 export const DISCOVER_VENUES: StagingVariant = {
   activationFlag: GENERAL, enableFlag: GENERAL, startup: "general-disabled",
   startupError: "Staging providers must remain disabled", saltedDigest: false, extractPurposeOnly: false,
-  ai: "gpt-4o-mini", metadataFailureResponse: false,
+  ai: "gpt-4o-mini", metadataFailureResponse: false, openAccess: false,
 };
 
 type Handler = (req: Request) => Response | Promise<Response>;
@@ -94,6 +104,13 @@ type Context = {
   signal: AbortSignal;
   dailyAI: number;
   dailyGoogle: number;
+  /** Open mode only: no ledger; the attempt is claimed at the first paid provider call. */
+  open?: boolean;
+  attemptId?: string;
+  testing?: { attempts: number; windowSeconds: number; maxRequests: number };
+  claim?: Promise<void>;
+  /** The first refusal a caller is meant to see (open mode), kept because handlers swallow thrown errors. */
+  error?: ControlError;
 };
 
 const scope = new AsyncLocalStorage<Context>();
@@ -137,11 +154,29 @@ function canonical(value: unknown): string {
 }
 
 class ControlError extends Error {
+  /** A refusal the caller is meant to see, with its own message (open mode). */
+  visible = false;
+  userMessage?: string;
+  retryAfter?: number;
   constructor(readonly status: number, readonly code: string) {
     super(code);
   }
 }
 const failure = (status: number, code: string) => new ControlError(status, code);
+const visibleFailure = (status: number, code: string, userMessage: string, retryAfter?: number) => {
+  const error = new ControlError(status, code);
+  error.visible = true;
+  error.userMessage = userMessage;
+  error.retryAfter = retryAfter;
+  return error;
+};
+
+/** "13 minutes", "1 minute", or "less than a minute". */
+function waitText(seconds: number): string {
+  if (seconds < 60) return "less than a minute";
+  const minutes = Math.ceil(seconds / 60);
+  return minutes === 1 ? "1 minute" : minutes + " minutes";
+}
 
 function abortable<T>(promise: Promise<T> | T, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -181,12 +216,17 @@ async function boundedBody(body: ReadableStream<Uint8Array> | null, maximum: num
   return bytes;
 }
 
-function setting(name: string, fallback: number, maximum: number): number {
+function setting(name: string, fallback: number, maximum: number, minimum = 0): number {
   const raw = env(name);
   if (!raw) return fallback;
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0 || value > maximum) throw failure(503, "staging_configuration_invalid");
+  if (!Number.isInteger(value) || value < minimum || value > maximum) throw failure(503, "staging_configuration_invalid");
   return value;
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))))
+    .map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Reserves, counts and releases provider use in the staging_provider_control RPC. */
@@ -226,17 +266,120 @@ function corsHeadersFor(req: Request): Record<string, string> {
   return { ...stagingHeaders, "Access-Control-Allow-Origin": configured[0] };
 }
 
-function json(req: Request, body: unknown, status = 200): Response {
+function json(req: Request, body: unknown, status = 200, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeadersFor(req), "Content-Type": "application/json" },
+    headers: { ...corsHeadersFor(req), "Content-Type": "application/json", ...extra },
   });
 }
 
 const safeResponse = (req: Request, error: unknown): Response => {
   const known = error instanceof ControlError ? error : failure(502, "provider_unavailable");
+  if (known.visible) {
+    // Open mode: say what happened, and for a wait, for how long.
+    const body: Record<string, unknown> = { error: known.userMessage, code: known.code };
+    if (known.retryAfter) body.retry_after_seconds = known.retryAfter;
+    return json(req, body, known.status, known.retryAfter ? { "Retry-After": String(known.retryAfter) } : {});
+  }
   return json(req, { error: "Staging request could not complete. Do not automatically retry.", code: known.code }, known.status);
 };
+
+const DUPLICATE_WINDOW_SECONDS = 5;
+
+/**
+ * Claims the AI Save attempt in the database: one slot of the testing allowance
+ * the first time an attempt id is seen, free after that, refused when the user
+ * is at the limit, the id has expired or the attempt has made too many
+ * requests. Once per request; fails closed if the database cannot answer.
+ */
+function claimAttempt(ctx: Context): Promise<void> {
+  ctx.claim ??= (async () => {
+    const testing = ctx.testing!;
+    let result: { data: unknown; error: unknown };
+    try {
+      result = await abortable(serviceClient().rpc("claim_ai_save_attempt", {
+        p_user: ctx.user, p_attempt: ctx.attemptId, p_limit: testing.attempts,
+        p_window_seconds: testing.windowSeconds, p_max_requests: testing.maxRequests,
+      }), AbortSignal.timeout(10_000));
+    } catch {
+      throw visibleFailure(503, "usage_control_unavailable", "AI Save is temporarily unavailable. Try again shortly.");
+    }
+    const data = result.data as { allowed?: unknown; code?: unknown; retry_after?: unknown } | null;
+    if (result.error || !data || typeof data.allowed !== "boolean") {
+      throw visibleFailure(503, "usage_control_unavailable", "AI Save is temporarily unavailable. Try again shortly.");
+    }
+    if (data.allowed) return;
+    if (data.code === "testing_limit") {
+      const wait = typeof data.retry_after === "number" && Number.isFinite(data.retry_after) ? Math.max(1, Math.ceil(data.retry_after)) : 60;
+      throw visibleFailure(429, "testing_limit", `You've reached the testing limit. Try again in ${waitText(wait)}.`, wait);
+    }
+    if (data.code === "attempt_expired") throw visibleFailure(410, "attempt_expired", "This attempt has expired. Start again.");
+    if (data.code === "attempt_request_limit") {
+      throw visibleFailure(429, "attempt_request_limit", "This attempt has made too many requests. Start again.");
+    }
+    throw visibleFailure(503, "usage_control_unavailable", "AI Save is temporarily unavailable. Try again shortly.");
+  })();
+  return ctx.claim;
+}
+
+/**
+ * One request in open mode. Admission (sign-in, origin, kill switch) has already
+ * passed. Adds the burst guard, a required attempt id, and the duplicate guard,
+ * then runs the handler; paid provider calls claim the attempt inside providerFetch.
+ */
+async function openRequest(v: StagingVariant, operation: string, handler: Handler, req: Request, userId: string): Promise<Response> {
+  const testing = {
+    attempts: setting("STAGING_TESTING_ATTEMPTS", 20, 100, 1),
+    windowSeconds: setting("STAGING_TESTING_WINDOW_SECONDS", 1800, 86400, 60),
+    maxRequests: setting("STAGING_ATTEMPT_MAX_REQUESTS", 12, 50, 1),
+  };
+  const minute = await consumeRateLimit(
+    "staging-provider-entry", userId, setting("STAGING_OPEN_REQUESTS_PER_MINUTE", 30, 120, 1), 60, { failClosed: true },
+  );
+  if (!minute.available) throw failure(503, "usage_control_unavailable");
+  if (!minute.allowed) {
+    throw visibleFailure(429, "user_rate_limit", "You're sending requests too quickly. Try again in a moment.", Math.max(1, minute.retryAfter));
+  }
+  const bytes = await boundedBody(req.clone().body, 65536, AbortSignal.timeout(5_000));
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw failure(400, "invalid_json");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw failure(400, "invalid_json");
+  if (operation === "ai-proxy" && body.use_credit === true) throw failure(400, "staging_credit_spending_disabled");
+  if (v.extractPurposeOnly && body.purpose !== "extract") throw failure(403, "staging_extraction_only");
+  // Rebuilt apps send an attempt id with every AI Save request. Older ones do not, and are refused
+  // before any provider call, so they cannot use the allowance per request.
+  const attemptId = body.attempt_id;
+  if (typeof attemptId !== "string" || !UUID.test(attemptId)) throw failure(400, "attempt_id_required");
+  // The same request from the same user (same attempt, same content) within a few seconds is a
+  // double tap: refused without touching providers or the allowance. A different request is not.
+  const duplicate = await consumeRateLimit(
+    "staging-duplicate", userId + ":" + await sha256Hex(operation + "\n" + canonical(body)), 1, DUPLICATE_WINDOW_SECONDS, { failClosed: true },
+  );
+  if (!duplicate.available) throw failure(503, "usage_control_unavailable");
+  if (!duplicate.allowed) {
+    throw visibleFailure(409, "request_in_progress", "This request is already being processed. Try again in a moment.", Math.max(1, duplicate.retryAfter));
+  }
+  const ctx: Context = {
+    campaign: "", requestId: crypto.randomUUID(), user: userId, deadline: Date.now() + 90_000, calls: 0, failed: false,
+    uncertain: false, queue: Promise.resolve(), signal: AbortSignal.timeout(90_000), dailyAI: 0, dailyGoogle: 0,
+    open: true, attemptId, testing,
+  };
+  try {
+    const response = await scope.run(ctx, () => abortable(Promise.resolve(handler(req)), ctx.signal));
+    await ctx.queue;
+    // Handlers swallow thrown errors, so a refusal such as the testing limit is carried on the context.
+    if (ctx.failed) throw ctx.error ?? failure(502, "provider_unavailable");
+    return response;
+  } catch (error) {
+    ctx.failed = true;
+    await ctx.queue;
+    throw error;
+  }
+}
 
 /** Wraps a handler so staging requests pass the access, budget and ledger checks. Elsewhere: the handler, unchanged. */
 export function withStagingProviderControls(operation: string, handler: Handler): Handler {
@@ -257,11 +400,17 @@ export function withStagingProviderControls(operation: string, handler: Handler)
       if (operation === "travel-times") throw failure(503, "routing_budget_not_approved");
       const auth = await requireUser(req);
       if (!auth.ok) return json(req, { error: auth.error }, auth.status);
-      const users = env("STAGING_PROVIDER_USERS").split(",").map((s) => s.trim()).filter(Boolean);
-      if (!users.length || users.some((s) => !UUID.test(s)) || !users.includes(auth.user.id)) {
-        throw failure(403, "synthetic_user_required");
+      // Open mode (off unless STAGING_PROVIDER_ACCESS=open, and only for the AI Save functions) admits any
+      // signed-in user. Otherwise the listed test accounts only, exactly as before.
+      const open = v.openAccess && env("STAGING_PROVIDER_ACCESS") === "open";
+      if (!open) {
+        const users = env("STAGING_PROVIDER_USERS").split(",").map((s) => s.trim()).filter(Boolean);
+        if (!users.length || users.some((s) => !UUID.test(s)) || !users.includes(auth.user.id)) {
+          throw failure(403, "synthetic_user_required");
+        }
       }
       if (env(v.enableFlag) !== "true") throw failure(503, "staging_providers_disabled");
+      if (open) return await openRequest(v, operation, handler, req, auth.user.id);
       const campaign = env("STAGING_PROVIDER_CAMPAIGN");
       if (!/^[a-zA-Z0-9_-]{1,64}$/.test(campaign)) throw failure(503, "staging_configuration_invalid");
       const minute = await consumeRateLimit(
@@ -279,9 +428,7 @@ export function withStagingProviderControls(operation: string, handler: Handler)
       if (!body || typeof body !== "object" || Array.isArray(body)) throw failure(400, "invalid_json");
       if (operation === "ai-proxy" && body.use_credit === true) throw failure(400, "staging_credit_spending_disabled");
       if (v.extractPurposeOnly && body.purpose !== "extract") throw failure(403, "staging_extraction_only");
-      const hashInput = operation + "\n" + canonical(body) + (v.saltedDigest ? "\n" + crypto.randomUUID() : "");
-      const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(hashInput))))
-        .map((b) => b.toString(16).padStart(2, "0")).join("");
+      const digest = await sha256Hex(operation + "\n" + canonical(body) + (v.saltedDigest ? "\n" + crypto.randomUUID() : ""));
       const conversation = operation === "ai-proxy" && body.purpose === "discover" ? req.headers.get("x-staging-conversation-id") : null;
       if (operation === "ai-proxy" && body.purpose === "discover" && (!conversation || !UUID.test(conversation))) {
         throw failure(400, "conversation_id_required");
@@ -389,7 +536,12 @@ export async function providerFetch(input: string, init: RequestInit = {}): Prom
     const kind = classify(url);
     let options: RequestInit = { ...init };
     if (kind === "ai") options = { ...options, body: aiBody(v, init) };
-    await ledger({ ...ledgerArgs(ctx, "call"), p_kind: kind, p_daily_ai: ctx.dailyAI, p_daily_google: ctx.dailyGoogle });
+    if (ctx.open) {
+      // Open mode: the attempt is claimed at the first paid call. Free metadata fetches are not counted.
+      if (kind !== "metadata") await claimAttempt(ctx);
+    } else {
+      await ledger({ ...ledgerArgs(ctx, "call"), p_kind: kind, p_daily_ai: ctx.dailyAI, p_daily_google: ctx.dailyGoogle });
+    }
     const timeout = AbortSignal.timeout(kind === "ai" ? 45_000 : 10_000);
     const signal = AbortSignal.any([ctx.signal, timeout, ...(init.signal ? [init.signal] : [])]);
     options.signal = signal;
@@ -425,8 +577,9 @@ export async function providerFetch(input: string, init: RequestInit = {}): Prom
       throw failure(signal.aborted ? 504 : 502, signal.aborted ? "provider_timeout" : "provider_unavailable");
     }
   });
-  ctx.queue = work.then(() => {}, () => {
+  ctx.queue = work.then(() => {}, (error: unknown) => {
     ctx.failed = true;
+    if (ctx.open && error instanceof ControlError && error.visible) ctx.error ??= error;
   });
   return work;
 }

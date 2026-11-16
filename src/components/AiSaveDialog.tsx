@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendation, shareRecommendationOrigin, type ExtractedVenueItem, type SharedVenue, type SharedVenueProgress, type SharedVenueResult } from '../lib/aiSave';
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
+import { waitText } from '../lib/providerErrors';
 import { fallbackImage } from '../lib/publicRecommendation.js';
 
 /** What the user sees when AI Save could not run. Manual entry and saving stay available in every case. */
@@ -14,6 +15,8 @@ const serviceProblem = {
   duplicate: 'These exact details were already checked. Change something and verify again, or save them as entered.',
   limit: 'AI Save has reached its limit for now. Try again later, or enter the details yourself.',
   unavailable: 'AI Save is temporarily unavailable. Try again, or enter the details yourself.',
+  attempt_expired: 'This attempt timed out. Try again to start a fresh one, or enter the details yourself.',
+  attempt_limit: 'This attempt made too many requests. Try again to start a fresh one, or enter the details yourself.',
 } as const;
 
 export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
@@ -66,9 +69,12 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
       setEditing(!result.venue);
       setIssue(result.issue);
       if (!result.issue) return;
-      const { stage, cause, retryable, reason } = result.issue;
+      const { stage, cause, retryable, reason, retryAfterSeconds } = result.issue;
       // A service problem is never worded as a verdict on the venue.
-      if (reason && reason in serviceProblem) setError(serviceProblem[reason as keyof typeof serviceProblem]);
+      if (reason === 'testing_limit') setError(typeof retryAfterSeconds === 'number'
+        ? `You've reached the testing limit. Try again in ${waitText(retryAfterSeconds)}.`
+        : "You've reached the testing limit. Try again later.");
+      else if (reason && reason in serviceProblem) setError(serviceProblem[reason as keyof typeof serviceProblem]);
       else if (reason === 'needs_review') setError('We found this from the link but could not confirm it automatically. Check the details, then tap Verify details.');
       else if (reason === 'no_match') setError('Google Places could not match this exact venue. Check the name and address, then verify again or save it as entered.');
       else if (stage === 'lookup') setError('Could not check your saved venues. Try again or enter the details.');

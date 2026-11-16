@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { guestSave, identifySharedVenue, publishVenue, readGuestSave, saveSharedVenue, sendRecommendation, sourceUrl } from './aiSave';
 import { ProviderUnavailableError } from './providerErrors';
 
-const mocks = vi.hoisted(() => ({ extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), session: { id: 'test-user' },
+}));
 vi.mock('./openai', () => ({ extractVenuesFromLink: mocks.extract, hasSourceAddress: () => false }));
 vi.mock('./apiKeys', () => ({ isGoogleMapsLink: mocks.maps, verifyVenuePlace: mocks.match }));
 vi.mock('./supabase', () => ({
   supabase: {
-    auth: { getSession: async () => ({ data: { session: { user: { id: 'test-user' } } } }) },
+    auth: { getSession: async () => ({ data: { session: { user: { id: mocks.session.id } } } }) },
     from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ limit: mocks.lookup }) }) }) }),
     rpc: mocks.rpc,
   },
@@ -18,6 +20,8 @@ const venue = { name: 'Cafe', address: '1 Test St', type: 'food' as const, link 
 
 afterEach(() => {
   localStorage.clear();
+  mocks.session.id = 'test-user';
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.resetAllMocks();
   vi.unstubAllEnvs();
@@ -152,7 +156,7 @@ describe('share venue persistence', () => {
     mocks.lookup.mockResolvedValue({ data: [], error: null });
     mocks.match.mockResolvedValue(null);
     await expect(identifySharedVenue(mapsLink)).resolves.toMatchObject({ issue: { stage: 'verify' } });
-    expect(mocks.match).toHaveBeenCalledWith({ url: mapsLink });
+    expect(mocks.match).toHaveBeenCalledWith({ url: mapsLink }, expect.stringMatching(/^[0-9a-f-]{36}$/));
     expect(mocks.extract).not.toHaveBeenCalled();
 
     mocks.extract.mockRejectedValueOnce(new Error('AI unavailable'));
@@ -197,5 +201,136 @@ describe('share venue persistence', () => {
     } finally {
       Reflect.deleteProperty(navigator, 'share');
     }
+  });
+});
+
+/**
+ * One AI Save attempt is one id, sent with every request it makes, so the
+ * server counts it once however many functions it calls. It survives retries
+ * and an accidental close, and ends when the venue is saved.
+ */
+describe('AI Save attempt ids', () => {
+  const other = 'https://www.tiktok.com/@user/video/123';
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const ready = () => {
+    mocks.lookup.mockResolvedValue({ data: [], error: null });
+    mocks.extract.mockResolvedValue([venue]);
+    mocks.match.mockResolvedValue({ ...venue, lat: 1, lon: 2 });
+  };
+  const idsUsed = () => [
+    ...mocks.extract.mock.calls.map(([, options]) => options?.attemptId),
+    ...mocks.match.mock.calls.map(([, attemptId]) => attemptId),
+  ];
+
+  it('uses one id for the extraction and the verification of an attempt', async () => {
+    ready();
+    const progress: Record<string, unknown> = {};
+    await identifySharedVenue(link, progress);
+    const [id, second] = idsUsed();
+    expect(id).toMatch(uuid);
+    expect(second).toBe(id);
+    expect(progress.attemptId).toBe(id);
+  });
+
+  it('keeps the id when the same attempt is retried', async () => {
+    ready();
+    mocks.match.mockRejectedValueOnce(new ProviderUnavailableError('unavailable', 503)).mockResolvedValue({ ...venue, lat: 1, lon: 2 });
+    const progress = {};
+    await identifySharedVenue(link, progress);
+    await identifySharedVenue(link, progress);
+    expect(new Set(idsUsed()).size).toBe(1);
+  });
+
+  it('keeps the id after an accidental close: reopening the same link continues the attempt', async () => {
+    ready();
+    await identifySharedVenue(link, {});
+    await identifySharedVenue(link, {});
+    expect(mocks.extract).toHaveBeenCalledTimes(2);
+    expect(new Set(idsUsed()).size).toBe(1);
+  });
+
+  it('starts a new attempt for a different link, and for a different account', async () => {
+    ready();
+    await identifySharedVenue(link, {});
+    await identifySharedVenue(other, {});
+    mocks.session.id = 'someone-else';
+    await identifySharedVenue(link, {});
+    expect(new Set(idsUsed()).size).toBe(3);
+  });
+
+  it('ends the attempt when the venue is saved, so the next intentional save is a new one', async () => {
+    ready();
+    mocks.rpc.mockResolvedValue({ data: { ...venue, id: 'saved' }, error: null });
+    const first = {};
+    const { venue: verified } = await identifySharedVenue(link, first);
+    await saveSharedVenue(verified!, link);
+    await identifySharedVenue(link, {});
+    const ids = idsUsed();
+    expect(new Set(ids).size).toBe(2);
+    expect(ids[0]).not.toBe(ids[ids.length - 1]);
+  });
+
+  it('keeps the attempt when a save fails, so the retry is the same attempt', async () => {
+    ready();
+    mocks.rpc.mockResolvedValue({ data: null, error: new Error('Write failed') });
+    const { venue: verified } = await identifySharedVenue(link, {});
+    await expect(saveSharedVenue(verified!, link)).rejects.toThrow('Write failed');
+    await identifySharedVenue(link, {});
+    expect(new Set(idsUsed()).size).toBe(1);
+  });
+
+  it('does not reuse an id once it is nearly as old as the server will accept', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+    ready();
+    await identifySharedVenue(link, {});
+    vi.setSystemTime(new Date('2026-11-17T10:24:00Z'));
+    await identifySharedVenue(link, {});
+    expect(new Set(idsUsed()).size).toBe(1);
+    vi.setSystemTime(new Date('2026-11-17T10:26:00Z'));
+    await identifySharedVenue(link, {});
+    expect(new Set(idsUsed()).size).toBe(2);
+  });
+
+  it.each(['attempt_expired', 'attempt_limit'] as const)('drops the id when the server says %s, so the retry is a new attempt', async (reason) => {
+    ready();
+    mocks.match.mockRejectedValueOnce(new ProviderUnavailableError(reason, 410, reason)).mockResolvedValue({ ...venue, lat: 1, lon: 2 });
+    const progress = {};
+    const refused = await identifySharedVenue(link, progress);
+    expect(refused.issue).toMatchObject({ stage: 'verify', retryable: true, reason });
+    await identifySharedVenue(link, progress);
+    const ids = idsUsed();
+    expect(new Set(ids).size).toBe(2);
+    expect(ids[ids.length - 1]).not.toBe(ids[0]);
+  });
+
+  it('reports the testing limit with the wait, keeps the id, and keeps the retry available', async () => {
+    ready();
+    mocks.match.mockRejectedValueOnce(new ProviderUnavailableError('testing_limit', 429, 'testing_limit', undefined, 723));
+    const progress = {};
+    const refused = await identifySharedVenue(link, progress);
+    expect(refused.issue).toMatchObject({ stage: 'verify', retryable: true, reason: 'testing_limit', retryAfterSeconds: 723 });
+    expect(refused.candidates).toEqual([venue]);
+    mocks.match.mockResolvedValue({ ...venue, lat: 1, lon: 2 });
+    await identifySharedVenue(link, progress);
+    expect(new Set(idsUsed()).size).toBe(1);
+  });
+
+  it('still works when browser storage is unavailable, with one id for the dialog', async () => {
+    ready();
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    const progress = {};
+    await identifySharedVenue(link, progress);
+    await identifySharedVenue(link, progress);
+    expect(idsUsed()[0]).toMatch(uuid);
+    expect(new Set(idsUsed()).size).toBe(1);
+  });
+
+  it('sends no id for a saved link, because no provider is called', async () => {
+    mocks.lookup.mockResolvedValue({ data: [{ ...venue, id: 'existing' }], error: null });
+    await identifySharedVenue(link, {});
+    expect(idsUsed()).toEqual([]);
+    expect(localStorage.length).toBe(0);
   });
 });

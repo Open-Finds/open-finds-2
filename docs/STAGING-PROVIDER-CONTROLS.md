@@ -74,8 +74,88 @@ These exist only because the source also has to be safe on production:
   `cors.ts` is unchanged, so a few deployed functions allow one extra CORS request header
   than they would from this source (`X-Staging-Conversation-Id`, unused while AI Discover is closed).
 
+## Open mode: AI Save testing allowance
+
+An optional second way in for human testers. **Off by default**: nothing changes unless
+`STAGING_PROVIDER_ACCESS` is exactly `open`. It applies only to the three AI Save functions
+(`resolve-place`, `extract-venue-meta`, `ai-proxy`, the last still extraction-only). `geocode`,
+`discover-venues` and AI Discover are never opened by it.
+
+**What it does.** Any signed-in user is admitted, with a testing allowance of **20 AI Save
+attempts per user per rolling 30 minutes**. It does not use the ledger above, so none of its
+lifetime budgets, single request slot, duplicate rule or per-user daily caps apply.
+
+**What an attempt is.** One AI Save dialog session. The app creates an id and sends it as
+`attempt_id` in the body of every request the attempt makes (extraction, AI, verification), so
+the attempt is counted once however many functions it calls. The id is kept for retries and for
+an accidental close and reopen of the same link (less than 25 minutes), and dropped when the
+venue is saved, so the next intentional save is a new attempt.
+
+**When it is counted.** At the first **paid** provider call of a request (AI, Places, Geocoding),
+in the database function `claim_ai_save_attempt` (migration `20261117130000_ai_save_attempt_allowance.sql`):
+
+- a new id uses one slot; refused when the user already has 20 in the last 30 minutes;
+- an id seen before in the window is free (a retry never needs allowance), up to **12 requests per attempt**;
+- an id older than the window is **refused, never renewed**;
+- free page-metadata fetches are not counted, and neither is anything refused before a paid call
+  (sign-in, origin, kill switch, a bad body, a missing attempt id, the duplicate or burst guard,
+  a handler's own checks, an unapproved endpoint, the eight-call limit).
+
+An attempt that reaches a provider and then fails still counts (the cost was incurred); its
+retries are free.
+
+**The wait.** At the limit the answer is HTTP 429, code `testing_limit`, `retry_after_seconds`
+and a `Retry-After` header: when the oldest counted attempt ages out. The app shows "You've reached
+the testing limit. Try again in 13 minutes." Other refusals: 410 `attempt_expired`, 429
+`attempt_request_limit`.
+
+**Other protections in open mode.** Sign-in (the anon key is refused), the origin list and each
+function's on/off flag stay, so the flag is still the kill switch. Plus: a **required attempt id**
+(400 `attempt_id_required` before any provider call, so an app that does not send ids cannot
+use the allowance per request), a **5-second identical-request guard** (the same user, attempt
+and content within 5 seconds gets 409 `request_in_progress`; a different request is not blocked
+and the guard never uses allowance), and a **burst guard of 30 requests a minute per user**.
+Unchanged: the eight-call and 90-second limit per request, the approved endpoints, and each
+function's own hourly limits (extract 60, resolve 60, AI 40 per user per hour).
+
+**Concurrency.** A claim takes a per-user database lock, so two simultaneous new attempts cannot
+both take the last slot and two requests of one attempt cannot both take the last request. One
+claim per request, however many paid calls it makes.
+
+**If the database cannot answer.** It fails closed: a 503 `usage_control_unavailable` and no provider
+call, for the allowance claim, the burst guard and the duplicate guard. A request that makes only
+free metadata fetches does not need the claim. (If the whole database is down, sign-in checks fail first.)
+
+| Setting | Default | Allowed |
+|---|---|---|
+| `STAGING_PROVIDER_ACCESS` | unset (off) | `open` turns it on |
+| `STAGING_TESTING_ATTEMPTS` | 20 | 1 to 100 |
+| `STAGING_TESTING_WINDOW_SECONDS` | 1800 | 60 to 86400 |
+| `STAGING_ATTEMPT_MAX_REQUESTS` | 12 | 1 to 50 |
+| `STAGING_OPEN_REQUESTS_PER_MINUTE` | 30 | 1 to 120 |
+
+A value outside its range stops requests with 503 `staging_configuration_invalid` rather than
+guessing. The 5-second duplicate window is fixed.
+
+### Before turning it on, in this order
+1. Run the database tests where Docker is available (`npm run test:db` runs
+   `supabase/tests/10_ai_save_attempts.sql`), and once run `supabase/tests/ai_save_attempts_concurrency.sh`.
+2. Apply the migration to staging (needs approval).
+3. Deploy the three functions from this branch (needs approval).
+4. **Rebuild and distribute the APK with attempt ids** and confirm testers have it. Open mode
+   refuses requests without an id, so enabling it first breaks AI Save for any older app.
+5. Then, and only then, the project owner sets the secrets: `STAGING_PROVIDER_ACCESS=open`, and
+   `ALLOWED_ORIGINS` including `https://localhost` (the Android app) and the web preview address.
+   Keep `premium_unlocked` on during testing, or the functions' own free tier (3 a day) applies.
+6. Smoke test with a test account only.
+
+**Switching it off:** unset `STAGING_PROVIDER_ACCESS` (back to the test-account list and the
+ledger above, exactly as before), or set a function's flag to `false` to stop one function. The
+migration is additive: the table and function can be dropped without affecting anything else.
+
 ## What was not carried over
 
-- The database objects (ledger tables and functions) are only recorded, not in
-  `supabase/migrations`. Deploying from Git does not create or change them.
-- Nothing here was deployed. Staging still runs the previous code.
+- The database objects of the ledger (tables and functions) are only recorded, not in
+  `supabase/migrations`. Deploying from Git does not create or change them. (The open-mode
+  allowance table and function, by contrast, are an ordinary migration.)
+- Nothing here was deployed or applied. Staging still runs the previous code and schema.

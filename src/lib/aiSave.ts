@@ -3,6 +3,7 @@ import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type 
 import { supabase, type SavedVenue, type VenueType } from './supabase';
 import { shareOrCopy } from './invite';
 import { ProviderUnavailableError, type ProviderReason } from './providerErrors';
+import { attemptIdFor, forgetAttempt } from './attemptId';
 import { recommendationOrigin, recommendationPath, stagingSupabase } from './publicRecommendation.js';
 
 export type PublicVenue = { name: string; address: string; type: VenueType; link: string | null };
@@ -26,6 +27,8 @@ export async function saveSharedVenue(venue: PublicVenue, link: string, position
     p_venue: { ...venue, ...position, link: sourceUrl(link) },
   });
   if (error || !data) throw error ?? new Error('Saving returned no venue.');
+  // The save ends this AI Save attempt: the next intentional save of the link starts a new one.
+  await forgetAttempt(sourceUrl(link));
   return data as SavedVenue;
 }
 
@@ -36,6 +39,8 @@ export type SharedVenueProgress = {
   identification?: VenueExtractionProgress;
   candidates?: ExtractedVenueItem[];
   verified?: SharedVenue;
+  /** Sent with every request of this attempt, so the server counts it once. Kept across retries and reopened dialogs. */
+  attemptId?: string;
 };
 
 /**
@@ -52,6 +57,8 @@ export type SharedVenueIssue = {
   cause?: unknown;
   retryable: boolean;
   reason?: ProviderReason | 'needs_review' | 'no_match';
+  /** For 'testing_limit': how long until an attempt is available again. */
+  retryAfterSeconds?: number;
 };
 
 export type SharedVenueResult = {
@@ -72,8 +79,9 @@ async function previouslySaved(link: string): Promise<SavedVenue | undefined> {
 
 export async function identifySharedVenue(input: string, progress: SharedVenueProgress = {}): Promise<SharedVenueResult> {
   let stage: SharedVenueIssue['stage'] = 'identify';
+  let link: string | undefined;
   try {
-    const link = sourceUrl(input);
+    link = sourceUrl(input);
     const mapsLink = isGoogleMapsLink(link);
     if (!progress.checkedSaved) {
       // An exact-source hit is the current account's previous choice.
@@ -86,9 +94,12 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
       progress.checkedSaved = true;
     }
     stage = 'identify';
+    progress.attemptId ??= await attemptIdFor(link);
     if (!mapsLink && !progress.candidates) {
       progress.identification ??= {};
-      progress.candidates = await extractVenuesFromLink(link, { verifySeparately: true, progress: progress.identification });
+      progress.candidates = await extractVenuesFromLink(link, {
+        verifySeparately: true, progress: progress.identification, attemptId: progress.attemptId,
+      });
     }
     if (!progress.verified) {
       stage = 'verify';
@@ -104,7 +115,7 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
           addressFromSource: hasSourceAddress(progress.identification, candidate.address),
         } : null;
       if (!details) return { candidates, issue: { stage, retryable: false, reason: 'needs_review' } };
-      const match = await verifyVenuePlace(details);
+      const match = await verifyVenuePlace(details, progress.attemptId);
       if (!match) return { candidates, issue: { stage, retryable: false, reason: 'no_match' } };
       progress.verified = {
         name: match.name, address: match.address, link,
@@ -116,8 +127,16 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
   } catch (cause) {
     const candidates = progress.candidates ?? [];
     if (cause instanceof ProviderUnavailableError) {
+      if (cause.reason === 'attempt_expired' || cause.reason === 'attempt_limit') {
+        // The server will not take this id again, so the next try is a new attempt.
+        progress.attemptId = undefined;
+        if (link) await forgetAttempt(link);
+      }
       // Retrying the identical request can never succeed once it was already seen.
-      return { candidates, issue: { stage, cause, retryable: cause.reason !== 'duplicate', reason: cause.reason } };
+      return {
+        candidates,
+        issue: { stage, cause, retryable: cause.reason !== 'duplicate', reason: cause.reason, retryAfterSeconds: cause.retryAfterSeconds },
+      };
     }
     return { candidates, issue: { stage, cause, retryable: true } };
   }

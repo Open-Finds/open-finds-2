@@ -76,6 +76,24 @@ describe('verifyVenuePlace contract', () => {
     }
   });
 
+  it('sends the attempt id with the verification, and nothing extra when there is none', async () => {
+    reply({ ...place, verified: true });
+    await verifyVenuePlace(input, '44444444-4444-4444-8444-444444444444');
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({
+      ...input, verify: true, attempt_id: '44444444-4444-4444-8444-444444444444',
+    });
+    reply({ ...place, verified: true });
+    await verifyVenuePlace(input);
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body))).toEqual({ ...input, verify: true });
+  });
+
+  it('reports the testing limit with its wait, and an expired attempt, as typed provider problems', async () => {
+    reply({ error: "You've reached the testing limit. Try again in 13 minutes.", code: 'testing_limit', retry_after_seconds: 723 }, 429);
+    expect(await failure(verifyVenuePlace(input, 'x'))).toMatchObject({ reason: 'testing_limit', status: 429, retryAfterSeconds: 723 });
+    reply({ error: 'This attempt has expired. Start again.', code: 'attempt_expired' }, 410);
+    expect(await failure(verifyVenuePlace(input, 'x'))).toMatchObject({ reason: 'attempt_expired', status: 410 });
+  });
+
   it('reports a missing session as a sign-in problem without calling the provider', async () => {
     mocks.headers.mockRejectedValueOnce(new Error('Please sign in to use this feature.'));
     expect(await failure(verifyVenuePlace(input))).toMatchObject({ reason: 'auth' });

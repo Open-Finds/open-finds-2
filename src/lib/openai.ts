@@ -49,7 +49,7 @@ export function setCreditPrompt(ask: ((purpose: AIPurpose) => Promise<boolean>) 
 
 async function callAI(
   messages: ChatMessage[],
-  opts?: { temperature?: number; responseFormat?: 'json_object'; purpose?: AIPurpose }
+  opts?: { temperature?: number; responseFormat?: 'json_object'; purpose?: AIPurpose; attemptId?: string }
 ): Promise<string> {
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-proxy`;
   const purpose = opts?.purpose ?? 'discover';
@@ -59,6 +59,8 @@ async function callAI(
     purpose,
   };
   if (opts?.responseFormat) body.response_format = { type: opts.responseFormat };
+  // AI Save attempts are counted once across the functions they call (staging testing allowance).
+  if (purpose === 'extract' && opts?.attemptId) body.attempt_id = opts.attemptId;
 
   const send = async (useCredit: boolean) => fetch(apiUrl, {
     method: 'POST',
@@ -174,13 +176,13 @@ type MetaResult = {
  * is reported, so a provider problem is not mistaken for a link with no venue.
  * A 400 still means the link itself was rejected.
  */
-async function fetchPageMeta(url: string, strict = false): Promise<MetaResult | null> {
+async function fetchPageMeta(url: string, strict = false, attemptId?: string): Promise<MetaResult | null> {
   try {
     const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-venue-meta`;
     const res = await fetch(apiUrl, {
       method: 'POST',
       headers: await edgeAuthHeaders(),
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, ...(attemptId ? { attempt_id: attemptId } : {}) }),
     });
     if (!res.ok) {
       if (strict && res.status !== 400) throw await providerFailure(res);
@@ -411,12 +413,15 @@ export function hasSourceAddress(progress: VenueExtractionProgress | undefined, 
 
 export async function extractVenuesFromLink(
   link: string,
-  options?: { verifySeparately: boolean; progress?: VenueExtractionProgress },
+  options?: { verifySeparately: boolean; progress?: VenueExtractionProgress; attemptId?: string },
 ): Promise<ExtractedVenueItem[]> {
+  // One extraction is one attempt: every request it makes carries the same id, so the staging testing
+  // allowance counts it once. AI Save passes the id of its dialog; other callers get one per call.
+  const attemptId = options?.attemptId ?? crypto.randomUUID();
   // If this is a Google Maps link, resolve it directly via the Google APIs
   // instead of scraping the page (which mostly returns empty for Maps pages).
   if (isGoogleMapsLink(link)) {
-    const place = await resolveGoogleMapsLink(link);
+    const place = await resolveGoogleMapsLink(link, attemptId);
     if (place?.hint === 'review') {
       throw new UserFacingError("That's a link to a Google review, not a place. Open the place in Google Maps and tap Share there.");
     }
@@ -435,7 +440,7 @@ export async function extractVenuesFromLink(
   }
 
   // Step 1: Fetch real page metadata via edge function
-  const meta = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately);
+  const meta = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately, attemptId);
   if (options?.progress && meta && (meta.fetched || meta.oembedTitle || meta.ogDescription || meta.metaDescription)) options.progress.metadata = meta;
   const caption = options?.verifySeparately ? readSocialCaption(meta) : undefined;
   if (caption?.name && caption.address && caption.type) {
@@ -452,7 +457,7 @@ export async function extractVenuesFromLink(
 
   const content = await callAI(
     extractionMessages(meta, meta?.url || link, caption),
-    { temperature: 0, responseFormat: 'json_object', purpose: 'extract' }
+    { temperature: 0, responseFormat: 'json_object', purpose: 'extract', attemptId }
   );
 
   let parsed: { venues?: unknown };
