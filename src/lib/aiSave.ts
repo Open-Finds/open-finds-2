@@ -1,4 +1,4 @@
-import { isGoogleMapsLink, verifyVenuePlace } from './apiKeys';
+import { isGoogleMapsLink, verifyVenuePlaceDetailed } from './apiKeys';
 import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
 import { supabase, type SavedVenue, type VenueType } from './supabase';
 import { shareOrCopy } from './invite';
@@ -56,7 +56,7 @@ export type SharedVenueIssue = {
   stage: 'identify' | 'verify' | 'lookup';
   cause?: unknown;
   retryable: boolean;
-  reason?: ProviderReason | 'needs_review' | 'no_match';
+  reason?: ProviderReason | 'needs_review' | 'no_match' | 'ambiguous';
   /** For 'testing_limit': how long until an attempt is available again. */
   retryAfterSeconds?: number;
 };
@@ -115,8 +115,19 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
           addressFromSource: hasSourceAddress(progress.identification, candidate.address),
         } : null;
       if (!details) return { candidates, issue: { stage, retryable: false, reason: 'needs_review' } };
-      const match = await verifyVenuePlace(details, progress.attemptId);
-      if (!match) return { candidates, issue: { stage, retryable: false, reason: 'no_match' } };
+      const check = await verifyVenuePlaceDetailed(details, progress.attemptId);
+      const match = check.match;
+      if (!match) {
+        // Google's places for this search are the choices to offer; nothing is saved from them automatically.
+        const choices: ExtractedVenueItem[] = check.candidates.map((place, index) => ({
+          name: place.name, address: place.address, type: place.type ?? candidate?.type ?? 'food',
+          order: index + 1, tags: [], lat: place.lat, lon: place.lon,
+        }));
+        return {
+          candidates: choices.length ? choices : candidates,
+          issue: { stage, retryable: false, reason: check.reason ?? 'no_match' },
+        };
+      }
       progress.verified = {
         name: match.name, address: match.address, link,
         type: match.type ?? candidate?.type ?? 'activity', lat: match.lat, lon: match.lon, tags: candidate?.tags ?? [],

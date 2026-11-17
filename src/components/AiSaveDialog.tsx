@@ -5,7 +5,8 @@ import { Input } from './ui/input';
 import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendation, shareRecommendationOrigin, type ExtractedVenueItem, type SharedVenue, type SharedVenueProgress, type SharedVenueResult } from '../lib/aiSave';
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
-import { waitText } from '../lib/providerErrors';
+import { ProviderUnavailableError, waitText } from '../lib/providerErrors';
+import { searchGooglePlaces } from '../lib/apiKeys';
 import { fallbackImage } from '../lib/publicRecommendation.js';
 
 /** What the user sees when AI Save could not run. Manual entry and saving stay available in every case. */
@@ -40,6 +41,10 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [issue, setIssue] = useState<SharedVenueResult['issue']>();
+  /** Coordinates of a Google place the user chose from the list or a search. Cleared as soon as the text is edited by hand. */
+  const [position, setPosition] = useState<{ lat: number; lon: number }>();
+  const [placeQuery, setPlaceQuery] = useState('');
+  const [searching, setSearching] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [message, setMessage] = useState("Let's check this out! 🤩");
   const [shareUrl, setShareUrl] = useState('');
@@ -76,7 +81,10 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         : "You've reached the testing limit. Try again later.");
       else if (reason && reason in serviceProblem) setError(serviceProblem[reason as keyof typeof serviceProblem]);
       else if (reason === 'needs_review') setError('We found this from the link but could not confirm it automatically. Check the details, then tap Verify details.');
-      else if (reason === 'no_match') setError('Google Places could not match this exact venue. Check the name and address, then verify again or save it as entered.');
+      else if (reason === 'ambiguous') setError('More than one Google place fits this venue. Choose the right one below, or save it as entered.');
+      else if (reason === 'no_match') setError(result.candidates.length
+        ? 'Google Places could not confirm this exact venue. Choose the closest place below, search for it, or save it as entered.'
+        : 'Google Places could not match this exact venue. Check the name and address, then verify again or save it as entered.');
       else if (stage === 'lookup') setError('Could not check your saved venues. Try again or enter the details.');
       else if (stage === 'verify') setError(retryable
         ? 'Place verification is temporarily unavailable. Try again or enter the details.'
@@ -101,6 +109,27 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     setShareUrl('');
     setIssue({ stage: 'verify', retryable: true });
     retryLookup();
+  };
+
+  /** Change location: Google places for what the user typed. Choosing one is still a separate Save. */
+  const searchPlaces = async () => {
+    const query = placeQuery.trim();
+    if (!query || searching) return;
+    setSearching(true);
+    setError('');
+    try {
+      const found = await searchGooglePlaces(query, progress.current.attemptId);
+      setCandidates(found.map((place, index) => ({
+        name: place.name, address: place.address, type: place.type ?? 'food', order: index + 1, tags: [], lat: place.lat, lon: place.lon,
+      })));
+      if (!found.length) setError('Google Places found nothing for that search. Try another name, or save it as entered.');
+    } catch (cause) {
+      setError(cause instanceof ProviderUnavailableError && cause.reason in serviceProblem
+        ? serviceProblem[cause.reason as keyof typeof serviceProblem]
+        : 'Place search is temporarily unavailable. Try again, or enter the details yourself.');
+    } finally {
+      setSearching(false);
+    }
   };
 
   const save = async (details: SharedVenue) => {
@@ -183,20 +212,40 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         </div>
       </> : editing ? <form className="grid gap-3" onSubmit={event => {
         event.preventDefault();
-        if (validDetails && !busy && !correctionSaved) void save({ name: name.trim(), address: address.trim(), type, link });
+        if (validDetails && !busy && !correctionSaved) void save({
+          name: name.trim(), address: address.trim(), type, link, lat: position?.lat ?? null, lon: position?.lon ?? null,
+        });
       }}>
-        {candidates.length > 1 && !saved && <label className="grid gap-1 text-sm">Places found
-          <select className="rounded border bg-background p-2" onChange={event => {
-            const candidate = candidates[Number(event.target.value)];
-            if (candidate) { setName(candidate.name); setAddress(candidate.address); setType(candidate.type); }
-          }}>
-            {candidates.map((candidate, index) => <option key={index} value={index}>{candidate.name} — {candidate.address}</option>)}
-          </select>
-        </label>}
-        <label className="grid gap-1 text-sm">Venue name<Input required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
-        <label className="grid gap-1 text-sm">Address<Input required maxLength={500} value={address} onChange={event => setAddress(event.target.value)} /></label>
+        {candidates.length > 0 && !saved && <fieldset className="grid gap-2 text-sm">
+          <legend className="text-label">Places found</legend>
+          {candidates.map((candidate, index) => {
+            const chosen = position?.lat === candidate.lat && position?.lon === candidate.lon && name === candidate.name && address === candidate.address;
+            return <Button key={index} type="button" variant={chosen ? 'secondary' : 'outline'} aria-pressed={chosen}
+              className="h-auto justify-start whitespace-normal py-2 text-left" onClick={() => {
+                setName(candidate.name); setAddress(candidate.address); setType(candidate.type);
+                setPosition(candidate.lat != null && candidate.lon != null ? { lat: candidate.lat, lon: candidate.lon } : undefined);
+              }}>
+              <span className="grid min-w-0"><span className="break-words font-semibold">{candidate.name}</span><span className="break-words text-muted-foreground">{candidate.address}</span></span>
+            </Button>;
+          })}
+        </fieldset>}
+        <div className="grid gap-2 rounded-lg border p-3">
+          <label className="grid gap-1 text-sm" htmlFor="ai-save-place-search">Change location: search Google Places</label>
+          <div className="flex gap-2">
+            <Input id="ai-save-place-search" maxLength={200} value={placeQuery} placeholder="e.g. Sculpture by the Sea, Bondi"
+              onChange={event => setPlaceQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void searchPlaces(); } }} />
+            <Button type="button" variant="outline" disabled={searching || !placeQuery.trim() || saving} onClick={() => void searchPlaces()}>
+              {searching ? 'Searching…' : 'Search'}
+            </Button>
+          </div>
+        </div>
+        <label className="grid gap-1 text-sm">Venue name<Input required maxLength={200} value={name} onChange={event => { setName(event.target.value); setPosition(undefined); }} /></label>
+        <label className="grid gap-1 text-sm">Address<Input required maxLength={500} value={address} onChange={event => { setAddress(event.target.value); setPosition(undefined); }} /></label>
+        {position && <p className="text-sm text-muted-foreground">Location chosen from Google Places. Editing the name or address removes it.</p>}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy || saving || !validDetails || correctionSaved}>{correctionSaved ? 'Saved to My Venues' : saved ? 'Save changes manually' : 'Save without verification'}</Button>
+          <Button type="submit" disabled={busy || saving || !validDetails || correctionSaved}>
+            {correctionSaved ? 'Saved to My Venues' : saved ? 'Save changes manually' : position ? 'Save this place' : 'Save without verification'}
+          </Button>
           <Button type="button" variant="outline" disabled={busy || saving || !validDetails} onClick={verifyCorrection}>Verify details</Button>
           {issue?.retryable && <Button type="button" variant="outline" disabled={busy || saving} onClick={retryLookup}>
             {issue.stage === 'identify' ? 'Retry identification' : issue.stage === 'verify' ? 'Retry verification' : 'Retry lookup'}

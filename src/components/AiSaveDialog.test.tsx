@@ -114,7 +114,7 @@ describe('Shared venue actions', () => {
 
   it('says Google Places found no exact match only after it was actually asked', async () => {
     await start({ candidates: [candidate], issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('Google Places could not match this exact venue');
+    expect(screen.getByRole('alert')).toHaveTextContent('Google Places could not confirm this exact venue');
     expect(screen.getByRole('button', { name: 'Verify details' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save without verification' })).toBeEnabled();
   });
@@ -128,5 +128,30 @@ describe('Shared venue actions', () => {
     expect(mocks.identifySharedVenue.mock.calls[0][1]).toBe(mocks.identifySharedVenue.mock.calls[1][1]);
     expect(screen.getByRole('button', { name: 'Create Plan' })).toBeEnabled();
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+});
+
+describe('Google place choices', () => {
+  beforeEach(() => vi.resetAllMocks());
+  const chosen = { ...venue, name: 'Sculpture by the Sea', address: 'Marine Dr, Bondi Beach NSW 2026, Australia', lat: -33.89, lon: 151.27, order: 1, tags: [] };
+
+  it('saves a chosen Google place with its coordinates, and drops them once the text is edited by hand', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await start({ candidates: [chosen], issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('could not confirm this exact venue');
+    fireEvent.click(screen.getByRole('button', { name: /Sculpture by the Sea/ }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save this place' })));
+    expect(mocks.saveSharedVenue).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: 'Sculpture by the Sea', lat: -33.89, lon: 151.27 }), link,
+    );
+  });
+
+  it('never keeps coordinates after the venue text is changed', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await start({ candidates: [chosen], issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sculpture by the Sea/ }));
+    fireEvent.change(screen.getByLabelText('Venue name'), { target: { value: 'Sculpture by the Sea (edited)' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Sculpture by the Sea (edited)', lat: null, lon: null });
   });
 });

@@ -6,7 +6,10 @@ const mocks = vi.hoisted(() => ({
   extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), session: { id: 'test-user' },
 }));
 vi.mock('./openai', () => ({ extractVenuesFromLink: mocks.extract, hasSourceAddress: () => false }));
-vi.mock('./apiKeys', () => ({ isGoogleMapsLink: mocks.maps, verifyVenuePlace: mocks.match }));
+vi.mock('./apiKeys', () => ({
+  isGoogleMapsLink: mocks.maps,
+  verifyVenuePlaceDetailed: async (...args: unknown[]) => ({ match: await mocks.match(...args), candidates: [] }),
+}));
 vi.mock('./supabase', () => ({
   supabase: {
     auth: { getSession: async () => ({ data: { session: { user: { id: mocks.session.id } } } }) },
