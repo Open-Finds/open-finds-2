@@ -2,7 +2,7 @@ name: Android staging APK
 
 on:
   push:
-    branches: [feature/ai-save-quick-share]
+    branches: [feature/ai-save-quick-share, feature/staging-reconciliation]
   workflow_dispatch:
 
 permissions:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apk:
-    if: github.ref == 'refs/heads/feature/ai-save-quick-share'
+    if: github.ref == 'refs/heads/feature/ai-save-quick-share' || github.ref == 'refs/heads/feature/staging-reconciliation'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
