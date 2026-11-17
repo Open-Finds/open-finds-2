@@ -143,10 +143,15 @@ BEGIN
   PERFORM rep('H2 anon and signed-in users cannot claim',
     NOT has_function_privilege('anon', 'public.claim_ai_save_attempt(uuid,uuid,integer,integer,integer)', 'EXECUTE')
     AND NOT has_function_privilege('authenticated', 'public.claim_ai_save_attempt(uuid,uuid,integer,integer,integer)', 'EXECUTE'));
-  PERFORM rep('H3 anon and signed-in users cannot read or write the table',
-    NOT has_table_privilege('anon', 'public.ai_save_attempts', 'SELECT') AND NOT has_table_privilege('authenticated', 'public.ai_save_attempts', 'SELECT')
-    AND NOT has_table_privilege('authenticated', 'public.ai_save_attempts', 'INSERT') AND NOT has_table_privilege('authenticated', 'public.ai_save_attempts', 'UPDATE')
-    AND NOT has_table_privilege('authenticated', 'public.ai_save_attempts', 'DELETE'));
+  -- The table is closed by RLS with no policy. Other test files grant broad table rights to the API roles,
+  -- so this checks behaviour (what those roles can actually see or write), not the grant list.
+  PERFORM public.claim_ai_save_attempt(u7, gen_random_uuid());
+  SET LOCAL ROLE authenticated;
+  BEGIN SELECT count(*) INTO n FROM public.ai_save_attempts; EXCEPTION WHEN insufficient_privilege THEN n := 0; END;
+  BEGIN INSERT INTO public.ai_save_attempts (user_id, attempt_id) VALUES (u7, gen_random_uuid()); ok := true;
+  EXCEPTION WHEN insufficient_privilege OR others THEN ok := false; END;
+  RESET ROLE;
+  PERFORM rep('H3 signed-in users can neither read nor write the table', n = 0 AND NOT ok);
   PERFORM rep('H4 row level security is on',
     (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.ai_save_attempts'::regclass));
   PERFORM rep('H5 the function runs with a fixed search path',
