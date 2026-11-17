@@ -109,3 +109,18 @@ Required behaviour:
 2. Ask the founder whether AI Save now works for an ordinary staging account (section 6). If not, fix that first (it is the unfinished end of Phase 3), not Phase 4.
 3. Read-only audit of the existing deterministic, code-first extraction path (`extractVenuesFromLink` in `src/lib/openai.ts`, `identifySharedVenue` in `src/lib/aiSave.ts`, and `extract-venue-meta`): how a link becomes a candidate name and address, where it is code-driven and where it asks the AI, and what evidence reaches `resolve-place`. Report findings; do not change it.
 4. Write a short Phase 4 plan (candidate source, UI states, tests, cost) and wait for the founder's approval before implementing.
+
+## 12. Live findings from the first real runs (2026-11-17, after the secrets were set)
+
+Section 6 is resolved: the founder set `STAGING_PROVIDER_ACCESS=open`, `STAGING_ANDROID_PROVIDERS_ENABLED=true` and `STAGING_RESOLVE_PLACE_ENABLED=true` on staging, and AI Save now runs for the founder's account. Two reels were tried on the new APK:
+
+1. Ishiyama Japanese Dining (caption gave only "Campsie, NSW"): extraction 200, AI 200, then two `resolve-place` calls that made no Google call (the address is not a full street address, so the verifier stops before searching; correctly not counted). Result: "Google Places could not match this exact venue". Saved unverified (no coordinates).
+2. Sculpture by the Sea, Bondi (address "Bondi to Tamarama coastal walk, Sydney, NSW 2026, Australia", an outdoor listing). Trace (UTC, 12:34): `extract-venue-meta` 200 in 3.8 s (free metadata fetch, not counted) -> allowance claimed at the first paid call -> `ai-proxy` 200 in 8.2 s -> `resolve-place` verify 200 in 3.0 s (reached Google) -> "Retry verification" `resolve-place` 200 in 5.2 s (reached Google) -> `save_shared_venue` 200 (saved unverified, `lat`/`lon` null). The attempt row shows 3 requests; 2 of 20 allowance used. Both verifications answered HTTP 200 with the empty "no match" result, so the "error" the founder saw on retry is the app's no-match wording, not a server failure (the response body is not logged; exact Google candidates are unknown without the diagnostics flag, which is for listed test accounts only). Likely reason, unconfirmed: the strict name rule (`nameKey`) compares "Sculpture by the Sea, Bondi" with Google's own name for the place, and the outdoor path also needs an outdoor place type and an equal locality. Treat this as the first Phase 4 test case.
+
+Quick Share gap (found by reading `src/components/AiSaveDialog.tsx`): the Quick Share and Create Plan buttons exist only in the confirmed view, which shows only when verification found one venue. In the edit view (what an unverified or manual save shows) there is no Quick Share. That is a product decision for the UX session: allow sharing a saved unverified venue (labelled unverified) or require verification.
+
+Timing seen: about 10 to 15 seconds from share to the card, mostly the AI step.
+
+## 13. Suggested split of the remaining work (founder asked 2026-11-17)
+
+Phase 4 (verification logic, candidates, in-app search, confirmation card) and the AI Save / Quick Share UI/UX completion both change `AiSaveDialog.tsx` and `src/lib/aiSave.ts`. Do not run them in parallel on the same branch. Do Phase 4 first, then the UX pass on top of it (or one session that does both in that order). Give the UX session its own branch name, asked from the founder first.
