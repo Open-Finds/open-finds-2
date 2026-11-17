@@ -69,19 +69,19 @@ describe('resolve-place verification', () => {
     ['no coordinates in the result', place({ location: undefined })],
   ])('does not verify when Google returns %s', async (_label, result) => {
     places(result);
-    expect(await (await request(details)).json()).toEqual(EMPTY);
+    expect(await (await request(details)).json()).toMatchObject(EMPTY);
   });
 
   it('treats two same-named results as ambiguous unless the address came from the source', async () => {
     const sameNameElsewhere = place({ id: 'ChIJelsewhere01', formattedAddress: '99 Other Rd, Newtown NSW 2042, Australia' });
     places(place(), sameNameElsewhere);
-    expect(await (await request({ ...details, addressFromSource: false })).json()).toEqual(EMPTY);
+    expect(await (await request({ ...details, addressFromSource: false })).json()).toMatchObject(EMPTY);
     expect(await (await request({ ...details, addressFromSource: true })).json()).toMatchObject({ verified: true, address: '1 Test St, Sydney NSW 2000, Australia' });
   });
 
   it('does not verify when two results match the same name and address', async () => {
     places(place(), place({ id: 'ChIJtwin0000001' }));
-    expect(await (await request(details)).json()).toEqual(EMPTY);
+    expect(await (await request(details)).json()).toMatchObject(EMPTY);
   });
 
   it('verifies when only one of several results has the name', async () => {
@@ -90,7 +90,7 @@ describe('resolve-place verification', () => {
   });
 
   it('never calls Google for an address that is only an area', async () => {
-    expect(await (await request({ ...details, address: 'Bondi Beach NSW 2026' })).json()).toEqual(EMPTY);
+    expect(await (await request({ ...details, address: 'Bondi Beach NSW 2026' })).json()).toMatchObject(EMPTY);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -100,9 +100,9 @@ describe('resolve-place verification', () => {
     places(park);
     expect(await (await request(input)).json()).toMatchObject({ verified: true, type: 'activity', address: 'Royal National Park NSW 2232, Australia' });
     places(place({ displayName: { text: 'Royal National Park' }, formattedAddress: 'Royal National Park NSW 2232, Australia', types: ['cafe'] }));
-    expect(await (await request(input)).json()).toEqual(EMPTY);
+    expect(await (await request(input)).json()).toMatchObject(EMPTY);
     places(park);
-    expect(await (await request({ ...input, outdoor: false })).json()).toEqual(EMPTY);
+    expect(await (await request({ ...input, outdoor: false })).json()).toMatchObject(EMPTY);
   });
 
   it('answers a missing or malformed request with 400, and refuses to guess from a non-Maps link', async () => {
@@ -165,5 +165,65 @@ describe('resolve-place without verification (unchanged behaviour)', () => {
     const body = await (await request({ url: mapsLink })).json();
     expect(body).toEqual({ name: 'Test Cafe', address: '1 Test St, Sydney NSW 2000, Australia', lat: -33.8, lon: 151.2, type: 'food' });
     expect(body).not.toHaveProperty('verified');
+  });
+});
+
+/** Phase 4: outdoor names with a locality, chain branches, candidates and in-app search. */
+describe('resolve-place Phase 4 verification', () => {
+  const park = (over: Record<string, unknown> = {}) => place({
+    displayName: { text: 'Sculpture by the Sea' }, types: ['park', 'tourist_attraction'], primaryType: 'park', ...over,
+  });
+  const sculpture = {
+    verify: true, name: 'Sculpture by the Sea, Bondi', address: 'Bondi to Tamarama coastal walk, Sydney, NSW 2026, Australia',
+    outdoor: true, addressFromSource: true,
+  };
+
+  it('verifies a venue whose name carries its locality, when Google confirms the locality and state', async () => {
+    places(park({ formattedAddress: 'Marine Dr, Bondi Beach NSW 2026, Australia', location: { latitude: -33.89, longitude: 151.27 } }));
+    expect(await (await request(sculpture)).json()).toMatchObject({ verified: true, name: 'Sculpture by the Sea', lat: -33.89 });
+  });
+
+  it('never accepts the same name in another state', async () => {
+    places(park({ formattedAddress: 'Cottesloe WA 6011, Australia', location: { latitude: -31.99, longitude: 115.45 } }));
+    const body = await (await request(sculpture)).json();
+    expect(body).not.toHaveProperty('verified');
+    expect(body).toMatchObject({ reason: 'no_match', candidates: [{ name: 'Sculpture by the Sea', address: 'Cottesloe WA 6011, Australia' }] });
+  });
+
+  it('asks the user to choose when two plausible places match, without saying "verified"', async () => {
+    places(
+      place({ displayName: { text: 'Test Cafe' }, id: 'a' }),
+      place({ displayName: { text: 'Test Cafe' }, id: 'b', location: { latitude: -33.7, longitude: 151.1 } }),
+    );
+    const body = await (await request({ ...details, addressFromSource: false })).json();
+    expect(body).not.toHaveProperty('verified');
+    expect(body.reason).toBe('ambiguous');
+    expect(body.candidates).toHaveLength(2);
+  });
+
+  it('picks the branch with the exact street address and offers the others as candidates only when nothing matches', async () => {
+    places(
+      place({ displayName: { text: 'Gelato Messina' }, formattedAddress: '2/10 George St, Sydney NSW 2000, Australia' }),
+      place({ displayName: { text: 'Gelato Messina' }, id: 'other', formattedAddress: '45 Oxford St, Bondi Junction NSW 2022, Australia' }),
+    );
+    expect(await (await request({ ...details, name: 'Gelato Messina', address: '2/10 George St, Sydney NSW 2000' })).json())
+      .toMatchObject({ verified: true, address: '2/10 George St, Sydney NSW 2000, Australia' });
+  });
+
+  it('answers an in-app search with up to five Google places and makes no verification decision', async () => {
+    places(park({ formattedAddress: 'Marine Dr, Bondi Beach NSW 2026, Australia' }), park({ id: 'two' }));
+    const body = await (await request({ search: true, query: 'Sculpture by the Sea Bondi' })).json();
+    expect(body).toEqual({ candidates: expect.any(Array) });
+    expect(body.candidates).toHaveLength(2);
+    expect(body).not.toHaveProperty('verified');
+    const sent = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(sent).toMatchObject({ textQuery: 'Sculpture by the Sea Bondi', pageSize: 5 });
+  });
+
+  it('refuses an empty search and fails closed when the limit cannot be checked', async () => {
+    expect((await request({ search: true, query: '  ' })).status).toBe(400);
+    mocks.limit.mockResolvedValue({ available: false, allowed: false, remaining: 0, retryAfter: 0 });
+    expect((await request({ search: true, query: 'Cafe' })).status).toBe(503);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

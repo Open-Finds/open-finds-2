@@ -340,7 +340,55 @@ type VerifyDiagnostics = {
  * street address (or a named outdoor locality) must match exactly one result.
  * More than one match, or none, is "no match".
  */
-async function verifyPlace(input: VerifyInput, apiKey: string, diagnostics?: VerifyDiagnostics): Promise<(PlaceResult & { verified: true }) | null> {
+/** A place offered to the user to choose from (never saved by itself). */
+export type Candidate = { name: string; address: string; lat: number; lon: number; type: VenueType | null };
+/** Why a name+address check did not verify, and the Google places the user can choose from instead. */
+export type VerifyOutcome = { reason?: "ambiguous" | "no_match"; candidates?: Candidate[] };
+
+/** "Sculpture by the Sea, Bondi" is the venue "Sculpture by the Sea" in the locality "Bondi". */
+function splitLocality(name: string): { base: string; locality: string | null } {
+  const comma = name.indexOf(",");
+  if (comma < 0) return { base: name, locality: null };
+  const base = name.slice(0, comma).trim();
+  const locality = name.slice(comma + 1).trim();
+  return base && locality ? { base, locality } : { base: name, locality: null };
+}
+
+/** The words of `locality` appear in `address` as whole words, in order, ignoring case and punctuation. */
+function hasPlaceWords(address: string, locality: string): boolean {
+  const padded = (value: string) => ` ${addressKey(value)} `;
+  return padded(address).includes(padded(locality));
+}
+
+const AU_STATE = /\b(ACT|NSW|NT|QLD|SA|TAS|VIC|WA)\b/i;
+const AU_POSTCODE = /\b(\d{4})\b/;
+/** Two addresses in different states, or with different postcodes, are different places. */
+function stateAndPostcodeAgree(source: string, found: string): boolean {
+  const sourceState = source.match(AU_STATE)?.[1].toUpperCase();
+  const foundState = found.match(AU_STATE)?.[1].toUpperCase();
+  if (sourceState && foundState && sourceState !== foundState) return false;
+  const sourcePostcode = source.match(AU_POSTCODE)?.[1];
+  const foundPostcode = found.match(AU_POSTCODE)?.[1];
+  return !(sourcePostcode && foundPostcode && sourcePostcode !== foundPostcode);
+}
+
+function validCoords(place: Place): place is Place & { name: string; address: string; lat: number; lon: number } {
+  return !!place.name && !!place.address && place.lat != null && place.lon != null && Number.isFinite(place.lat) &&
+    Number.isFinite(place.lon) && Math.abs(place.lat) <= 90 && Math.abs(place.lon) <= 180;
+}
+
+/** Up to `limit` usable Google places, in Google's order, for the user to choose from. */
+function toCandidates(places: Place[], limit = 3): Candidate[] {
+  return places.filter(validCoords).slice(0, limit)
+    .map((place) => ({ name: place.name, address: place.address, lat: place.lat, lon: place.lon, type: place.type }));
+}
+
+async function verifyPlace(
+  input: VerifyInput,
+  apiKey: string,
+  diagnostics?: VerifyDiagnostics,
+  outcome?: VerifyOutcome,
+): Promise<(PlaceResult & { verified: true }) | null> {
   let { name } = input;
   const { address } = input;
   let pin: Coord | null = null;
@@ -368,17 +416,27 @@ async function verifyPlace(input: VerifyInput, apiKey: string, diagnostics?: Ver
   const query = address ? `${name}, ${address}` : name;
   if (diagnostics) diagnostics.query = query;
   const places = await searchPlaces(query, pin, apiKey, 5);
+  // "Sculpture by the Sea, Bondi": the venue's own name, with the locality after the comma.
+  const { base, locality } = splitLocality(name);
+  const baseName = locality ? nameKey(base) : null;
+  const nameFits = (place: Place): boolean => !!place.name && (nameKey(place.name) === expectedName ||
+    (baseName !== null && nameKey(place.name) === baseName));
   const ambiguousName = !placeId && !pin && !input.addressFromSource &&
-    places.filter((place) => place.name && nameKey(place.name) === expectedName).length > 1;
+    places.filter((place) => nameFits(place)).length > 1;
   const compare = (place: Place): string => {
-    if (!place.name || !place.address || place.lat == null || place.lon == null || !Number.isFinite(place.lat) ||
-      !Number.isFinite(place.lon) || Math.abs(place.lat) > 90 || Math.abs(place.lon) > 180) return "missing_or_invalid_place_data";
+    if (!validCoords(place)) return "missing_or_invalid_place_data";
     if (placeId) return place.id === placeId ? "match" : "place_id_mismatch";
-    if (nameKey(place.name) !== expectedName) return "name_mismatch";
+    // The locality part of the name must really be in Google's address, or the short name is not enough.
+    const localityFits = nameKey(place.name ?? "") === expectedName ||
+      (!!locality && hasPlaceWords(place.address, locality));
+    if (!nameFits(place) || !localityFits) return "name_mismatch";
     if (pin) return kmBetween(pin, { lat: place.lat, lng: place.lon }) <= 0.1 ? "match" : "pin_mismatch";
     if (!address) return "missing_source_address";
     if (fullStreet) return matchesStreetAddress(address, place.address, input.addressFromSource === true) ? "match" : "street_address_mismatch";
     if (!outdoorArea || !place.outdoor) return "not_an_outdoor_listing";
+    // Outdoor places have no street number, so the state and postcode must agree and the locality must be in the address.
+    if (!stateAndPostcodeAgree(address, place.address)) return "outdoor_locality_mismatch";
+    if (locality) return hasPlaceWords(place.address, locality) ? "match" : "outdoor_locality_mismatch";
     const expected = addressKey(address);
     const actual = addressKey(place.address);
     const sameLocality = expected === actual || (input.addressFromSource &&
@@ -395,6 +453,16 @@ async function verifyPlace(input: VerifyInput, apiKey: string, diagnostics?: Ver
     diagnostics.candidates = evaluated.map(({ place, outcome }) => ({
       id: place.id, name: place.name, address: place.address, outcome,
     }));
+  }
+  if (outcome && !placeId && !pin) {
+    // Candidates come from this same search: no second paid request.
+    if (ambiguousName || matches.length > 1) {
+      outcome.reason = "ambiguous";
+      outcome.candidates = toCandidates(matches.length > 1 ? matches : places.filter(nameFits));
+    } else if (matches.length === 0) {
+      outcome.reason = "no_match";
+      outcome.candidates = toCandidates(places.filter(nameFits));
+    }
   }
   if (ambiguousName || matches.length !== 1) return null;
   const [place] = matches;
@@ -528,12 +596,13 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
     const auth = await requireUser(req);
     if (!auth.ok) return json(req, { error: auth.error }, auth.status);
 
-    const { url, verify, name, address, outdoor, addressFromSource, verificationDiagnostics } = await req.json();
-    // Verification gates what gets saved, so if the limit cannot be checked it fails closed.
+    const { url, verify, name, address, outdoor, addressFromSource, verificationDiagnostics, search, query } = await req.json();
+    // Verification and search gate what gets saved, so if the limit cannot be checked they fail closed.
+    const gated = verify === true || search === true;
     const limit = await consumeRateLimit(
-      "resolve-place", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS, verify === true ? { failClosed: true } : undefined,
+      "resolve-place", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS, gated ? { failClosed: true } : undefined,
     );
-    if (!limit.available && verify === true) return json(req, { error: "Place verification is temporarily unavailable" }, 503);
+    if (!limit.available && gated) return json(req, { error: "Place verification is temporarily unavailable" }, 503);
     if (!limit.allowed) {
       return json(
         req,
@@ -546,26 +615,42 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
     // verify: true answers with `verified: true` and the Google place only when
     // exactly one place matches. Anything else is the empty result: a no-match,
     // not an error. Failures to run the check are real errors (non-200).
+    // search: one Text Search for what the user typed, for "Change location". Google places only; nothing is saved here.
+    if (search === true) {
+      if (typeof query !== "string" || !query.trim() || query.length > 200) {
+        return json(req, { error: "A place search of 1–200 characters is required" }, 400);
+      }
+      const places = await searchPlaces(query.trim(), null, await resolverMapsKey(), 5);
+      return json(req, { candidates: toCandidates(places, 5) }, 200, { "Cache-Control": "no-store" });
+    }
+
     if (verify === true) {
       // Candidate-by-candidate outcomes, for listed staging test accounts only.
       const canDiagnose = verificationDiagnostics === true && isStagingProviderTarget() &&
         (Deno.env.get("STAGING_PROVIDER_USERS") ?? "").split(",").some((id) => id.trim() === auth.user.id);
       const diagnostics: VerifyDiagnostics | undefined = canDiagnose ? { outcome: "insufficient_source_evidence" } : undefined;
-      const verificationResponse = (place: PlaceResult | null) => diagnostics
-        ? json(req, { ...(place ?? EMPTY), verificationDiagnostics: diagnostics }, 200, { "Cache-Control": "no-store" })
-        : json(req, place ?? EMPTY);
+      // A non-match carries its reason and Google's candidates only when there are some; otherwise it is the plain empty result.
+      const verificationResponse = (place: PlaceResult | null, outcome: VerifyOutcome = {}) => {
+        const choices = outcome.candidates?.length ? { reason: outcome.reason, candidates: outcome.candidates } : {};
+        const body = place ?? { ...EMPTY, ...choices };
+        return diagnostics
+          ? json(req, { ...body, verificationDiagnostics: diagnostics }, 200, { "Cache-Control": "no-store" })
+          : json(req, body);
+      };
       if (typeof url === "string" && url.length <= 2048 && isMapsUrl(url)) {
         return verificationResponse(await verifyPlace({ url }, await resolverMapsKey(), diagnostics));
       }
       if (typeof name !== "string" || typeof address !== "string" || !name.trim() || name.length > 200 || !address.trim() || address.length > 500) {
         return json(req, { error: "A Maps link or venue name and address are required" }, 400);
       }
-      return verificationResponse(await verifyPlace({
+      const outcome: VerifyOutcome = {};
+      const place = await verifyPlace({
         name: name.trim(),
         address: address.trim(),
         outdoor: outdoor === true,
         addressFromSource: addressFromSource === true,
-      }, await resolverMapsKey(), diagnostics));
+      }, await resolverMapsKey(), diagnostics, outcome);
+      return verificationResponse(place, outcome);
     }
 
     if (typeof url !== "string" || !url.trim()) {
