@@ -1,4 +1,6 @@
 -- REFERENCE ONLY. DO NOT APPLY. NOT A MIGRATION.
+-- Superseded 2026-11-18 by supabase/staging-only/staging_provider_ledger.sql, which has the
+-- complete table definitions (this file leaves out constraints and foreign keys).
 --
 -- The spending ledger behind the staging provider controls, as it exists on the
 -- staging project crpkzysdtnoomzimibhe. None of it is in supabase/migrations: it

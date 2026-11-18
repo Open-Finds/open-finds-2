@@ -36,10 +36,10 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
 - `geocode` v20 and `discover-venues` v19 were not compared (not part of AI Save).
 - Finding for the founder (not a database issue): `venue-photo` is deployed and the app calls it (`src/lib/apiKeys.ts`). It uses plain `fetch` to Google Places, so it bypasses the staging provider controls and the AI Save allowance. Its only limit is 200 calls per user per hour. This conflicts with the decision "staging APK ships without a Google photo".
 
-### S1-03 Record staging-only objects as migrations. NOT STARTED
-- Scope: migration files for the `staging_provider_*` tables and function, and the reminders migration name; no change to staging.
-- Acceptance: a fresh database built from migrations matches staging for these objects.
-- Risk: low. Depends on: none.
+### S1-03 Record staging-only objects in Git. APPROVED (no change to staging or production)
+- Decision: the ledger is a staging testing control, so it is NOT added to `supabase/migrations` (that chain goes to production). It is recorded as an idempotent script in `supabase/staging-only/staging_provider_ledger.sql`, with a README that also records the reminders hazard (the repo reminders migration schedules a job that calls the production URL; staging ran a no-schedule variant under the same version).
+- Evidence 2026-11-18: live staging functions match the saved definitions by MD5 (781050db..., 052b1264...); live tables carry constraints and foreign keys the old reference file omitted, now captured. The script was validated on a throwaway real PostgreSQL 18.6 after the full migration chain: applies twice cleanly; function checksums equal staging's; anon and authenticated have no access, service_role can run the control function only; and 19 behaviour checks pass (admit, campaign busy, counted call, refused call kind, finish, duplicate refusal). Staging itself was only read.
+- Not done: the reminders migration name difference is documented, not changed (history on production must not be rewritten).
 
 ### S1-04 Close anonymous access to sales and billing functions. APPROVED on staging (production not applied)
 - Applied to staging 2026-11-18 with founder approval (version 20261118114331, name `close_sales_billing_helpers`). Staging check afterwards: `anon` and `authenticated` can no longer execute either function; `service_role` and the owner still can. The guarded callers (`admin_team`, `my_sales_summary`, `admin_partner_overview`) are still SECURITY DEFINER and callable by signed-in users, so they keep working. Rollback is in the migration comments.
@@ -57,7 +57,9 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
 - Scope: read every function callable by anon or authenticated, fix real gaps, fix the unsafe view and the 3 search paths.
 - Risk: medium. Depends on: S1-04.
 
-### S1-06 Duplicate protection for saved venues. IN PROGRESS (built and tested locally; not applied to staging)
+### S1-06 Duplicate protection for saved venues. APPROVED on staging (production not applied)
+- Applied to staging 2026-11-18 with founder approval (migration `saved_venue_duplicate_rule`). Staging checks afterwards: still 33 rows; exactly 1 flagged (the later row of the existing pair; the earlier row, with its notes and visited mark, is unflagged); the unique index and trigger exist; `anon` cannot call `save_shared_venue`, `authenticated` can; a repeat insert and an insert that tries to set the flag were both refused inside a rolled-back test (nothing kept, row count unchanged).
+- Not done: production (needs a read-only duplicate count and its own approval). The record below describes the local build.
 - Founder decision 2026-11-18: keep the existing duplicate rows (no deletion).
 - Built: migration `20261118130000_saved_venue_duplicate_rule.sql` (one saved venue per person per name and address, capitals and edge spaces ignored; later rows of any existing duplicate group are flagged `legacy_duplicate` and exempt, so nothing is deleted and it cannot fail on unexpected production data; a trigger stops people setting or clearing the flag; `save_shared_venue` now matches on name and address instead of the link, so a second venue from one link is saved). App side: `insertSavedVenue` returns the existing venue on a repeat save, `updateSavedVenue` explains a clash in plain words.
 - Tests: `supabase/tests/18_saved_venue_duplicates.sql` (13 checks) and `src/lib/savedVenues.test.ts` (5 tests).
