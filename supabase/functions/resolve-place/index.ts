@@ -343,7 +343,7 @@ type VerifyDiagnostics = {
 /** A place offered to the user to choose from (never saved by itself). */
 export type Candidate = { name: string; address: string; lat: number; lon: number; type: VenueType | null };
 /** Why a name+address check did not verify, and the Google places the user can choose from instead. */
-export type VerifyOutcome = { reason?: "ambiguous" | "no_match"; candidates?: Candidate[] };
+export type VerifyOutcome = { reason?: "ambiguous" | "no_match"; candidates?: Candidate[]; weak?: boolean };
 
 /** "Sculpture by the Sea, Bondi" is the venue "Sculpture by the Sea" in the locality "Bondi". */
 function splitLocality(name: string): { base: string; locality: string | null } {
@@ -358,6 +358,13 @@ function splitLocality(name: string): { base: string; locality: string | null } 
 function hasPlaceWords(address: string, locality: string): boolean {
   const padded = (value: string) => ` ${addressKey(value)} `;
   return padded(address).includes(padded(locality));
+}
+
+/** One name inside the other as whole words: "kiddo coffee" is in "kiddo coffee redfern". For choices only, never for verifying. */
+function wordsContain(a: string, b: string): boolean {
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  return shorter.length >= 3 && ` ${longer} `.includes(` ${shorter} `);
 }
 
 const AU_STATE = /\b(ACT|NSW|NT|QLD|SA|TAS|VIC|WA)\b/i;
@@ -455,13 +462,27 @@ async function verifyPlace(
     }));
   }
   if (outcome && !placeId && !pin) {
-    // Candidates come from this same search: no second paid request.
+    // Choices come from this same search: no second paid request. The user picks one; nothing is saved from here.
+    // Related = the name fits, or one name sits inside the other (a branch: "Kiddo Coffee Redfern").
+    const related = (place: Place): boolean => nameFits(place) || (!!place.name && (
+      wordsContain(nameKey(place.name), expectedName) || (baseName !== null && wordsContain(nameKey(place.name), baseName))));
+    // Best first: the exact name, then the exact street address, then Google's own order.
+    const rankOf = (place: Place): number =>
+      (place.name && (nameKey(place.name) === expectedName || (baseName !== null && nameKey(place.name) === baseName)) ? 0 : 2) +
+      (fullStreet && !!address && !!place.address && matchesStreetAddress(address, place.address, input.addressFromSource === true) ? 0 : 1);
+    const ranked = (list: Place[]) => [...list].sort((a, b) => rankOf(a) - rankOf(b));
     if (ambiguousName || matches.length > 1) {
       outcome.reason = "ambiguous";
-      outcome.candidates = toCandidates(matches.length > 1 ? matches : places.filter(nameFits));
+      outcome.candidates = toCandidates(ranked(matches.length > 1 ? matches : places.filter(nameFits)));
     } else if (matches.length === 0) {
       outcome.reason = "no_match";
-      outcome.candidates = toCandidates(places.filter(nameFits));
+      const relatedPlaces = places.filter(related);
+      if (relatedPlaces.length) outcome.candidates = toCandidates(ranked(relatedPlaces));
+      else {
+        // Nothing resembles the name: offer Google's closest results, labelled as weak, so the user can search or pick.
+        outcome.candidates = toCandidates(places);
+        outcome.weak = true;
+      }
     }
   }
   if (ambiguousName || matches.length !== 1) return null;
@@ -631,7 +652,8 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
       const diagnostics: VerifyDiagnostics | undefined = canDiagnose ? { outcome: "insufficient_source_evidence" } : undefined;
       // A non-match carries its reason and Google's candidates only when there are some; otherwise it is the plain empty result.
       const verificationResponse = (place: PlaceResult | null, outcome: VerifyOutcome = {}) => {
-        const choices = outcome.candidates?.length ? { reason: outcome.reason, candidates: outcome.candidates } : {};
+        const choices = outcome.candidates?.length
+          ? { reason: outcome.reason, candidates: outcome.candidates, ...(outcome.weak ? { weak: true } : {}) } : {};
         const body = place ?? { ...EMPTY, ...choices };
         return diagnostics
           ? json(req, { ...body, verificationDiagnostics: diagnostics }, 200, { "Cache-Control": "no-store" })

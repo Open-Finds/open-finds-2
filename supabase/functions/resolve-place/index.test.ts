@@ -150,7 +150,8 @@ describe('resolve-place verification', () => {
   it('only returns verification diagnostics to listed staging test accounts', async () => {
     places(place({ displayName: { text: 'Other Place' } }));
     const body = await (await request({ ...details, verificationDiagnostics: true })).json();
-    expect(body).toEqual(EMPTY);
+    expect(body).toMatchObject(EMPTY);
+    expect(body).not.toHaveProperty('verificationDiagnostics');
   });
 });
 
@@ -225,5 +226,48 @@ describe('resolve-place Phase 4 verification', () => {
     mocks.limit.mockResolvedValue({ available: false, allowed: false, remaining: 0, retryAfter: 0 });
     expect((await request({ search: true, query: 'Cafe' })).status).toBe(503);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+/** Phase 4 "A": choices for the Confirm the venue sheet. */
+describe('resolve-place choices for the user', () => {
+  const kiddo = { verify: true, name: 'Kiddo Coffee', address: '84-86 Mary Street, Surry Hills NSW 2010', addressFromSource: true };
+  const branch = (text: string, address: string, id: string) => place({ id, displayName: { text }, formattedAddress: address });
+
+  it('still verifies the exact venue and branch without asking the user', async () => {
+    places(branch('Kiddo Coffee', '84-86 Mary St, Surry Hills NSW 2010, Australia', 'a'),
+      branch('Kiddo Coffee Redfern', '1 Lawson St, Redfern NSW 2016, Australia', 'b'));
+    expect(await (await request(kiddo)).json()).toMatchObject({ verified: true, address: '84-86 Mary St, Surry Hills NSW 2010, Australia' });
+  });
+
+  it('offers branches whose names add a suburb, best first, when the exact one is not found', async () => {
+    places(branch('Kiddo Coffee Potts Point', '15A Orwell St, Potts Point NSW 2011, Australia', 'c'),
+      branch('Kiddo Coffee Redfern', '1 Lawson St, Redfern NSW 2016, Australia', 'b'),
+      branch('Unrelated Hardware', '5 Other Rd, Newtown NSW 2042, Australia', 'z'));
+    const body = await (await request(kiddo)).json();
+    expect(body).not.toHaveProperty('verified');
+    expect(body).toMatchObject({ reason: 'no_match' });
+    expect(body).not.toHaveProperty('weak');
+    expect(body.candidates.map((c: { name: string }) => c.name)).toEqual(['Kiddo Coffee Potts Point', 'Kiddo Coffee Redfern']);
+  });
+
+  it('puts the exact name before suffixed branches in the list', async () => {
+    places(branch('Kiddo Coffee Redfern', '1 Lawson St, Redfern NSW 2016, Australia', 'b'),
+      branch('Kiddo Coffee', '99 Other St, Surry Hills NSW 2010, Australia', 'a'));
+    const body = await (await request(kiddo)).json();
+    expect(body.candidates[0].name).toBe('Kiddo Coffee');
+  });
+
+  it('offers at most three choices', async () => {
+    places(...['a', 'b', 'c', 'd', 'e'].map((id) => branch('Kiddo Coffee ' + id, `${id} Some St, Sydney NSW 2000, Australia`, id)));
+    expect((await (await request(kiddo)).json()).candidates).toHaveLength(3);
+  });
+
+  it('labels Google\'s closest results as weak when nothing resembles the name, and still never verifies them', async () => {
+    places(branch('Totally Different Place', '1 Elsewhere St, Sydney NSW 2000, Australia', 'z'));
+    const body = await (await request(kiddo)).json();
+    expect(body).not.toHaveProperty('verified');
+    expect(body).toMatchObject({ reason: 'no_match', weak: true });
+    expect(body.candidates).toHaveLength(1);
   });
 });
