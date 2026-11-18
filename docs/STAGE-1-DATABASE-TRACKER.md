@@ -28,6 +28,10 @@ Open items for the founder (none block Stage 1 on staging):
 5. The AI could not read a venue from one TikTok link (provider issue, separate from the database).
 6. Draft PR #3 stays unmerged until the founder approves.
 
+## Production: Step A applied (2026-11-19)
+
+With the founder's approval the two security migrations were applied to production (`20261118134143 close_sales_billing_helpers`, `20261118134208 restrict_signed_in_functions`). The sales/billing exposure on production is closed. Verified: counts unchanged (520 saved venues, 175 plans, 142 unowned plans, 31 tables); signed-out-callable functions 45 to 20; the 25 functions closed to signed-out callers, the 23 signed-in ones still work; guest RSVP and share-link functions still open; rating view and search paths fixed; advisors' ERROR and 3 search-path warnings gone; a rolled-back behaviour check passed; no failed requests or database errors in the logs afterwards. No backup was possible (Supabase free plan has none); the step changed no data and has a tested rollback. Details: `docs/PRODUCTION-RELEASE-PLAN.md`, Step A. The founder checked the live website (Admin, Sales, an invite link and guest RSVP): all good, and the logs agree. Still open: Steps B to E.
+
 ## Production read-only findings (2026-11-19)
 
 Founder approved a read-only check of production (`wfrlkifdlgmlbffumglt`). Only selects, the migration list, the function list and the security advisors were used. No write, no migration, no deployment.
