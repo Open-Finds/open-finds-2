@@ -53,7 +53,11 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
 - Verification: SQL test on real Postgres; then staging check after approval.
 - Risk: medium. Needs founder approval to apply to staging. Production is a separate approval.
 
-### S1-05 Review the other callable functions and fix advisor warnings. IN PROGRESS (built and tested locally; not applied to staging)
+### S1-05 Review the other callable functions and fix advisor warnings. APPROVED on staging (production not applied)
+- Applied to staging 2026-11-18 with founder approval (migration `restrict_signed_in_functions`). Staging checks afterwards: 0 of the 23 listed functions open to signed-out callers, 0 blocked for signed-in users, none of the 9 intentionally public functions closed, view runs with `security_invoker=true`, 3 functions have a fixed search path. Security advisors re-run: the ERROR (security-definer view) and the 3 search-path warnings are gone; signed-out-callable security-definer functions fell from 51 to 26.
+- Remaining advisor items (not defects, not changed): 9 "RLS enabled, no policy" (by design); remaining security-definer warnings are the intentionally public functions, functions that return nothing for signed-out callers, and trigger functions (they cannot be called as RPC; optional later tidy: revoke their EXECUTE from API roles); "leaked password protection disabled" is a Supabase Auth dashboard setting for the founder to decide, not changed.
+- Not done: production.
+- Earlier record of the local build follows.
 - Review result (staging, 2026-11-18): 39 non-trigger functions were callable by signed-out users. No further data leak found beyond S1-04: every function that returns private data already checks `auth.uid()` (empty result or exception for a signed-out caller). Intentionally public and left open: guest RSVP (`submit_plan_rsvp`, `submit_stop_rsvp`, `set_rsvp_decline_reason`), share links (`get_shared_plan`, `get_shared_trip`, `read_venue_recommendation`), and the device-id plan helpers (`app_is_owner`, `app_request_device_id`: row rules for plans and trips apply to anon, so these must stay open). Design note for the founder, not a defect: anyone holding a plan or trip link can read its stops and guest RSVP names, and anyone holding an RSVP id can set a decline reason once; ids are random UUIDs.
 - Change: migration `20261118140000_restrict_signed_in_functions.sql` removes anon EXECUTE from 23 functions that already refuse signed-out callers (behaviour-neutral); makes `venue_rating_summary` run with the caller's rights (its table is already publicly readable, so numbers are unchanged; clears the one ERROR advisor); fixes the search path of 3 functions. Functions whose quiet empty answer the app relies on were deliberately not touched.
 - Tests: `supabase/tests/19_function_access.sql` (6 checks; 3 fail without the migration). Evidence (real PostgreSQL 18.6, scratch install, 2026-11-18): whole suite passes with the migration, including every earlier signed-out and device-id flow.
@@ -72,8 +76,10 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
 - Remaining: founder approval to apply to staging, then check the staging pair is flagged (earliest unflagged, later flagged) and that a repeat insert is refused.
 - Risk: medium. Rollback is in the migration header.
 
-### S1-07 Decide on `preserve_claimed_plan_ownership`. NOT STARTED
-- Founder decision: apply to staging or drop. Risk: low.
+### S1-07 Bring in `preserve_claimed_plan_ownership`. IN PROGRESS (in the branch and tested locally; not applied to staging)
+- Founder decision 2026-11-18: bring it in. Copied unchanged from `origin/codex/phase-1-staging-db`: migration `20261114120000_preserve_claimed_plan_ownership.sql` (a plan or trip owner cannot be changed once set; the normal sign-in claim, which fills an empty owner, is unaffected) and its test, renumbered to `supabase/tests/20_claimed_plan_ownership.sql` because 19 was taken.
+- Evidence (real PostgreSQL 18.6, scratch install, 2026-11-18): without the migration the test fails ("Plan ownership must remain claimed"); with it the whole suite passes, 277 assertions, 0 fail.
+- Remaining: founder approval to apply to staging, then confirm the trigger exists and a claim still works. Risk: low; rollback `DROP TRIGGER preserve_claimed_plan_ownership ON plans; DROP TRIGGER preserve_claimed_trip_ownership ON trips; DROP FUNCTION preserve_claimed_plan_ownership();`.
 
 ### S1-08 Run the full database tests on real Postgres 17 and CI. NOT STARTED
 - Blocked on tooling (no Docker). Option: run the main CI workflow on this branch (needs a push, which needs approval).
