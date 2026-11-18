@@ -114,7 +114,7 @@ describe('Shared venue actions', () => {
 
   it('says Google Places found no exact match only after it was actually asked', async () => {
     await start({ candidates: [candidate], issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('Google Places could not confirm this exact venue');
+    expect(screen.getByRole('alert')).toHaveTextContent('Google Places could not match this exact venue');
     expect(screen.getByRole('button', { name: 'Verify details' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save without verification' })).toBeEnabled();
   });
@@ -131,27 +131,69 @@ describe('Shared venue actions', () => {
   });
 });
 
-describe('Google place choices', () => {
+describe('Confirm the venue choices', () => {
   beforeEach(() => vi.resetAllMocks());
-  const chosen = { ...venue, name: 'Sculpture by the Sea', address: 'Marine Dr, Bondi Beach NSW 2026, Australia', lat: -33.89, lon: 151.27, order: 1, tags: [] };
+  const place = (over: Record<string, unknown> = {}) => ({ ...venue, name: 'Kiddo Coffee', address: '84-86 Mary St, Surry Hills NSW 2010', lat: -33.88, lon: 151.21, order: 1, tags: [], ...over });
+  const choices = [place(), place({ name: 'Kiddo Coffee Redfern', address: '1 Lawson St, Redfern NSW 2016', lat: -33.89, lon: 151.2, order: 2 })];
+  const noMatch = { stage: 'verify' as const, retryable: false, reason: 'no_match' as const };
 
-  it('saves a chosen Google place with its coordinates, and drops them once the text is edited by hand', async () => {
-    mocks.saveSharedVenue.mockResolvedValue(saved);
-    await start({ candidates: [chosen], issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('could not confirm this exact venue');
-    fireEvent.click(screen.getByRole('button', { name: /Sculpture by the Sea/ }));
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save this place' })));
-    expect(mocks.saveSharedVenue).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: 'Sculpture by the Sea', lat: -33.89, lon: 151.27 }), link,
-    );
+  it('shows the venue choices instead of an error, with the best match selected', async () => {
+    await start({ candidates: choices, choices, issue: noMatch });
+    expect(screen.getByText('Confirm the venue')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Kiddo Coffee\s*84-86 Mary St/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Kiddo Coffee Redfern\s*1 Lawson St/ })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Confirm & Save' })).toBeEnabled();
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
   });
 
-  it('never keeps coordinates after the venue text is changed', async () => {
+  it('saves only the chosen place, with its coordinates, after an explicit Confirm & Save', async () => {
     mocks.saveSharedVenue.mockResolvedValue(saved);
-    await start({ candidates: [chosen], issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
-    fireEvent.click(screen.getByRole('button', { name: /Sculpture by the Sea/ }));
-    fireEvent.change(screen.getByLabelText('Venue name'), { target: { value: 'Sculpture by the Sea (edited)' } });
+    await start({ candidates: choices, choices, issue: noMatch });
+    fireEvent.click(screen.getByRole('radio', { name: /Kiddo Coffee Redfern/ }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm & Save' })));
+    expect(mocks.saveSharedVenue).toHaveBeenCalledOnce();
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Kiddo Coffee Redfern', lat: -33.89, lon: 151.2 });
+    expect(screen.getByRole('button', { name: 'Quick Share' })).toBeEnabled();
+  });
+
+  it('preselects nothing when the choices are only the closest results, and says so', async () => {
+    await start({ candidates: choices, choices, issue: { ...noMatch, weak: true } });
+    expect(screen.getByText(/closest Google results/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm & Save' })).toBeDisabled();
+  });
+
+  it('None of these match opens the details form with the search box, and unverified saving still works without coordinates', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await start({ candidates: choices, choices, issue: noMatch });
+    fireEvent.click(screen.getByRole('button', { name: 'None of these match' }));
+    expect(screen.getByLabelText(/search Google Places/)).toBeInTheDocument();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
-    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Sculpture by the Sea (edited)', lat: null, lon: null });
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ lat: null, lon: null });
+  });
+
+  it('never keeps coordinates after the venue text is changed by hand', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await start({ candidates: choices, choices, issue: noMatch });
+    fireEvent.click(screen.getByRole('button', { name: 'None of these match' }));
+    fireEvent.click(screen.getByRole('button', { name: /Kiddo Coffee Redfern/ }));
+    fireEvent.change(screen.getByLabelText('Venue name'), { target: { value: 'Kiddo Coffee (edited)' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Kiddo Coffee (edited)', lat: null, lon: null });
+  });
+
+  it('never shows what the AI read as a Google choice when Google found nothing', async () => {
+    await start({ candidates: [], issue: { stage: 'identify', retryable: true } });
+    expect(screen.getByLabelText(/search Google Places/)).toBeInTheDocument();
+  });
+});
+
+describe('No Google choices', () => {
+  beforeEach(() => vi.resetAllMocks());
+  it('does not present the AI-read venue as a Google choice when Google found nothing', async () => {
+    await start({ candidates: [{ ...candidate, lat: 5, lon: 6 }], issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
+    expect(screen.queryByText('Confirm the venue')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save without verification' })).toBeEnabled();
   });
 });

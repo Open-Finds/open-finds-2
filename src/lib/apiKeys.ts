@@ -288,7 +288,13 @@ export type VerifiedPlace = { name: string; address: string; lat: number; lon: n
  * Otherwise `reason` says whether several places fit ('ambiguous') or none did
  * ('no_match'), and `candidates` are the Google places the user can choose from.
  */
-export type VerifyResult = { match: VerifiedPlace | null; reason?: 'ambiguous' | 'no_match'; candidates: GooglePlaceChoice[] };
+export type VerifyResult = {
+  match: VerifiedPlace | null;
+  reason?: 'ambiguous' | 'no_match';
+  candidates: GooglePlaceChoice[];
+  /** The choices are only Google's closest results; nothing resembles the venue name. */
+  weak?: boolean;
+};
 
 function validChoice(value: unknown): value is GooglePlaceChoice {
   const c = value as Partial<GooglePlaceChoice> | null;
@@ -319,7 +325,7 @@ export async function verifyVenuePlaceDetailed(
   if (data?.verified !== true || !data.name || !data.address ||
     !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) {
     const reason = data?.reason === 'ambiguous' ? 'ambiguous' : candidates.length ? 'no_match' : undefined;
-    return { match: null, reason, candidates };
+    return { match: null, reason, candidates, ...(data?.weak === true && candidates.length ? { weak: true } : {}) };
   }
   return { match: { ...data, address: tidyAddress(data.address) }, candidates: [] };
 }

@@ -8,6 +8,8 @@ import { UserFacingError } from '../lib/openai';
 import { ProviderUnavailableError, waitText } from '../lib/providerErrors';
 import { searchGooglePlaces } from '../lib/apiKeys';
 import { fallbackImage } from '../lib/publicRecommendation.js';
+import { typeWithIcon } from '../lib/partners';
+import { cn } from '../lib/utils';
 
 /** What the user sees when AI Save could not run. Manual entry and saving stay available in every case. */
 const serviceProblem = {
@@ -45,6 +47,12 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   const [position, setPosition] = useState<{ lat: number; lon: number }>();
   const [placeQuery, setPlaceQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  /** The user chose "None of these match": show the details form and the search box instead of the choices. */
+  const [manual, setManual] = useState(false);
+  /** Which Google place is selected in the Confirm the venue list. */
+  const [choice, setChoice] = useState<number>();
+  /** Google places for the Confirm the venue list. Never what the AI read. */
+  const [choices, setChoices] = useState<ExtractedVenueItem[]>([]);
   const [sharing, setSharing] = useState(false);
   const [message, setMessage] = useState("Let's check this out! 🤩");
   const [shareUrl, setShareUrl] = useState('');
@@ -73,6 +81,14 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
       setType(candidate?.type ?? 'food');
       setEditing(!result.venue);
       setIssue(result.issue);
+      setManual(false);
+      // Best match first. Preselect it unless the choices are only Google's closest results.
+      setChoices(result.choices ?? []);
+      const choosable = (result.choices?.length ?? 0) > 0 && (result.issue?.reason === 'ambiguous' || result.issue?.reason === 'no_match');
+      setChoice(choosable && !result.issue?.weak ? 0 : undefined);
+      // A search box that starts with what we know: the name we read, else the creator's handle as words.
+      const handle = progress.current.identification?.metadata?.handle ?? '';
+      setPlaceQuery(progress.current.candidates?.[0]?.name || handle.replace(/[._]+/g, ' ').trim());
       if (!result.issue) return;
       const { stage, cause, retryable, reason, retryAfterSeconds } = result.issue;
       // A service problem is never worded as a verdict on the venue.
@@ -81,10 +97,9 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         : "You've reached the testing limit. Try again later.");
       else if (reason && reason in serviceProblem) setError(serviceProblem[reason as keyof typeof serviceProblem]);
       else if (reason === 'needs_review') setError('We found this from the link but could not confirm it automatically. Check the details, then tap Verify details.');
-      else if (reason === 'ambiguous') setError('More than one Google place fits this venue. Choose the right one below, or save it as entered.');
-      else if (reason === 'no_match') setError(result.candidates.length
-        ? 'Google Places could not confirm this exact venue. Choose the closest place below, search for it, or save it as entered.'
-        : 'Google Places could not match this exact venue. Check the name and address, then verify again or save it as entered.');
+      // With choices to show, the Confirm the venue list says what happened; no error line is needed.
+      else if (reason === 'ambiguous' || (reason === 'no_match' && result.choices?.length)) setError('');
+      else if (reason === 'no_match') setError('Google Places could not match this exact venue. Search for it below, or save it as entered.');
       else if (stage === 'lookup') setError('Could not check your saved venues. Try again or enter the details.');
       else if (stage === 'verify') setError(retryable
         ? 'Place verification is temporarily unavailable. Try again or enter the details.'
@@ -132,6 +147,27 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     }
   };
 
+  /** Confirm & Save: save the Google place the user picked, with its coordinates, then show the usual actions. */
+  const confirmChoice = async () => {
+    const picked = choice === undefined ? undefined : choices[choice];
+    if (!picked || picked.lat == null || picked.lon == null || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const details: SharedVenue = { name: picked.name, address: picked.address, type: picked.type, link, lat: picked.lat, lon: picked.lon };
+      setSaved(await saveSharedVenue(details, link));
+      onSaved?.();
+      setVenue(details);
+      setEditing(false);
+      setIssue(undefined);
+      setShareUrl('');
+    } catch {
+      setError('Could not save this venue. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const save = async (details: SharedVenue) => {
     if (saving) return;
     setSaving(true);
@@ -173,6 +209,9 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     }
   };
 
+  /** Google found places that might be the venue: let the user pick instead of showing an error. */
+  const choosing = !busy && !sharing && !manual && !venue && !saved && choices.length > 0 &&
+    (issue?.reason === 'ambiguous' || issue?.reason === 'no_match');
   const validDetails = Boolean(name.trim() && address.trim());
   const detailsMatchSaved = !!saved && saved.name === venue?.name && saved.address === venue?.address;
   const correctionSaved = !!saved && saved.name === name.trim() && saved.address === address.trim();
@@ -191,9 +230,12 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         if (swipe.current !== undefined && event.clientY - swipe.current > 60) onClose();
         swipe.current = undefined;
       }} onPointerCancel={() => { swipe.current = undefined; }}>
-        <DialogTitle>{sharing ? 'Quick Share' : compact ? 'AI Save or Create Plan' : 'Venue from link'}</DialogTitle>
+        <DialogTitle>{sharing ? 'Quick Share' : choosing ? 'Confirm the venue' : compact ? 'AI Save or Create Plan' : 'Venue from link'}</DialogTitle>
         <DialogDescription aria-live="polite">{busy ? (issue?.stage === 'verify' ? 'Verifying venue…' : 'Finding the venue…')
-          : sharing ? 'Recommend this venue to a friend.' : editing ? 'Check the venue details.' : 'Choose what to do with this venue.'}</DialogDescription>
+          : sharing ? 'Recommend this venue to a friend.'
+          : choosing ? (issue?.weak ? "We couldn't find an exact match. These are the closest Google results."
+            : 'We found a few possible matches on Google Maps. Choose the correct one to save.')
+          : editing ? 'Check the venue details.' : 'Choose what to do with this venue.'}</DialogDescription>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {sharing ? <>
@@ -209,6 +251,28 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         <div className="flex gap-2">
           <Button variant="outline" disabled={shareBusy} onClick={() => { setSharing(false); setError(''); setCopied(false); }}>Back</Button>
           <Button disabled={shareBusy || !shareRecommendationOrigin()} onClick={() => void send()}>{copied ? 'Link copied' : 'Share recommendation'}</Button>
+        </div>
+      </> : choosing ? <>
+        <div role="radiogroup" aria-label="Possible matches" className="grid gap-2">
+          {choices.map((candidate, index) => {
+            const selected = choice === index;
+            return <button key={index} type="button" role="radio" aria-checked={selected} onClick={() => setChoice(index)}
+              className={cn('flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                selected ? 'border-primary bg-primary-soft' : 'border-border bg-card')}>
+              <span className="grid min-w-0 flex-1 gap-0.5">
+                <span className="break-words font-semibold">{candidate.name}</span>
+                <span className="break-words text-sm">{candidate.address}</span>
+                <span className="text-sm text-muted-foreground">{typeWithIcon(candidate.type)}</span>
+              </span>
+              <span aria-hidden="true" className={cn('flex size-6 shrink-0 items-center justify-center rounded-full border-2', selected ? 'border-primary' : 'border-border')}>
+                {selected && <span className="size-3 rounded-full bg-primary" />}
+              </span>
+            </button>;
+          })}
+        </div>
+        <div className="grid gap-2">
+          <Button disabled={choice === undefined || saving} onClick={() => void confirmChoice()}>{saving ? 'Saving…' : 'Confirm & Save'}</Button>
+          <Button variant="outline" disabled={saving} onClick={() => { setManual(true); setError(''); }}>None of these match</Button>
         </div>
       </> : editing ? <form className="grid gap-3" onSubmit={event => {
         event.preventDefault();
@@ -232,7 +296,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         <div className="grid gap-2 rounded-lg border p-3">
           <label className="grid gap-1 text-sm" htmlFor="ai-save-place-search">Change location: search Google Places</label>
           <div className="flex gap-2">
-            <Input id="ai-save-place-search" maxLength={200} value={placeQuery} placeholder="e.g. Sculpture by the Sea, Bondi"
+            <Input id="ai-save-place-search" autoFocus={candidates.length === 0} maxLength={200} value={placeQuery} placeholder="e.g. Sculpture by the Sea, Bondi"
               onChange={event => setPlaceQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void searchPlaces(); } }} />
             <Button type="button" variant="outline" disabled={searching || !placeQuery.trim() || saving} onClick={() => void searchPlaces()}>
               {searching ? 'Searching…' : 'Search'}

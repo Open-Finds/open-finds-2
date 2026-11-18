@@ -59,10 +59,14 @@ export type SharedVenueIssue = {
   reason?: ProviderReason | 'needs_review' | 'no_match' | 'ambiguous';
   /** For 'testing_limit': how long until an attempt is available again. */
   retryAfterSeconds?: number;
+  /** For 'no_match': the offered places are only Google's closest results, not name matches. */
+  weak?: boolean;
 };
 
 export type SharedVenueResult = {
   candidates: ExtractedVenueItem[];
+  /** Google places the user can choose from (Confirm the venue). Only ever Google results, never what the AI read. */
+  choices?: ExtractedVenueItem[];
   saved?: SavedVenue;
   venue?: SharedVenue;
   issue?: SharedVenueIssue;
@@ -125,7 +129,8 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
         }));
         return {
           candidates: choices.length ? choices : candidates,
-          issue: { stage, retryable: false, reason: check.reason ?? 'no_match' },
+          choices,
+          issue: { stage, retryable: false, reason: check.reason ?? 'no_match', ...(check.weak ? { weak: true } : {}) },
         };
       }
       progress.verified = {
