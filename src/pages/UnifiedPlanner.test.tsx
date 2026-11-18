@@ -70,7 +70,7 @@ describe('unified planner interactions', () => {
     expect(screen.queryByRole('button', { name: /Next step|Continue|Review itinerary|Final review|Confirm event/ })).not.toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Add to itinerary' })[0]);
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Go to Itinerary' }));
+    await user.click(await screen.findByRole('button', { name: 'Go to Itinerary' }));
     expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
     expect(screen.getByLabelText('Event name')).toHaveValue('QA night');
   });

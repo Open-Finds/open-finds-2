@@ -21,12 +21,34 @@ Rules for this stage: staging first; no production change, staging migration, de
 | S1-10 Final regression run and documentation | see its entry | n/a | n/a |
 
 Open items for the founder (none block Stage 1 on staging):
-1. Production has not been checked or fixed. It is expected to have the same sales/billing exposure and the same missing migrations. Needs a read-only check first (including a count of duplicate saved venues), then separate approval for each change.
+1. PRODUCTION (read-only check done 2026-11-19, founder approved; nothing changed there): see "Production read-only findings" below. Production still has the sales/billing exposure and needs a reconciliation plan and separate approval before any change.
 2. Google venue photos (`venue-photo`): DECIDED by the founder on 2026-11-18: keep the Google images (this replaces the earlier "no Google photos in this release" decision). Cost note: the function runs outside the AI Save allowance and the staging provider controls (limit 200 lookups per user per hour, one Places search plus one photo lookup per venue the first time it is shown). The founder's Google quota and budget alerts remain the hard stop. Before any wider release: read Google's terms for stored photo links and attribution, and consider adding the photo lookups to the provider controls.
-3. App test `src/pages/UnifiedPlanner.test.tsx` ("renders all four sections in one document") fails every time in GitHub CI, so draft PR #3 is red. Proposed as a separate task; not a Stage 1 database defect.
+3. App test `src/pages/UnifiedPlanner.test.tsx` ("renders all four sections in one document") failed every time in GitHub CI. Cause confirmed 2026-11-19: the floating "Go to Itinerary" shortcut hides while a text box has focus and re-shows only after a screen-check timer (about 16 ms); the test looked for the button instantly. Slowing the timer on purpose reproduced the exact CI error every time. Fix (one line, local, not yet committed or pushed): the test now waits for the button with `findByRole`. With the timer slowed to 150 ms all 27 planner tests pass; the file passed 3 of 3 runs; `npm run check` passes (350 app tests, 251 edge tests, build). Not a database defect and not an app bug.
 4. Supabase Auth "leaked password protection" is off (dashboard setting, founder's decision).
 5. The AI could not read a venue from one TikTok link (provider issue, separate from the database).
 6. Draft PR #3 stays unmerged until the founder approves.
+
+## Production read-only findings (2026-11-19)
+
+Founder approved a read-only check of production (`wfrlkifdlgmlbffumglt`). Only selects, the migration list, the function list and the security advisors were used. No write, no migration, no deployment.
+
+| Finding | Evidence |
+|---|---|
+| Recorded migration history stops at `20260923160000` (33 entries), but the real schema contains objects from later migrations up to about `20261015`. Production is OUT OF SYNC with its own history. | Production has `stripe_events`, `venue_reviews`, `credit_ledger`, `commission_payouts`, `review_reminders` (with an hourly `review-reminders` cron job), `app_settings`, `profiles.role` and `commission_percent`, `saved_venues.photo_url`, and the functions `add_host_rsvp`, `admin_set_role`, `spend_credit`, `sales_summary_for`, `partner_billing`; none of this is in the recorded history. |
+| Production is MISSING everything from `20261027` on: six-stop planner, optional event end (`plans.end_time`/`end_date` absent), AI Save (`save_shared_venue`, `venue_recommendations`, `ai_save_attempts`), plan-invite ownership, private collection notes, all Stage 1 migrations. | Those objects are absent. Production edge functions are older (ai-proxy v22, resolve-place v17; `venue-photo` and the AI Save controls are not deployed). |
+| BROKEN on production: `sales_summary_for(uuid)` and `partner_billing()` are callable by signed-out users (same as staging before S1-04). | `has_function_privilege('anon', ...)` true; neither checks the caller. |
+| Same advisor warnings as staging had: security-definer view `venue_rating_summary` (ERROR), 3 functions with no fixed search path, 51 signed-out-callable security-definer functions, plus `pg_net` installed in `public`; leaked password protection off. | Production security advisors. |
+| Row security is on for all 31 public tables. | Catalog query. |
+| 520 saved venues, 7 groups of duplicate saved venues (same person, name and address), 175 plans of which 142 are unclaimed (no owner id). | Counts only; no personal data read. The S1-06 migration flags duplicates and deletes nothing, so it is safe on this data. |
+
+Consequences for any production release:
+- A plain `supabase db push` would try to re-run migrations that production already contains (history gap) and fail or half-apply. The history must be reconciled first (decide which migrations are really applied, mark them as applied, or apply only what is missing) and verified against a staging-like copy.
+- The full chain through `20261118140000` must reach production in one planned release so the sales/billing and function fixes are not left open while newer features arrive.
+- `20261014120000_review_reminders.sql` schedules a job that already exists on production; do not duplicate it.
+- The app and Edge Functions must be released in step with the schema (AI Save, six-stop planner and venue photos need their functions and secrets), including the staging-only controls staying off production.
+- The same collection-notes privacy leak that existed on staging (`get_collection_venues`, signed-out callable) is expected on production until `20261114120100` is applied.
+
+Nothing here is applied. Next step needs the founder's approval: a written production release plan (read-only work), then separate approval for each production change.
 
 ## Audit summary (2026-11-18)
 
@@ -134,3 +156,4 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
 - Final run on the branch tip, 2026-11-18, local: real PostgreSQL 18.6 scratch install: full migration chain (56 migrations) applies and all 277 SQL assertions pass, 0 fail; staging ledger script check 19 of 19 pass; `npm run check`: typecheck pass, lint 0 errors (3 existing warnings), 41 app test files (350 tests) and 13 edge-function test files (251 tests) pass, build succeeds. GitHub CI (draft PR #3): the Postgres 17 database job passed on both attempts; the app-test job fails on one planner test (see S1-08 and open item 3).
 - Documentation: this tracker (single Stage 1 tracker) and a "Database rules for saved venues" note plus corrected `insertSavedVenue` and `updateSavedVenue` rows in `DOCUMENTATION.md`. `supabase/staging-only/README.md` documents the staging-only script and the reminders hazard.
 - Applied to staging only; production is not touched, so Stage 1 is complete for staging and open for production (open item 1).
+- Human event-planning test (founder, staging app, 2026-11-18 evening): create an event with stops, reopen the app, edit and reorder, share the link, guest RSVP from another browser without signing in, and see the reply as host: steps 1 to 6 all passed. Read-only log check afterwards (staging, from 22:45 Sydney time on): 0 failed requests (no 4xx or 5xx on the app, API or functions) and 0 database errors; the planning calls (plans, stops, rsvps, `get_shared_plan` 15 calls, `submit_plan_rsvp` 1 call, `claim_device_rows` 4 calls) all succeeded. Not covered: a second signed-in account on the event (optional step 7).
