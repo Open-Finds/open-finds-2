@@ -5,6 +5,29 @@ Audit date: 2026-11-18. Status values: NOT STARTED, IN PROGRESS, BLOCKED, FAILED
 
 Rules for this stage: staging first; no production change, staging migration, deployment, push or paid call without the founder's approval; never weaken RLS; every bug fix gets a regression test.
 
+## Where Stage 1 stands (2026-11-18)
+
+| Task | Status | Applied to staging | Production |
+|---|---|---|---|
+| S1-01 Reconcile local changes into the branch | APPROVED | n/a | n/a |
+| S1-02 Compare deployed staging functions with Git | APPROVED | read-only | not touched |
+| S1-03 Record staging-only ledger in Git | APPROVED | no change needed | not applicable |
+| S1-04 Close sales and billing helper functions | APPROVED | yes | not applied |
+| S1-05 Close signed-in-only functions, view, search paths | APPROVED | yes | not applied |
+| S1-06 One saved venue per name and address | APPROVED | yes | not applied |
+| S1-07 Claimed plan and trip ownership protection | APPROVED | yes | not applied |
+| S1-08 Database tests on Postgres 17 in GitHub CI | APPROVED (database job); app-test job red | n/a | n/a |
+| S1-09 Live Save Venues check on staging | APPROVED (database integration) | n/a | n/a |
+| S1-10 Final regression run and documentation | see its entry | n/a | n/a |
+
+Open items for the founder (none block Stage 1 on staging):
+1. Production has not been checked or fixed. It is expected to have the same sales/billing exposure and the same missing migrations. Needs a read-only check first (including a count of duplicate saved venues), then separate approval for each change.
+2. Google venue photos (`venue-photo`): DECIDED by the founder on 2026-11-18: keep the Google images (this replaces the earlier "no Google photos in this release" decision). Cost note: the function runs outside the AI Save allowance and the staging provider controls (limit 200 lookups per user per hour, one Places search plus one photo lookup per venue the first time it is shown). The founder's Google quota and budget alerts remain the hard stop. Before any wider release: read Google's terms for stored photo links and attribution, and consider adding the photo lookups to the provider controls.
+3. App test `src/pages/UnifiedPlanner.test.tsx` ("renders all four sections in one document") fails every time in GitHub CI, so draft PR #3 is red. Proposed as a separate task; not a Stage 1 database defect.
+4. Supabase Auth "leaked password protection" is off (dashboard setting, founder's decision).
+5. The AI could not read a venue from one TikTok link (provider issue, separate from the database).
+6. Draft PR #3 stays unmerged until the founder approves.
+
 ## Audit summary (2026-11-18)
 
 | Area | Class | Evidence |
@@ -107,5 +130,7 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
   - Part B, live providers (paid, founder's device): founder shares 2 to 3 public Instagram or TikTok venue links on the staging app while signed in to a staging account; I give a short checklist and afterwards read staging read-only to confirm the saved rows, coordinates, no duplicates, and the attempt ledger (`ai_save_attempts`). Max 3 retries per request, at most about 9 AI and 9 to 18 Google Places calls in total (a rough cost under a few dollars at list prices; the founder's own OpenRouter and Google limits stay the hard stop; I will not change provider settings or secrets). Acceptance (from the Phase 4 handover): an ordinary account can start AI Save; a real link yields the right venue and branch or a clear "unverified" result; review and save works; the venue is still there after reopening the app; a retry costs no extra allowance; another user cannot see it. Risk: medium (paid calls, and provider switches I cannot read).
 - Provider and Google matching problems found in Part B are recorded as separate issues, not database defects.
 
-### S1-10 Final regression run and documentation. NOT STARTED
-- Update this tracker and `DOCUMENTATION.md`. Depends on all of the above.
+### S1-10 Final regression run and documentation. APPROVED (staging scope)
+- Final run on the branch tip, 2026-11-18, local: real PostgreSQL 18.6 scratch install: full migration chain (56 migrations) applies and all 277 SQL assertions pass, 0 fail; staging ledger script check 19 of 19 pass; `npm run check`: typecheck pass, lint 0 errors (3 existing warnings), 41 app test files (350 tests) and 13 edge-function test files (251 tests) pass, build succeeds. GitHub CI (draft PR #3): the Postgres 17 database job passed on both attempts; the app-test job fails on one planner test (see S1-08 and open item 3).
+- Documentation: this tracker (single Stage 1 tracker) and a "Database rules for saved venues" note plus corrected `insertSavedVenue` and `updateSavedVenue` rows in `DOCUMENTATION.md`. `supabase/staging-only/README.md` documents the staging-only script and the reminders hazard.
+- Applied to staging only; production is not touched, so Stage 1 is complete for staging and open for production (open item 1).

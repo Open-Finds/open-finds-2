@@ -167,10 +167,17 @@ Creates a Supabase client with a custom `safeStorage` wrapper around `localStora
 | Function | Description |
 |---|---|
 | `fetchSavedVenues(limit?)` | Fetches all saved venues for the authenticated user, newest first |
-| `insertSavedVenue(venue)` | Saves a new venue (RLS-scoped to auth.uid) |
+| `insertSavedVenue(venue)` | Saves a new venue (RLS-scoped to auth.uid). If the person already has a venue with the same name and address, returns that venue instead of an error |
 | `deleteSavedVenue(id)` | Deletes a saved venue |
-| `updateSavedVenue(id, updates)` | Updates venue fields (name, address, type, tags, collection) |
+| `updateSavedVenue(id, updates)` | Updates venue fields (name, address, type, tags, collection). Editing into a name and address the person already has throws `DUPLICATE_VENUE_MESSAGE` |
 | `updateSavedVenueCoords(id, lat, lon)` | Updates stored coordinates for a saved venue |
+
+**Database rules for saved venues (Stage 1, see `docs/STAGE-1-DATABASE-TRACKER.md`)**
+- One saved venue per person per name and address, ignoring capitals and edge spaces (unique index `saved_venues_one_per_venue`). Duplicates that existed before the rule are kept and flagged `legacy_duplicate`; the flag cannot be set or cleared by a user.
+- `save_shared_venue(p_venue)` (AI Save) matches on name and address, not on the link: the same venue returns the saved row, a different venue from the same link is saved as its own venue. Signed-in users only.
+- A plan or trip owner, once set, cannot be changed (`preserve_claimed_plan_ownership`); the sign-in device claim only fills an empty owner.
+- `sales_summary_for` and `partner_billing` are internal helpers with no API access; 23 signed-in-only functions have no signed-out access (guest RSVP, share links and the device-plan row rules stay open on purpose).
+- Staging-only SQL (not migrations, never for production) lives in `supabase/staging-only/`.
 
 ### Collection Functions
 
