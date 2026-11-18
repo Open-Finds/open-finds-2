@@ -1022,8 +1022,34 @@ export async function insertSavedVenue(
     .insert({ ...venue, tags: normalizeTags(venue.tags ?? []) })
     .select()
     .single();
+  if (error?.code === DUPLICATE_VENUE_CODE) {
+    // The database allows one saved venue per person per name and address
+    // (migration 20261118130000). Saving it again is not an error: return the one they have.
+    const existing = await findSavedVenueByNameAndAddress(venue.name, venue.address);
+    if (existing) return existing;
+    throw new Error(DUPLICATE_VENUE_MESSAGE);
+  }
   if (error) throw error;
   return data as SavedVenue;
+}
+
+const DUPLICATE_VENUE_CODE = '23505';
+export const DUPLICATE_VENUE_MESSAGE = 'You already have a venue with that name and address.';
+
+const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The caller's saved venue with this name and address, ignoring capitals and edge spaces. */
+async function findSavedVenueByNameAndAddress(name: string, address: string): Promise<SavedVenue | null> {
+  const exact = (text: string) => text.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+  const { data, error } = await supabase
+    .from('saved_venues')
+    .select('*')
+    .ilike('name', exact(name))
+    .ilike('address', exact(address))
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  const rows = (data ?? []) as SavedVenue[];
+  return rows.find((row) => sameText(row.name, name) && sameText(row.address, address)) ?? null;
 }
 
 export async function deleteSavedVenue(id: string) {
@@ -1044,6 +1070,7 @@ export async function updateSavedVenue(
     .eq('id', id)
     .select()
     .single();
+  if (error?.code === DUPLICATE_VENUE_CODE) throw new Error(DUPLICATE_VENUE_MESSAGE);
   if (error) throw error;
   return data as SavedVenue;
 }

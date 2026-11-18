@@ -41,7 +41,9 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
 - Acceptance: a fresh database built from migrations matches staging for these objects.
 - Risk: low. Depends on: none.
 
-### S1-04 Close anonymous access to sales and billing functions. IN PROGRESS (fixed and tested locally; not applied to staging)
+### S1-04 Close anonymous access to sales and billing functions. APPROVED on staging (production not applied)
+- Applied to staging 2026-11-18 with founder approval (version 20261118114331, name `close_sales_billing_helpers`). Staging check afterwards: `anon` and `authenticated` can no longer execute either function; `service_role` and the owner still can. The guarded callers (`admin_team`, `my_sales_summary`, `admin_partner_overview`) are still SECURITY DEFINER and callable by signed-in users, so they keep working. Rollback is in the migration comments.
+- Not done: production (needs separate approval and a read-only check first).
 - Done 2026-11-18: migration `20261118120000_close_sales_billing_helpers.sql`; new test `supabase/tests/17_sales_billing_access.sql` (9 checks); test setup `00_platform_stub.sql` now copies Supabase's default function grants, which is why the old tests never saw this hole.
 - Evidence (real PostgreSQL 18.6, scratch install outside the repo, run by me 2026-11-18): before the fix the new test failed 7 of 9 (the 2 working-path checks passed); after the fix 9 of 9 pass; whole suite 257 assertions pass, 0 fail, plus the AI Save concurrency checks (all passed). Existing sales tests (12, 13, 14) still pass.
 - Still to do: founder approval to apply to staging, then confirm the signed-out call is refused on staging. Production is a separate approval; production is expected to have the same gap but has not been checked.
@@ -55,9 +57,14 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
 - Scope: read every function callable by anon or authenticated, fix real gaps, fix the unsafe view and the 3 search paths.
 - Risk: medium. Depends on: S1-04.
 
-### S1-06 Duplicate protection for saved venues. NOT STARTED
-- Scope: unique rule per user for the same venue; clean the 1 existing duplicate first; fix the lost second venue from one link.
-- Risk: medium. Needs approval to apply to staging. Depends on: S1-04.
+### S1-06 Duplicate protection for saved venues. IN PROGRESS (built and tested locally; not applied to staging)
+- Founder decision 2026-11-18: keep the existing duplicate rows (no deletion).
+- Built: migration `20261118130000_saved_venue_duplicate_rule.sql` (one saved venue per person per name and address, capitals and edge spaces ignored; later rows of any existing duplicate group are flagged `legacy_duplicate` and exempt, so nothing is deleted and it cannot fail on unexpected production data; a trigger stops people setting or clearing the flag; `save_shared_venue` now matches on name and address instead of the link, so a second venue from one link is saved). App side: `insertSavedVenue` returns the existing venue on a repeat save, `updateSavedVenue` explains a clash in plain words.
+- Tests: `supabase/tests/18_saved_venue_duplicates.sql` (13 checks) and `src/lib/savedVenues.test.ts` (5 tests).
+- Evidence (real PostgreSQL 18.6, scratch install, run 2026-11-18): all 270 SQL assertions pass, 0 fail, and the new test fails without the migration. App tests for the new file pass (5 of 5). Full `npm run check` (2026-11-18): typecheck pass, lint 0 errors (3 warnings), 41 app test files and 13 edge test files pass, build succeeds.
+- Known limits: (1) if a person renames a saved venue and then re-shares the original link, the server treats it as a new venue (the app normally catches this earlier by link). (2) The app's "already saved from this link" shortcut still only fires when exactly one venue has that link, so a second venue from a two-venue link can't be reached by re-sharing; that is app behaviour, not database. (3) Production duplicates have not been counted.
+- Remaining: founder approval to apply to staging, then check the staging pair is flagged (earliest unflagged, later flagged) and that a repeat insert is refused.
+- Risk: medium. Rollback is in the migration header.
 
 ### S1-07 Decide on `preserve_claimed_plan_ownership`. NOT STARTED
 - Founder decision: apply to staging or drop. Risk: low.
