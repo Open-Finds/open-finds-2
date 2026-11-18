@@ -53,9 +53,13 @@ Outside Stage 1 (not database): Google Places matching and the confirm sheet, AI
 - Verification: SQL test on real Postgres; then staging check after approval.
 - Risk: medium. Needs founder approval to apply to staging. Production is a separate approval.
 
-### S1-05 Review the other callable functions and fix advisor warnings. NOT STARTED
-- Scope: read every function callable by anon or authenticated, fix real gaps, fix the unsafe view and the 3 search paths.
-- Risk: medium. Depends on: S1-04.
+### S1-05 Review the other callable functions and fix advisor warnings. IN PROGRESS (built and tested locally; not applied to staging)
+- Review result (staging, 2026-11-18): 39 non-trigger functions were callable by signed-out users. No further data leak found beyond S1-04: every function that returns private data already checks `auth.uid()` (empty result or exception for a signed-out caller). Intentionally public and left open: guest RSVP (`submit_plan_rsvp`, `submit_stop_rsvp`, `set_rsvp_decline_reason`), share links (`get_shared_plan`, `get_shared_trip`, `read_venue_recommendation`), and the device-id plan helpers (`app_is_owner`, `app_request_device_id`: row rules for plans and trips apply to anon, so these must stay open). Design note for the founder, not a defect: anyone holding a plan or trip link can read its stops and guest RSVP names, and anyone holding an RSVP id can set a decline reason once; ids are random UUIDs.
+- Change: migration `20261118140000_restrict_signed_in_functions.sql` removes anon EXECUTE from 23 functions that already refuse signed-out callers (behaviour-neutral); makes `venue_rating_summary` run with the caller's rights (its table is already publicly readable, so numbers are unchanged; clears the one ERROR advisor); fixes the search path of 3 functions. Functions whose quiet empty answer the app relies on were deliberately not touched.
+- Tests: `supabase/tests/19_function_access.sql` (6 checks; 3 fail without the migration). Evidence (real PostgreSQL 18.6, scratch install, 2026-11-18): whole suite passes with the migration, including every earlier signed-out and device-id flow.
+- Remaining advisor items, accepted by design: "RLS enabled, no policy" (9 tables, service-role or RPC access only); signed-in users can run security-definer RPCs (that is how the app works; each checks the caller inside).
+- Remaining: founder approval to apply to staging, then re-run the security advisors on staging to confirm the ERROR and the 3 search-path warnings are gone.
+- Risk: medium. Rollback is in the migration header.
 
 ### S1-06 Duplicate protection for saved venues. APPROVED on staging (production not applied)
 - Applied to staging 2026-11-18 with founder approval (migration `saved_venue_duplicate_rule`). Staging checks afterwards: still 33 rows; exactly 1 flagged (the later row of the existing pair; the earlier row, with its notes and visited mark, is unflagged); the unique index and trigger exist; `anon` cannot call `save_shared_venue`, `authenticated` can; a repeat insert and an insert that tries to set the flag were both refused inside a rolled-back test (nothing kept, row count unchanged).
