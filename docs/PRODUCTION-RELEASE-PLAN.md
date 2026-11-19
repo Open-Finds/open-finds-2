@@ -69,7 +69,19 @@ Record the 11 unrecorded migrations as applied (names above) in `supabase_migrat
 - **Undo:** delete those 11 history rows (a `DELETE` on `supabase_migrations.schema_migrations` for the 11 versions listed above); no schema is touched.
 - **After it:** the history should list everything up to `20261015120000`.
 
-### Step C: rehearse the remaining nine migrations on a copy
+### Step C: rehearse the remaining nine migrations on a copy. DONE, 2026-11-19 (nothing touched on production)
+
+`scripts/release-rehearsal/rehearse-step-d.mjs` built a throwaway database in production's current state (first 45 migrations plus the two Step A migrations) with made-up rows that mimic production's quirks (3 groups of duplicate saved venues, owned and unowned plans, a plan with 5 stops, a shared collection with a private note), then ran the nine remaining migrations. Result, all passing:
+- The result is identical to a clean build of all 56 migrations (structure, function and table access, settings).
+- The older duplicates are flagged (5 flagged) and none deleted; every table keeps its rows; the content of every existing row is unchanged apart from the new columns.
+- Six stops for everyone (no subscription test in the limit): a plan with five stops takes a sixth, a seventh is refused with the six-stop message. Both planner flags are on.
+- Another member of a shared collection does not see the owner's private note; the owner still does.
+- Rolling all nine back returns the database exactly to the start (structure, access, settings, data); releasing again gives the same result as the first release.
+- The project's 21 database test files pass on the released state (277 checks, 0 failures).
+- The rehearsal needed three fixes to the script itself (not to any migration); none of the nine migrations needed changing.
+- Limits: tiny data (not production volumes, so it says nothing about lock time on big tables, though production's tables are small: 521 saved venues, 176 plans); and it covers the database only, not the Edge Functions, secrets or the app.
+
+**Original description:**
 Build a throwaway database to the production-equivalent schema, load synthetic rows that mimic production quirks (duplicate saved venues, plans with no owner, shared collections with notes, plans with 5 and 6 stops), apply the nine migrations in order, and run the full test suite. Optionally also a Supabase preview branch of production (founder approves any cost). No production data is copied.
 - **Approval needed:** none for the scratch copy (read-only on production); the preview branch needs approval for cost.
 
