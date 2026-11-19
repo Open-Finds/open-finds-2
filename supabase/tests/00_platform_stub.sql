@@ -27,3 +27,9 @@ LANGUAGE plpgsql AS $$ BEGIN
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO anon, authenticated, service_role;
 GRANT SELECT ON auth.users TO anon, authenticated, service_role;
+
+-- Real Supabase also gives the API roles EXECUTE on every function created in
+-- public (default privileges), so a migration's `REVOKE ... FROM PUBLIC` does
+-- not close a function to signed-out callers. Without this line the stub hid
+-- exactly that gap (sales_summary_for / partner_billing, Stage 1 task S1-04).
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;

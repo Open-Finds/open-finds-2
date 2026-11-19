@@ -16,9 +16,15 @@ import { FriendsPage } from './pages/Friends';
 import { NotificationsPage } from './pages/Notifications';
 import { MainNavigation, type AppView } from './components/MainNavigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
-import { takeSharedLink } from './lib/shareTarget';
-import type { PlannerMode } from './lib/planner';
-import type { SavedVenue } from './lib/supabase';
+import { SHARE_RECEIVED, takeSharedLink } from './lib/shareTarget';
+import { nativeShare, type AndroidShare } from './lib/aiSave';
+import { AndroidShareSheet, PendingAndroidSharePlan } from './components/AndroidShareSheet';
+import { Capacitor } from '@capacitor/core';
+import { stagingSupabase } from './lib/publicRecommendation.js';
+import { AiSaveDialog } from './components/AiSaveDialog';
+import { PendingVenuePlan, PublicVenuePage } from './pages/PublicVenue';
+import { categoryOf, savedCandidate, venueKey, type PlannerMode, type PlannerVenue } from './lib/planner';
+import type { SharedVenue } from './lib/aiSave';
 import { GuidedTour } from './components/GuidedTour';
 import { CreditPrompt } from './components/CreditPrompt';
 import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isSigningUp } from './lib/supabase';
@@ -103,20 +109,27 @@ function AppInner() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [homeResetKey, setHomeResetKey] = useState(0);
   const [plannerMode, setPlannerMode] = useState<PlannerMode | undefined>();
-  const [plannerSeed, setPlannerSeed] = useState<SavedVenue[]>([]);
+  const [plannerSeed, setPlannerSeed] = useState<PlannerVenue[]>([]);
   const [plannerCollection, setPlannerCollection] = useState('');
   const [plannerDirty, setPlannerDirty] = useState(false);
   const [pendingView, setPendingView] = useState<View | null>(null);
+  const [pendingPlannerVenue, setPendingPlannerVenue] = useState<PlannerVenue>();
   const [openSave, setOpenSave] = useState(false);
+  const [venueSaveVersion, setVenueSaveVersion] = useState(0);
   const [incomingShare, setIncomingShare] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile } = useAuth();
+  const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile, premiumUnlocked } = useAuth();
   useEffect(() => {
-    if (!session) return;
-    const shared = takeSharedLink();
-    if (shared) { setIncomingShare(shared); setOpenSave(true); setView('venues'); }
-  }, [session]);
-  useEffect(() => { if (view !== 'venues') { setOpenSave(false); setIncomingShare(null); } }, [view]);
+    if (!session || incomingShare) return;
+    const consume = () => {
+      const shared = takeSharedLink();
+      if (shared) setIncomingShare(shared);
+    };
+    consume();
+    window.addEventListener(SHARE_RECEIVED, consume);
+    return () => window.removeEventListener(SHARE_RECEIVED, consume);
+  }, [session, incomingShare]);
+  useEffect(() => { if (view !== 'venues') setOpenSave(false); }, [view]);
 
   // The walkthrough runs over the app until it's finished or skipped, and
   // again after Settings → Replay Walkthrough. It points at Home's buttons,
@@ -200,6 +213,7 @@ function AppInner() {
   if (route.name === 'trip') return <TripOverviewPage tripId={route.id} />;
   if (route.name === 'trip-day') return <TripDayPage tripId={route.tripId} dayId={route.dayId} />;
   if (route.name === 'trip-setup') return <TripSetupPage />;
+  if (route.name === 'public-venue') return <PublicVenuePage key={route.id} id={route.id} />;
 
   // Venue partner portal + subscription — require auth
   if (route.name === 'venue-portal') {
@@ -208,6 +222,9 @@ function AppInner() {
   }
   if (route.name === 'subscription') {
     if (!session) return <LoginPage />;
+    if (import.meta.env.VITE_SUPABASE_URL === stagingSupabase && (!profileLoaded || premiumUnlocked)) {
+      return <main className="p-6"><p>Subscriptions are paused during testing.</p><button className="btn-outline mt-4" onClick={() => navigate('/')}>Go home</button></main>;
+    }
     return <SubscriptionPage onBack={() => navigate('/')} />;
   }
   // Blank screen while session loads — avoids flash of login page for returning users
@@ -246,7 +263,6 @@ function AppInner() {
         await updateDietaryPreferences(dietary);
         await refreshProfile();
       }
-      if (incomingShare) setView('venues');
     } catch { /* ignore */ }
   };
 
@@ -271,11 +287,27 @@ function AppInner() {
     if (editPlanId || (plannerDirty && (view === 'planner' || view === 'discover') && v !== view)) { setPendingView(v); return; }
     applyView(v);
   };
-  const startPlanner = (mode?: PlannerMode, seed?: SavedVenue, collection = '') => {
+  const startPlanner = (mode?: PlannerMode, seed?: PlannerVenue, collection = '') => {
     applyView('planner');
     setPlannerMode(mode); setPlannerSeed(seed ? [seed] : []); setPlannerCollection(collection);
     setHomeResetKey((k) => k + 1);
   };
+  const planFromShare = (venue: SharedVenue) => {
+    const stop: PlannerVenue = {
+      id: `shared:${venueKey(venue)}`,
+      name: venue.name, address: venue.address, link: venue.link, category: categoryOf(venue),
+      lat: venue.lat ?? null, lon: venue.lon ?? null, tags: venue.tags ?? [],
+      source: 'external', entityKind: 'venue',
+    };
+    setIncomingShare(null);
+    if (editPlanId || plannerDirty) {
+      setPendingPlannerVenue(stop);
+      setPendingView('planner');
+      return;
+    }
+    startPlanner('saved', stop);
+  };
+  const closePlannerGuard = () => { setPendingView(null); setPendingPlannerVenue(undefined); };
 
   const openDashboard = (planId: string) => {
     setDashboardId(planId);
@@ -304,7 +336,23 @@ function AppInner() {
     onChangeView: switchView,
     unreadCount,
     onOpenNotifications: () => setShowNotifications(true),
-    guard: <Dialog open={pendingView !== null} onOpenChange={(open) => !open && setPendingView(null)}><DialogContent><DialogHeader><DialogTitle>Leave your planner?</DialogTitle><DialogDescription>Your new-event draft is kept on this device. Unsaved edits to an existing event will be discarded.</DialogDescription></DialogHeader><button className="btn-primary" onClick={() => { const target = pendingView; setPendingView(null); setPlannerDirty(false); if (target) applyView(target); }}>Leave planner</button><button className="btn-outline" onClick={() => setPendingView(null)}>Keep planning</button></DialogContent></Dialog>,
+    guard: <>
+      <Dialog open={pendingView !== null} onOpenChange={open => { if (!open) closePlannerGuard(); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Leave your planner?</DialogTitle><DialogDescription>Your new-event draft is kept on this device. Unsaved edits to an existing event will be discarded.</DialogDescription></DialogHeader>
+          <button className="btn-primary" onClick={() => {
+            closePlannerGuard();
+            setPlannerDirty(false);
+            if (pendingPlannerVenue) startPlanner('saved', pendingPlannerVenue);
+            else if (pendingView) applyView(pendingView);
+          }}>Leave planner</button>
+          <button className="btn-outline" onClick={closePlannerGuard}>Keep planning</button>
+        </DialogContent>
+      </Dialog>
+      {incomingShare && <AiSaveDialog key={incomingShare} link={incomingShare}
+        onClose={() => setIncomingShare(null)} onPlan={planFromShare}
+        onSaved={() => setVenueSaveVersion(version => version + 1)} />}
+    </>,
   };
 
   if (editPlanId) {
@@ -360,10 +408,12 @@ function AppInner() {
 
   return (
     <Shell {...shellProps} inlineNotifications={view === 'home'}>
-      {tourActive && <GuidedTour initialDietary={dietaryPreferences} onFinish={finishTour} />}
+      {tourActive && !incomingShare && <GuidedTour initialDietary={dietaryPreferences} onFinish={finishTour} />}
+      {!tourActive && <PendingVenuePlan onPlan={planFromShare} />}
+      {!tourActive && Capacitor.getPlatform() === 'android' && <PendingAndroidSharePlan owner={session.user.id} onPlan={planFromShare} />}
       <div key={view === 'home' ? `home-${homeResetKey}` : view} className={`animate-slide-${slideDir}`}>
         {view === 'home' ? (
-          <HomeDashboard onPlan={startPlanner} onVenues={() => switchView('venues')} onEvent={openDashboard}
+          <HomeDashboard onPlan={(mode, seed) => startPlanner(mode, seed ? savedCandidate(seed) : undefined)} onVenues={() => switchView('venues')} onEvent={openDashboard}
             onEvents={() => switchView('events')} onSettings={() => switchView('settings')}
             unreadCount={unreadCount} onNotifications={shellProps.onOpenNotifications} onSave={() => { setOpenSave(true); switchView('venues'); }} />
         ) : view === 'planner' || view === 'discover' ? (
@@ -376,7 +426,7 @@ function AppInner() {
         ) : view === 'settings' ? (
           <SettingsPage onBack={() => switchView('home')} onFriends={() => switchView('friends')} />
         ) : (
-          <VenuesPage initialAdd={openSave} sharedLink={incomingShare} onPlan={(v) => startPlanner('saved', v)}
+          <VenuesPage saveVersion={venueSaveVersion} initialAdd={openSave} onSaveLink={setIncomingShare} onPlan={(v) => startPlanner('saved', savedCandidate(v))}
             onPlanCollection={(id) => startPlanner('saved', undefined, id)} />
         )}
       </div>
@@ -385,6 +435,29 @@ function AppInner() {
 }
 
 function App() {
+  const android = Capacitor.getPlatform() === 'android';
+  const [share, setShare] = useState<AndroidShare | null | undefined>(android ? undefined : null);
+  useEffect(() => {
+    if (!android) return;
+    document.documentElement.classList.add('android-share-window');
+    let active = true;
+    const show = (value: Partial<AndroidShare>) => {
+      if (!active) return;
+      if (value.id) setShare({ ...value, id: value.id });
+      else {
+        document.documentElement.classList.remove('android-share-window');
+        setShare(null);
+      }
+    };
+    void nativeShare.getShare().then(show).catch(() => show({}));
+    return () => {
+      active = false;
+      document.documentElement.classList.remove('android-share-window');
+    };
+  }, [android]);
+  if (share === undefined) return null;
+  if (share) return <AuthProvider compact><AndroidShareSheet initialShare={share} /><CreditPrompt /></AuthProvider>;
+
   return (
     <div className="app-shell">
       <AuthProvider>

@@ -19,7 +19,8 @@ beforeEach(async () => {
   mocks.db.mockReturnValue(db);
   mocks.auth.mockResolvedValue({ ok: true, user: { id: user } });
   mocks.limit.mockResolvedValue({ available: true, allowed: true, remaining: 2, retryAfter: 0 });
-  vi.stubGlobal('Deno', { env: { get: () => 'fake-openrouter-key' }, serve: (fn: typeof handler) => { handler = fn; } });
+  // Only the OpenRouter key is set. Any other variable (a staging flag or campaign) would put the function under staging controls.
+  vi.stubGlobal('Deno', { env: { get: (name: string) => name === 'OPENROUTER_API_KEY' ? 'fake-openrouter-key' : '' }, serve: (fn: typeof handler) => { handler = fn; } });
   await import('./index');
 });
 

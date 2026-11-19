@@ -3,11 +3,15 @@ import { json, preflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
 import { geocodeAU, getGoogleMapsApiKey } from "../_shared/maps.ts";
+import { configureStagingProviders, GEOCODE, withStagingProviderControls } from "../_shared/stagingProviders.ts";
+
+// Staging only: requests pass the access/budget/ledger controls. Elsewhere a pass-through.
+configureStagingProviders(GEOCODE);
 
 const RATE_LIMIT = 120;
 const RATE_WINDOW_SECONDS = 60 * 60;
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withStagingProviderControls("geocode", async (req: Request) => {
   const pre = preflight(req);
   if (pre) return pre;
 
@@ -51,4 +55,4 @@ Deno.serve(async (req: Request) => {
     console.error("[geocode] internal error", String(err));
     return json(req, { error: "Internal error" }, 500);
   }
-});
+}));

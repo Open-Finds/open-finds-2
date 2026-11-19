@@ -3,6 +3,13 @@ import { json, preflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
 import { assertPublicUrl, followRedirects, safeFetch } from "../_shared/urlguard.ts";
+import {
+  configureStagingProviders, EXTRACT_VENUE_META, isStagingProviderTarget, providerFetch, withStagingProviderControls,
+} from "../_shared/stagingProviders.ts";
+
+// Staging only: requests pass the access/budget/ledger controls and trim retries.
+// Everywhere else this is a pass-through. See _shared/stagingProviders.ts.
+configureStagingProviders(EXTRACT_VENUE_META);
 
 const RATE_LIMIT = 60;
 const RATE_WINDOW_SECONDS = 60 * 60;
@@ -256,7 +263,7 @@ async function fetchMetaOEmbed(
       return null;
     }
 
-    const res = await fetch(oembedUrl, {
+    const res = await providerFetch(oembedUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -310,12 +317,13 @@ function canonicalTikTokUrl(url: string): string {
  * TikTok turns away some requests from cloud servers (about one in three in
  * testing, for any video), sometimes for a few seconds at a time, so a failed
  * lookup is retried over ~6s. The AI step after this takes far longer.
+ * On staging every attempt is a counted provider call, so it tries once.
  */
 async function fetchTikTokOEmbed(
   videoUrl: string
 ): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
   const url = canonicalTikTokUrl(videoUrl);
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < (isStagingProviderTarget() ? 1 : 4); attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1000 * attempt));
     const result = await fetchTikTokOEmbedOnce(url);
     if (result?.title || result?.author) return result;
@@ -328,7 +336,7 @@ async function fetchTikTokOEmbedOnce(
 ): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
   try {
     const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(videoUrl)}`;
-    const res = await fetch(oembedUrl, {
+    const res = await providerFetch(oembedUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -349,7 +357,7 @@ async function fetchTikTokOEmbedOnce(
   }
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request) => {
   const pre = preflight(req);
   if (pre) return pre;
 
@@ -390,6 +398,17 @@ Deno.serve(async (req: Request) => {
     const contentType = detectContentType(target, platform);
     const handle = extractHandle(target, platform);
 
+    // The public caption embed often has the caption when the Reel page serves a login shell.
+    if (platform === "instagram" && (contentType === "post" || contentType === "reel")) {
+      const shortcode = new URL(target).pathname.match(/\/(?:p|reel)\/([A-Za-z0-9_-]+)\/?$/)?.[1];
+      if (shortcode) {
+        const embed = await fetchWithHeaders("https://www.instagram.com/p/" + shortcode + "/embed/captioned/", false);
+        const captionHtml = embed?.match(/<div\b[^>]*class=["']Caption["'][^>]*>([\s\S]*?)<\/div>/i)?.[1];
+        const caption = captionHtml ? extractMeta(captionHtml).rawText?.slice(0, 1200) : null;
+        if (caption) return json(req, { platform, contentType, url: target, handle, ogDescription: caption, fetched: true });
+      }
+    }
+
     // Kick off oEmbed and HTML scrape in parallel for maximum speed
     const oembedPromises: Promise<{ title: string | null; author: string | null; html: string | null } | null>[] = [];
 
@@ -411,9 +430,10 @@ Deno.serve(async (req: Request) => {
     // HTML scrape — try mobile UA first for Instagram reels, desktop for everything else
     const scrapePromise = (async () => {
       if (platform === "instagram" && contentType === "reel") {
+        // On staging each fetch is a counted provider call, so the fallbacks are skipped.
         let h = await fetchWithHeaders(target, true);
-        if (!h) h = await fetchWithHeaders(target, false);
-        if (!h) {
+        if (!h && !isStagingProviderTarget()) h = await fetchWithHeaders(target, false);
+        if (!h && !isStagingProviderTarget()) {
           const variant = target.includes("?") ? target + "&__d=1" : target + "?__d=1";
           h = await fetchWithHeaders(variant, true);
         }
@@ -520,4 +540,4 @@ Deno.serve(async (req: Request) => {
     console.error("[extract-venue-meta] internal error", String(err));
     return json(req, { error: "Internal error" }, 500);
   }
-});
+}));

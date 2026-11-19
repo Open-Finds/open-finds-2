@@ -3,6 +3,21 @@ import { json, preflight } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
 import { getGoogleMapsApiKey } from "../_shared/maps.ts";
+import { isStagingProviderTarget } from "../_shared/stagingProviders.ts";
+
+/**
+ * Staging reads the Google key from this function's own environment, as
+ * resolve-place does. A missing staging key fails closed rather than falling
+ * back to the database table. Elsewhere the shared secret is used, unchanged.
+ */
+async function photoMapsKey(): Promise<string> {
+  if (isStagingProviderTarget()) {
+    const stagingKey = Deno.env.get("GOOGLE_MAPS_API_KEY")?.trim();
+    if (!stagingKey) throw new Error("Staging Google Maps key not configured");
+    return stagingKey;
+  }
+  return getGoogleMapsApiKey();
+}
 
 /**
  * A photo for one of the caller's saved venues, from Google Places, looked up
@@ -27,7 +42,10 @@ async function findPhoto(name: string, address: string, apiKey: string): Promise
   }
   const photoName = (await search.json())?.places?.[0]?.photos?.[0]?.name as string | undefined;
   if (!photoName) return null;
-  const media = await fetch(`https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=480&skipHttpRedirect=true&key=${apiKey}`);
+  // The key goes in a header, not the URL, so it is never written into a URL or a log line.
+  const media = await fetch(`https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=480&skipHttpRedirect=true`, {
+    headers: { "X-Goog-Api-Key": apiKey },
+  });
   if (!media.ok) return null;
   return ((await media.json())?.photoUri as string | undefined) ?? null;
 }
@@ -57,7 +75,7 @@ Deno.serve(async (req: Request) => {
     const limit = await consumeRateLimit("venue-photo", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS);
     if (!limit.allowed) return json(req, { url: null }, 429, { "Retry-After": String(limit.retryAfter) });
 
-    const url = await findPhoto(venue.name, venue.address, await getGoogleMapsApiKey());
+    const url = await findPhoto(venue.name, venue.address, await photoMapsKey());
     await db.from("saved_venues").update({ photo_url: url, photo_checked_at: new Date().toISOString() }).eq("id", venue.id);
     return json(req, { url });
   } catch (err) {

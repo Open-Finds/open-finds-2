@@ -2,6 +2,11 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
+import { AI_PROXY, configureStagingProviders, providerFetch, withStagingProviderControls } from "../_shared/stagingProviders.ts";
+
+// Staging only: extraction requests pass the access/budget/ledger controls.
+// Everywhere else this is a pass-through. See _shared/stagingProviders.ts.
+configureStagingProviders(AI_PROXY);
 
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
 if (!OPENROUTER_API_KEY) {
@@ -51,7 +56,7 @@ function validateMessages(raw: unknown): { ok: true; messages: ChatMessage[] } |
   return { ok: true, messages };
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withStagingProviderControls("ai-proxy", async (req: Request) => {
   const pre = preflight(req);
   if (pre) return pre;
 
@@ -169,7 +174,7 @@ Deno.serve(async (req: Request) => {
     const timeout = setTimeout(() => controller.abort(), 120_000);
 
     try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const res = await providerFetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -200,4 +205,4 @@ Deno.serve(async (req: Request) => {
     await refundCredit();
     return json(req, { error: "Internal error" }, 500);
   }
-});
+}));

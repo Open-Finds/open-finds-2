@@ -1,4 +1,5 @@
 import { edgeAuthHeaders } from './edgeAuth';
+import { ProviderUnavailableError, asProviderError, providerFailure } from './providerErrors';
 import type { VenueType } from './supabase';
 
 /** The starting point typed in couldn't be found. The message is for the user. */
@@ -146,12 +147,12 @@ export function isGoogleMapsLink(url: string): boolean {
   }
 }
 
-export async function resolveGoogleMapsLink(url: string): Promise<ResolvedPlace | null> {
+export async function resolveGoogleMapsLink(url: string, attemptId?: string): Promise<ResolvedPlace | null> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
       method: 'POST',
       headers: await edgeAuthHeaders(),
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, ...(attemptId ? { attempt_id: attemptId } : {}) }),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -275,6 +276,87 @@ export async function findVenueAddress(
   } catch {
     return null;
   }
+}
+
+/** A Google place the user can choose from. Chosen by the user, so it is not verified by the app. */
+export type GooglePlaceChoice = { name: string; address: string; lat: number; lon: number; type?: VenueType | null };
+
+export type VerifiedPlace = { name: string; address: string; lat: number; lon: number; type?: VenueType | null };
+
+/**
+ * A name+address check: `match` only when Google confirmed exactly one place.
+ * Otherwise `reason` says whether several places fit ('ambiguous') or none did
+ * ('no_match'), and `candidates` are the Google places the user can choose from.
+ */
+export type VerifyResult = {
+  match: VerifiedPlace | null;
+  reason?: 'ambiguous' | 'no_match';
+  candidates: GooglePlaceChoice[];
+  /** The choices are only Google's closest results; nothing resembles the venue name. */
+  weak?: boolean;
+};
+
+function validChoice(value: unknown): value is GooglePlaceChoice {
+  const c = value as Partial<GooglePlaceChoice> | null;
+  return !!c && typeof c.name === 'string' && !!c.name.trim() && typeof c.address === 'string' && !!c.address.trim() &&
+    Number.isFinite(c.lat) && Number.isFinite(c.lon) && Math.abs(c.lat!) <= 90 && Math.abs(c.lon!) <= 180;
+}
+
+export async function verifyVenuePlaceDetailed(
+  input: { url: string } | { name: string; address: string; outdoor?: boolean; addressFromSource?: boolean },
+  attemptId?: string,
+): Promise<VerifyResult> {
+  // Anything that stops the check from running is a provider problem, not a
+  // verdict on the venue: only a completed answer without `verified: true` is "no match".
+  let res: Response;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({ ...input, verify: true, ...(attemptId ? { attempt_id: attemptId } : {}) }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    throw asProviderError(error);
+  }
+  if (!res.ok) throw await providerFailure(res);
+  const data = await res.json().catch(() => { throw new ProviderUnavailableError('unavailable', res.status); });
+  const candidates = Array.isArray(data?.candidates) ? data.candidates.filter(validChoice) : [];
+  if (data?.verified !== true || !data.name || !data.address ||
+    !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) {
+    const reason = data?.reason === 'ambiguous' ? 'ambiguous' : candidates.length ? 'no_match' : undefined;
+    return { match: null, reason, candidates, ...(data?.weak === true && candidates.length ? { weak: true } : {}) };
+  }
+  return { match: { ...data, address: tidyAddress(data.address) }, candidates: [] };
+}
+
+export async function verifyVenuePlace(
+  input: { url: string } | { name: string; address: string; outdoor?: boolean; addressFromSource?: boolean },
+  attemptId?: string,
+): Promise<VerifiedPlace | null> {
+  return (await verifyVenuePlaceDetailed(input, attemptId)).match;
+}
+
+/**
+ * "Change location": Google places matching what the user typed. Nothing is
+ * verified or saved by this; the user picks one place and then confirms the save.
+ */
+export async function searchGooglePlaces(query: string, attemptId?: string): Promise<GooglePlaceChoice[]> {
+  let res: Response;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({ search: true, query, ...(attemptId ? { attempt_id: attemptId } : {}) }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    throw asProviderError(error);
+  }
+  if (!res.ok) throw await providerFailure(res);
+  const data = await res.json().catch(() => { throw new ProviderUnavailableError('unavailable', res.status); });
+  return (Array.isArray(data?.candidates) ? data.candidates.filter(validChoice) : [])
+    .map((c: GooglePlaceChoice) => ({ ...c, address: tidyAddress(c.address) }));
 }
 
 export async function geocodeAddress(address: string): Promise<{ lat: number; lon: number } | null> {
