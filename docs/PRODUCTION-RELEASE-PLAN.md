@@ -55,7 +55,14 @@ Apply only `20261118120000` and `20261118140000` to production. This works on it
 - **Undo:** `supabase/rollback/20261118120000_close_sales_billing_helpers.rollback.sql` and `20261118140000_restrict_signed_in_functions.rollback.sql` (tested; see Backup and rollback below).
 - **Note:** run this way the two migrations get new version numbers in production's history. Re-running them later in Step D is harmless.
 
-### Step B: fix production's migration history (no schema change)
+### Step B: fix production's migration history (no schema change). DONE on production, 2026-11-19
+
+**Applied with the founder's approval, after the verified backup.** 11 rows were added to `supabase_migrations.schema_migrations` (versions `20260925120000` to `20261015120000`, names `stripe_billing` through `venue_photos`, `statements` left empty because nothing was run). Each row is tagged `created_by = 'history-repair-2026-11-19'`. History went from 36 to 47 rows; it now lists every migration through `20261015120000` plus the two Step A entries (`20261118134143`, `20261118134208`).
+- **Verified:** none of the 11 existed before; all 11 are listed afterwards; saved venues 521, plans 176, tables 31, functions 62, `public` policies 89 (the other 2 policies are in the `cron` schema), all unchanged. No structure or data was touched.
+- **Undo:** `delete from supabase_migrations.schema_migrations where created_by = 'history-repair-2026-11-19';`
+- **For Step D:** the repo's files `20261118120000` and `20261118140000` are the same changes as the two Step A entries (recorded under their apply times). Applying them again in Step D is harmless (rehearsed); or skip them.
+
+**Plan as written before it was applied:**
 Record the 11 unrecorded migrations as applied (names above) in `supabase_migrations.schema_migrations` (or `supabase migration repair --status applied`).
 - **Why it is safe:** the fingerprint comparison proves the database already equals them.
 - **Approval needed:** yes.
@@ -84,6 +91,7 @@ Build a throwaway database to the production-equivalent schema, load synthetic r
 ### Backup and rollback (added 2026-11-19)
 
 **Backup.** I cannot create a database backup from here (no access to the dashboard's backup tools, and I will not copy private data into files). So the backup step is an explicit part of the release checklist:
+0. **BACKUP TAKEN AND VERIFIED, 2026-11-19 22:05:56 Sydney time.** The founder made a manual dump of production's `public` schema with `pg_dump` (custom format, 329 KB) and saved it outside the project at `C:\Users\Home\Documents\theunsaved-backups\production-before-release.dump`. It contains private user data: keep it out of Git and chat, and delete it once the release has been stable. Verified without reading any data: (a) a valid archive made from production (Postgres 17.6); 31 tables with data, 62 functions, 89 policies, which is production's exact shape; (b) restored into a throwaway database on the founder's PC, all 31 tables came back and every row count equals production's (for example saved venues 521, plans 176, stops 399, rsvps 116, profiles 34); (c) its own text shows the Step A fix is in it (sales and billing helpers granted to the service role only, guest functions still open, rating view caller rights, fixed search path). Limits: it covers the `public` schema only (not the sign-in users table, which none of the planned steps touch), so restoring it elsewhere reports expected errors on links to that table. It is a snapshot from 22:05 on 19 Nov: **take a fresh dump immediately before Step D** because people keep adding data.
 1. **Founder confirmed on 2026-11-19 that the Supabase free plan has no backups.** Step A went ahead without one because it changes no data (see Step A). **Before Step B and Step D, a backup is still needed** because Step D adds a column and flags rows. Options: upgrade the project to a plan with daily backups for the release window, or take a manual database dump under the founder's own login with the Supabase CLI (`supabase db dump`, schema and data; never paste keys into chat) and store it safely, since it holds private data. No production step that touches data runs until one of these is done.
 2. **Before each step I record the "before" numbers** (saved venues 520, plans 175, 142 unowned plans, 31 tables, settings `premium_unlocked` and `visit_rate_cents`) and run `scripts/schema-fingerprint.sql`, so any change can be seen.
 3. The migrations never delete rows. The only data they write is a flag on the 7 duplicate saved-venue groups and two settings rows, all covered by the rollbacks.
