@@ -126,6 +126,56 @@ it.each([
   expect(hasSourceAddress(progress, fullAddress + ', Australia')).toBe(true);
 });
 
+describe('free evidence for venues with no street address', () => {
+  const link = 'https://www.instagram.com/reel/test/';
+
+  it('uses the suburb a TikTok creator tagged, so Google can be asked by name', async () => {
+    const tiktok = 'https://vt.tiktok.com/test/';
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({
+      platform: 'tiktok', url: tiktok, fetched: true, oembedTitle: 'free drink at @Makers Daily',
+      location: { name: 'Chatswood', address: 'New South Wales, Australia', kind: 'Other Places' },
+    })).mockResolvedValueOnce(aiVenues({ name: 'Makers Daily', address: '', type: 'food' }));
+    await expect(extractVenuesFromLink(tiktok, { verifySeparately: true }))
+      .resolves.toMatchObject([{ name: 'Makers Daily', address: 'Chatswood, New South Wales, Australia' }]);
+  });
+
+  it('reads the address from the venue\'s own Instagram profile when the caption only has its @handle', async () => {
+    const progress = {};
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({
+      platform: 'instagram', url: link, fetched: true, handle: 'foodie', ogDescription: 'Banh mi at @duchuongsandwiches so good',
+    })).mockResolvedValueOnce(aiVenues({ name: 'Du Chuong Sandwiches', address: '', type: 'food' }))
+      .mockResolvedValueOnce(Response.json({
+        platform: 'instagram', url: 'https://www.instagram.com/duchuongsandwiches/', fetched: true,
+        ogDescription: '1,200 Followers, 10 Following, 40 Posts - Du Chuong Sandwiches (@duchuongsandwiches) on Instagram: "Banh mi Shop 3/45 Bunnerong Rd, Eastgardens NSW | Open daily"',
+      }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress }))
+      .resolves.toMatchObject([{ name: 'Du Chuong Sandwiches', address: 'Shop 3/45 Bunnerong Rd, Eastgardens NSW' }]);
+    expect(String(vi.mocked(fetch).mock.calls[2][1]?.body)).toContain('instagram.com/duchuongsandwiches/');
+    expect(hasSourceAddress(progress, 'Shop 3/45 Bunnerong Rd, Eastgardens NSW')).toBe(true);
+  });
+
+  it('keeps a venue without evidence as it is when the profile cannot be read', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({
+      platform: 'instagram', url: link, fetched: true, ogDescription: 'Banh mi at @duchuongsandwiches',
+    })).mockResolvedValueOnce(aiVenues({ name: 'Du Chuong Sandwiches', address: '', type: 'food' }))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true }))
+      .resolves.toMatchObject([{ name: 'Du Chuong Sandwiches', address: '' }]);
+  });
+
+  it('takes a street address written for another country as the source address', async () => {
+    const progress = {};
+    const address = '215B Nguyen Trai, Cau Ong Lanh, Ho Chi Minh City, Vietnam';
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({
+      platform: 'instagram', url: link, fetched: true, ogDescription: 'Venue: Tran Pizza\nAddress: ' + address,
+    })).mockResolvedValueOnce(aiVenues({ name: 'Tran Pizza', address: '', type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress }))
+      .resolves.toMatchObject([{ name: 'Tran Pizza', address }]);
+    expect(hasSourceAddress(progress, address)).toBe(true);
+  });
+});
+
 it.each(['&#x2028;', '&#8232;', '\r\n'])('extracts the NGLE Cafe pin and postcode-free address with line break %j', async (lineBreak) => {
   const link = 'https://www.instagram.com/reel/DZmLwlpNQcs/';
   const ogDescription = 'Pho dipped focaccia in Sydney?! &#x1f92f; &#064;ngle.cafe in Bonnyrigg is a family-owned Vietnamese cafe putting a modern twist on traditional Vietnamese favourites.\n\n&#x1f4cd; NGLE Cafe' + lineBreak + '5 Rigg Pl, Bonnyrigg NSW \n\nWhat we tried:&#x2028;Pho-caccia $20';

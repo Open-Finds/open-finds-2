@@ -4,6 +4,7 @@ import { areaOf, findVenueAddress, hasStreetNumber, isAustralianAddress, isGoogl
 import { findSimilarVenues, type KnownVenue } from './venueMatch';
 import { edgeAuthHeaders } from './edgeAuth';
 import { asProviderError, providerFailure } from './providerErrors';
+import { areaFromLocationTag, fillAddressEvidence, isWrittenAddress, profileBio, type TagLocation } from './venueEvidence';
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -168,6 +169,10 @@ type MetaResult = {
   oembedAuthor: string | null;
   oembedHtml: string | null;
   fetched: boolean;
+  /** The place a creator tagged on a TikTok (often only a suburb or city). */
+  location?: TagLocation | null;
+  /** The page's own search keywords. */
+  keywords?: string | null;
 };
 
 /**
@@ -228,6 +233,8 @@ function extractionMessages(meta: MetaResult | null, link: string, caption?: Cap
     ['Caption evidence (unverified source data)', sourceEvidence, 500],
     ['Source URL', link, 650],
     ['Platform', [meta?.platform, meta?.contentType, meta?.handle, meta?.oembedAuthor].filter(Boolean).join(' / '), 250],
+    ['Location tag set by the creator (unverified)', meta?.location ? [meta.location.name, meta.location.address].filter(Boolean).join(', ') : '', 200],
+    ['Page keywords (unverified)', meta?.keywords, 300],
     ['Source title', meta?.ogTitle || meta?.pageTitle, 260],
     ['Caption or description', descriptions[0] && decodeCaption(descriptions[0]), 1250],
     ['Article excerpt', meta?.platform === 'website' ? articleExcerpt : '', 3200],
@@ -339,7 +346,8 @@ function readSocialCaption(meta: MetaResult | null | undefined): CaptionEvidence
       const pin = line.match(/^📍\s*([^,]+),\s*(\d.+)$/u);
       const splitPin = line.match(/^\u{1F4CD}\s*([^\d,][^,]*)$/u);
       const nextAddress = splitPin && lines[index + 1]?.match(captionAddress);
-      const label = line.match(/^(venue|address|location|type|category):\s*(.+)$/i);
+      const label = line.match(/^(venue|address|location|type|category):\s*(.+)$/i)
+        ?? line.match(/^\u{1F4CD}\s*(venue|address|location):\s*(.+)$/iu);
       const pinnedAddress = line.match(/^\u{1F4CD}\s*(\d.+)$/u);
       const entries = pin ? [['venue', pin[1]], ['address', pin[2]]] :
         nextAddress ? [['venue', splitPin[1]], ['address', nextAddress[0]]] :
@@ -372,9 +380,11 @@ function readSocialCaption(meta: MetaResult | null | undefined): CaptionEvidence
   const type = normalizeType(typeLabel?.size === 1 ? typeLabel.values().next().value : undefined)
     ?? normalizeType(name.replace(/café/gi, 'cafe').match(/\b(?:cafe|restaurant|dessert|gelato|bakery|bar|pub|brewery)\b/i)?.[0]);
   const street = location.match(captionAddress);
+  // Any other country: a written street address (a number, a street word, then more place parts) is the address as written.
+  const written = !street && !captionLocality.test(location) && isWrittenAddress(location);
   return {
     name, type,
-    address: street ? street[1] + ', ' + street[2] : undefined,
+    address: street ? street[1] + ', ' + street[2] : written ? location.replace(/[.\s]+$/, '') : undefined,
     locality: captionLocality.test(location) ? location : undefined,
   };
 }
@@ -395,10 +405,16 @@ function reconcileCaption(caption: CaptionEvidence, name: string, items: Extract
   return items.length > 1 ? [candidate, ...items.filter(item => captionKey(item.name) !== captionKey(name))] : [candidate];
 }
 
-export type VenueExtractionProgress = { metadata?: MetaResult; structuredAddress?: boolean };
+export type VenueExtractionProgress = {
+  metadata?: MetaResult;
+  structuredAddress?: boolean;
+  /** Addresses read from a venue's own profile bio: written by the venue, so source-backed. */
+  sourceAddresses?: string[];
+};
 
 export function hasSourceAddress(progress: VenueExtractionProgress | undefined, address: string): boolean {
   if (progress?.structuredAddress) return true;
+  if (progress?.sourceAddresses?.some(found => addressKey(found) === addressKey(address))) return true;
   const meta = progress?.metadata;
   const caption = readSocialCaption(meta);
   if (caption) return !!caption.address && addressKey(caption.address) === addressKey(address);
@@ -490,6 +506,25 @@ export async function extractVenuesFromLink(
   }
 
   items.sort((a, b) => a.order - b.order);
+
+  // Free evidence before Google: a venue with no street address gets the address from its own profile bio,
+  // else the suburb the creator tagged, so Google can still be asked for it by name.
+  if (options?.verifySeparately && meta) {
+    const found = await fillAddressEvidence(items, {
+      texts: [meta.ogDescription, meta.oembedTitle, meta.metaDescription].map(text => text && decodeCaption(text)),
+      creatorHandle: meta.handle,
+      area: areaFromLocationTag(meta.location),
+      hasStreet: hasStreetNumber,
+      // Only Instagram handles name a profile page we can read; the lookup is free and its failure just means no extra evidence.
+      fetchBio: meta.platform === 'instagram'
+        ? async handle => {
+          const profile = await fetchPageMeta(`https://www.instagram.com/${handle}/`, false, attemptId);
+          return profileBio(profile?.ogDescription ?? profile?.metaDescription);
+        }
+        : async () => null,
+    });
+    if (found.length && options.progress) options.progress.sourceAddresses = [...(options.progress.sourceAddresses ?? []), ...found];
+  }
 
   if (ambiguous) return items.map(item => ({ ...item, requiresManualCorrection: true }));
   if (caption?.name) return reconcileCaption(caption, caption.name, items);

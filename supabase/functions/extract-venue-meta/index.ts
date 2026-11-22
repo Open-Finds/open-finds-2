@@ -35,7 +35,30 @@ type MetaResult = {
   oembedAuthor: string | null;
   oembedHtml: string | null;
   fetched: boolean;
+  /** The place the creator tagged on a TikTok (often only a suburb or city), when the page carries one. */
+  location?: { name: string; address: string; kind: string } | null;
+  /** The page's own search keywords: creators often list the venue and its suburb here. */
+  keywords?: string | null;
 };
+
+/**
+ * The location tag in a TikTok page: a flat "poi" object with a name, an address
+ * and a kind ("City", "Other Places", "Restaurant" ...). Only those three short
+ * strings are read, never anything else on the page.
+ */
+export function tiktokLocation(html: string): { name: string; address: string; kind: string } | null {
+  const found = html.match(/"poi":(\{[^{}]{0,800}\})/);
+  if (!found) return null;
+  try {
+    const poi = JSON.parse(found[1]) as Record<string, unknown>;
+    const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+    const name = text(poi.name, 120);
+    if (!name) return null;
+    return { name, address: text(poi.address, 200), kind: text(poi.ttTypeNameTiny, 40) };
+  } catch {
+    return null;
+  }
+}
 
 function detectPlatform(url: string): Platform {
   const lower = url.toLowerCase();
@@ -112,6 +135,7 @@ function extractMeta(html: string): {
   metaDescription: string | null;
   jsonLd: string | null;
   rawText: string | null;
+  keywords: string | null;
 } {
   const getMeta = (property: string): string | null => {
     const re = new RegExp(
@@ -136,6 +160,7 @@ function extractMeta(html: string): {
   const ogDescription = getMeta("og:description");
   const ogSiteName = getMeta("og:site_name");
   const metaDescription = getMeta("description");
+  const keywords = getMeta("keywords")?.trim().slice(0, 400) || null;
 
   // Extract JSON-LD blocks
   const jsonLdMatches = html.matchAll(
@@ -164,7 +189,7 @@ function extractMeta(html: string): {
   if (text.length > 6000) text = text.slice(0, 6000);
   const rawText = text || null;
 
-  return { ogTitle, ogDescription, ogSiteName, pageTitle, metaDescription, jsonLd, rawText };
+  return { ogTitle, ogDescription, ogSiteName, pageTitle, metaDescription, jsonLd, rawText, keywords };
 }
 
 async function fetchWithHeaders(
@@ -546,6 +571,8 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
       oembedAuthor,
       oembedHtml,
       fetched: true,
+      location: platform === "tiktok" ? tiktokLocation(html) : null,
+      keywords: meta.keywords,
     };
 
     stageLog("extract-venue-meta", "extract", started, finalOgDescription ? "ok" : "no_caption", {

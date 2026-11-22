@@ -38,6 +38,27 @@ beforeEach(() => {
   mocks.rpc.mockResolvedValue({ data: { allowed: true }, error: null });
 });
 
+describe('extract-venue-meta location and keywords', () => {
+  beforeEach(() => boot());
+
+  it('reads the location a TikTok creator tagged and the page keywords, and nothing else from the page', async () => {
+    const poi = '{"name":"Chatswood","address":"New South Wales, Australia","city":"","id":"123","ttTypeNameTiny":"Other Places"}';
+    answer({
+      'tiktok.com/oembed': () => Response.json({ title: 'matcha at @Makers Daily', author_name: 'Sydney Seens', author_unique_id: 'sydney.seens' }),
+      'tiktok.com/@sydney.seens': () => html(`<html><head><meta name="keywords" content="sydney matcha, chatswood eats"></head><body><script>{"itemStruct":{"poi":${poi}}}</script></body></html>`),
+    });
+    const body = await (await request('https://www.tiktok.com/@sydney.seens/video/1')).json();
+    expect(body.location).toEqual({ name: 'Chatswood', address: 'New South Wales, Australia', kind: 'Other Places' });
+    expect(body.keywords).toBe('sydney matcha, chatswood eats');
+  });
+
+  it('has no location when the page carries no tag, and ignores a malformed one', async () => {
+    answer({ 'tiktok.com/oembed': () => Response.json({ title: 'x' }), 'tiktok.com/@a': () => html('<html>{"poi":{"name":}</html>') });
+    const body = await (await request('https://www.tiktok.com/@a/video/2')).json();
+    expect(body.location).toBeNull();
+  });
+});
+
 describe('extract-venue-meta', () => {
   beforeEach(() => boot());
 
