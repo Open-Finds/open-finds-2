@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
+import { stageLog } from "../_shared/stagelog.ts";
 import { assertPublicUrl, followRedirects, safeFetch } from "../_shared/urlguard.ts";
 import {
   configureStagingProviders, EXTRACT_VENUE_META, isStagingProviderTarget, providerFetch, withStagingProviderControls,
@@ -365,6 +366,7 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
     return json(req, { error: "Method not allowed" }, 405);
   }
 
+  const started = Date.now();
   try {
     // Fetching arbitrary URLs on a caller's behalf is only offered to
     // signed-in users, and is capped per user.
@@ -373,6 +375,7 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
 
     const limit = await consumeRateLimit("extract-venue-meta", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS);
     if (!limit.allowed) {
+      stageLog("extract-venue-meta", "extract", started, "rate_limited");
       return json(
         req,
         { error: "Rate limit reached. Try again shortly." },
@@ -388,6 +391,7 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
 
     const guard = assertPublicUrl(url);
     if (!guard.ok) {
+      stageLog("extract-venue-meta", "extract", started, "url_rejected");
       return json(req, { error: guard.error }, 400);
     }
 
@@ -405,7 +409,12 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
         const embed = await fetchWithHeaders("https://www.instagram.com/p/" + shortcode + "/embed/captioned/", false);
         const captionHtml = embed?.match(/<div\b[^>]*class=["']Caption["'][^>]*>([\s\S]*?)<\/div>/i)?.[1];
         const caption = captionHtml ? extractMeta(captionHtml).rawText?.slice(0, 1200) : null;
-        if (caption) return json(req, { platform, contentType, url: target, handle, ogDescription: caption, fetched: true });
+        if (caption) {
+          stageLog("extract-venue-meta", "extract", started, "caption_embed", {
+            platform, content: contentType, caption_chars: caption.length, has_handle: !!handle,
+          });
+          return json(req, { platform, contentType, url: target, handle, ogDescription: caption, fetched: true });
+        }
       }
     }
 
@@ -485,6 +494,10 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
         oembedHtml,
         fetched: oembedTitle !== null || oembedAuthor !== null,
       };
+      stageLog("extract-venue-meta", "extract", started, result.fetched ? "oembed_only" : "nothing_fetched", {
+        platform, content: contentType, caption_chars: oembedTitle?.length ?? 0, has_handle: !!creatorHandle,
+        tiktok_oembed: tiktokOembed !== null, meta_oembed: metaOembed !== null, html: false,
+      });
       return json(req, result);
     }
 
@@ -535,8 +548,13 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
       fetched: true,
     };
 
+    stageLog("extract-venue-meta", "extract", started, finalOgDescription ? "ok" : "no_caption", {
+      platform, content: contentType, caption_chars: finalOgDescription?.length ?? 0, has_handle: !!result.handle,
+      tiktok_oembed: tiktokOembed !== null, meta_oembed: metaOembed !== null, html: true,
+    });
     return json(req, result);
   } catch (err) {
+    stageLog("extract-venue-meta", "extract", started, "internal_error");
     console.error("[extract-venue-meta] internal error", String(err));
     return json(req, { error: "Internal error" }, 500);
   }

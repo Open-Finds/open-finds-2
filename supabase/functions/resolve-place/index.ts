@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
+import { stageLog } from "../_shared/stagelog.ts";
 import { type Coord, geocodeAU, getGoogleMapsApiKey, logGoogleError } from "../_shared/maps.ts";
 import {
   configureStagingProviders, isStagingProviderTarget, providerFetch, RESOLVE_PLACE, withStagingProviderControls,
@@ -611,6 +612,7 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
     return json(req, { error: "Method not allowed" }, 405);
   }
 
+  const started = Date.now();
   try {
     // This endpoint spends Google Maps quota, so it requires a real signed-in
     // user rather than the public anon key, and is capped per user.
@@ -642,6 +644,7 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
         return json(req, { error: "A place search of 1–200 characters is required" }, 400);
       }
       const places = await searchPlaces(query.trim(), null, await resolverMapsKey(), 5);
+      stageLog("resolve-place", "search", started, places.length ? "found" : "none", { count: places.length });
       return json(req, { candidates: toCandidates(places, 5) }, 200, { "Cache-Control": "no-store" });
     }
 
@@ -651,7 +654,11 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
         (Deno.env.get("STAGING_PROVIDER_USERS") ?? "").split(",").some((id) => id.trim() === auth.user.id);
       const diagnostics: VerifyDiagnostics | undefined = canDiagnose ? { outcome: "insufficient_source_evidence" } : undefined;
       // A non-match carries its reason and Google's candidates only when there are some; otherwise it is the plain empty result.
-      const verificationResponse = (place: PlaceResult | null, outcome: VerifyOutcome = {}) => {
+      const verificationResponse = (place: PlaceResult | null, outcome: VerifyOutcome = {}, mode = "name_address") => {
+        stageLog("resolve-place", "verify", started, place ? "match" : (outcome.reason ?? "empty"), {
+          mode, count: outcome.candidates?.length ?? 0, weak: outcome.weak === true, outdoor: outdoor === true,
+          source_address: addressFromSource === true,
+        });
         const choices = outcome.candidates?.length
           ? { reason: outcome.reason, candidates: outcome.candidates, ...(outcome.weak ? { weak: true } : {}) } : {};
         const body = place ?? { ...EMPTY, ...choices };
@@ -660,7 +667,7 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
           : json(req, body);
       };
       if (typeof url === "string" && url.length <= 2048 && isMapsUrl(url)) {
-        return verificationResponse(await verifyPlace({ url }, await resolverMapsKey(), diagnostics));
+        return verificationResponse(await verifyPlace({ url }, await resolverMapsKey(), diagnostics), {}, "maps_link");
       }
       if (typeof name !== "string" || typeof address !== "string" || !name.trim() || name.length > 200 || !address.trim() || address.length > 500) {
         return json(req, { error: "A Maps link or venue name and address are required" }, 400);
@@ -683,8 +690,11 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
     }
 
     const apiKey = await resolverMapsKey();
-    return json(req, await resolve(url.trim(), apiKey));
+    const resolved = await resolve(url.trim(), apiKey);
+    stageLog("resolve-place", "resolve_link", started, resolved.address ? "found" : resolved.name ? "name_only" : "none");
+    return json(req, resolved);
   } catch (err) {
+    stageLog("resolve-place", "request", started, "internal_error");
     // Upstream/config detail is logged, not returned — error text from the
     // Maps client can leak key state and internal identifiers.
     console.error("[resolve-place] internal error", String(err));
