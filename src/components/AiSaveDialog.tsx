@@ -26,14 +26,14 @@ const serviceProblem = {
 const isVerified = (venue: { lat?: number | null; lon?: number | null }) => venue.lat != null && venue.lon != null;
 
 /** The one line under an unverified venue, in plain words. A venue with no street gets a different line. */
-export function unverifiedNote(venue: { address: string }): string {
+function unverifiedNote(venue: { address: string }): string {
   return hasStreetNumber(venue.address)
     ? 'AI Save might not be accurate. Check the address before you go.'
     : 'AI Save found the area only. Tap Edit to add the street address.';
 }
 
 /** What a friend reads next to a shared venue that Google has not confirmed. */
-export const unverifiedShareLine = 'Address not verified: check it before you go.';
+const unverifiedShareLine = 'Address not verified: check it before you go.';
 
 export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
   link: string;
