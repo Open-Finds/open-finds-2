@@ -43,7 +43,38 @@ export type SharedVenueProgress = {
   attemptId?: string;
   /** The AI with web search has already been asked for this link, so it is not asked again. */
   searched?: boolean;
+  /** A post that names several venues: each one, checked against Google. Kept so a reopened dialog does not check again. */
+  rows?: VenueRow[];
 };
+
+/** One venue from a post that names several: the details to save, and whether Google confirmed them. */
+export type VenueRow = { venue: SharedVenue; verified: boolean };
+
+/** The most venues taken from one post. */
+export const MAX_VENUES = 5;
+
+/**
+ * Checks each venue against Google at the same time. One that Google cannot match stays in the list as the AI read it,
+ * unconfirmed, so nothing is lost. Only if every check fails is the failure reported (a service problem).
+ */
+async function verifyEach(items: ExtractedVenueItem[], link: string, attemptId: string | undefined, identification?: VenueExtractionProgress): Promise<VenueRow[]> {
+  const read = (item: ExtractedVenueItem): SharedVenue =>
+    ({ name: item.name, address: item.address, type: item.type, link, lat: null, lon: null, tags: item.tags });
+  const settled = await Promise.allSettled(items.map(async (item): Promise<VenueRow> => {
+    if (!item.address.trim()) return { venue: read(item), verified: false };
+    const check = await verifyVenuePlaceDetailed({
+      name: item.name, address: item.address, outdoor: item.type === 'activity',
+      addressFromSource: hasSourceAddress(identification, item.address),
+    }, attemptId);
+    const match = check.match;
+    return match
+      ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon }, verified: true }
+      : { venue: read(item), verified: false };
+  }));
+  const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (failures.length === settled.length) throw failures[0].reason;
+  return settled.map((result, index) => result.status === 'fulfilled' ? result.value : { venue: read(items[index]), verified: false });
+}
 
 /** The AI found at least one venue with something to look up: a street address or an area. */
 function hasAddressEvidence(candidates: ExtractedVenueItem[]): boolean {
@@ -80,6 +111,8 @@ export type SharedVenueResult = {
   choices?: ExtractedVenueItem[];
   saved?: SavedVenue;
   venue?: SharedVenue;
+  /** A post that names several venues (up to MAX_VENUES), each checked against Google. */
+  rows?: VenueRow[];
   issue?: SharedVenueIssue;
 };
 
@@ -124,6 +157,12 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
         progress.searched = true;
         progress.candidates = await identify(true);
       }
+    }
+    // A post that names several venues: check each one, and let the user tick which to save.
+    if (!mapsLink && !progress.verified && (progress.rows || (progress.candidates?.length ?? 0) > 1)) {
+      stage = 'verify';
+      progress.rows ??= await verifyEach((progress.candidates ?? []).slice(0, MAX_VENUES), url, progress.attemptId, progress.identification);
+      return { rows: progress.rows, candidates: progress.candidates ?? [] };
     }
     if (!progress.verified) {
       stage = 'verify';

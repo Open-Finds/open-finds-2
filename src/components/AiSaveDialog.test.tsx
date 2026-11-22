@@ -255,3 +255,60 @@ describe('Saving and sharing a venue Google has not confirmed', () => {
     expect(found).not.toHaveTextContent('Test cafe');
   });
 });
+
+describe('A post that names several venues', () => {
+  beforeEach(() => vi.resetAllMocks());
+  const alpha = { venue: { ...venue, name: 'Alpha', lat: 1, lon: 2 }, verified: true };
+  const beta = { venue: { ...venue, name: 'Beta', address: '2 Test St, Sydney NSW', lat: null, lon: null }, verified: false };
+  const gamma = { venue: { ...venue, name: 'Gamma', address: '', lat: null, lon: null }, verified: false };
+  const startRows = async (onSaved = vi.fn()) => {
+    mocks.identifySharedVenue.mockResolvedValueOnce({ rows: [alpha, beta, gamma], candidates: [] });
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} onSaved={onSaved} />));
+    return { onSaved };
+  };
+  const box = (name: string) => screen.getByRole('checkbox', { name: `Save ${name}` });
+
+  it('lists every venue, with the ones Google confirmed ticked and the rest left to the user', async () => {
+    await startRows();
+    expect(screen.getByText('We found 3 venues. Tick the ones to save.')).toBeInTheDocument();
+    expect(box('Alpha')).toHaveAttribute('aria-checked', 'true');
+    expect(box('Beta')).toHaveAttribute('aria-checked', 'false');
+    expect(box('Gamma')).toBeDisabled();
+    expect(screen.getByText('Confirmed on Google Maps')).toBeInTheDocument();
+    expect(screen.getByText('AI Save might not be accurate. Check the address before you go.')).toBeInTheDocument();
+    expect(screen.getByText('This venue cannot be saved without an address.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save selected (1)' })).toBeEnabled();
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('saves only the ticked venues, then offers Quick Share for each saved one and comes back to the list', async () => {
+    mocks.saveSharedVenue.mockImplementation(async (details: { name: string }) => ({ ...saved, name: details.name }));
+    const { onSaved } = await startRows();
+    fireEvent.click(box('Beta'));
+    expect(screen.getByRole('button', { name: 'Save selected (2)' })).toBeEnabled();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save selected (2)' })));
+    expect(mocks.saveSharedVenue.mock.calls).toEqual([[alpha.venue, link], [beta.venue, link]]);
+    expect(onSaved).toHaveBeenCalledOnce();
+    expect(screen.getAllByText('Saved to My Venues')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Save selected (0)' })).toBeDisabled();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quick Share' })[0]);
+    expect(screen.getByText('Recommend this venue to a friend.')).toBeInTheDocument();
+    expect(screen.getByText('Alpha')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('group', { name: 'Venues found' })).toBeInTheDocument();
+  });
+
+  it('keeps a venue that failed to save ticked, says so, and saves only that one on the next try', async () => {
+    mocks.saveSharedVenue.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce(saved);
+    await startRows();
+    fireEvent.click(box('Beta'));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save selected (2)' })));
+    expect(screen.getByRole('alert')).toHaveTextContent('One venue could not be saved');
+    expect(screen.getByRole('button', { name: 'Save selected (1)' })).toBeEnabled();
+    mocks.saveSharedVenue.mockResolvedValueOnce(saved);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save selected (1)' })));
+    expect(mocks.saveSharedVenue).toHaveBeenCalledTimes(3);
+    expect(mocks.saveSharedVenue.mock.calls[2][0]).toBe(alpha.venue);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});

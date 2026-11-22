@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendation, shareRecommendationOrigin, type ExtractedVenueItem, type SharedVenue, type SharedVenueProgress, type SharedVenueResult } from '../lib/aiSave';
+import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendation, shareRecommendationOrigin, type ExtractedVenueItem, type SharedVenue, type SharedVenueProgress, type SharedVenueResult, type VenueRow } from '../lib/aiSave';
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
 import { ProviderUnavailableError, waitText } from '../lib/providerErrors';
@@ -71,6 +71,10 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   const [shareUrl, setShareUrl] = useState('');
   const [shareBusy, setShareBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  /** A post that names several venues: each one, to tick and save. */
+  const [rows, setRows] = useState<VenueRow[]>();
+  const [ticked, setTicked] = useState<Set<number>>(new Set());
+  const [savedRows, setSavedRows] = useState<Record<number, SavedVenue>>({});
   const progress = useRef<SharedVenueProgress>(initialProgress ?? {});
   const progressListener = useRef(onProgress);
   progressListener.current = onProgress;
@@ -86,6 +90,9 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
       if (!active) return;
       if (result.saved) setSaved(result.saved);
       progressListener.current?.(progress.current);
+      setRows(result.rows);
+      // Venues Google confirmed start ticked; the rest are the user's choice.
+      setTicked(new Set((result.rows ?? []).flatMap((row, index) => row.verified && row.venue.address.trim() ? [index] : [])));
       setVenue(result.venue);
       setCandidates(result.candidates);
       const candidate = result.venue ?? result.candidates[0];
@@ -206,6 +213,33 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     }
   };
 
+  const toggleRow = (index: number) => setTicked(current => {
+    const next = new Set(current);
+    if (!next.delete(index)) next.add(index);
+    return next;
+  });
+
+  /** Save every ticked venue that is not saved yet, one after another. A failure leaves that venue ticked to try again. */
+  const saveSelected = async () => {
+    if (!rows || saving) return;
+    setSaving(true);
+    setError('');
+    const done: Record<number, SavedVenue> = { ...savedRows };
+    let failed = 0;
+    for (const index of [...ticked].sort((a, b) => a - b)) {
+      if (done[index]) continue;
+      try {
+        done[index] = await saveSharedVenue(rows[index].venue, link);
+      } catch {
+        failed++;
+      }
+    }
+    setSavedRows(done);
+    if (Object.keys(done).length > Object.keys(savedRows).length) onSaved?.();
+    if (failed) setError(failed === 1 ? 'One venue could not be saved. Try again.' : `${failed} venues could not be saved. Try again.`);
+    setSaving(false);
+  };
+
   const send = async () => {
     if (!venue || shareBusy) return;
     setShareBusy(true);
@@ -247,9 +281,10 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         if (swipe.current !== undefined && event.clientY - swipe.current > 60) onClose();
         swipe.current = undefined;
       }} onPointerCancel={() => { swipe.current = undefined; }}>
-        <DialogTitle>{sharing ? 'Quick Share' : choosing ? 'Confirm the venue' : compact ? 'AI Save or Create Plan' : 'Venue from link'}</DialogTitle>
+        <DialogTitle>{sharing ? 'Quick Share' : rows ? 'Venues from this link' : choosing ? 'Confirm the venue' : compact ? 'AI Save or Create Plan' : 'Venue from link'}</DialogTitle>
         <DialogDescription aria-live="polite">{busy ? (issue?.stage === 'verify' ? 'Verifying venue…' : 'Finding the venue…')
           : sharing ? 'Recommend this venue to a friend.'
+          : rows ? `We found ${rows.length} venues. Tick the ones to save.`
           : choosing ? (issue?.weak ? "We couldn't find an exact match. These are the closest Google results."
             : 'We found a few possible matches on Google Maps. Choose the correct one to save.')
           : editing ? 'Check the venue details.' : 'Choose what to do with this venue.'}</DialogDescription>
@@ -270,6 +305,33 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
           <Button variant="outline" disabled={shareBusy} onClick={() => { setSharing(false); setError(''); setCopied(false); }}>Back</Button>
           <Button disabled={shareBusy || !shareRecommendationOrigin()} onClick={() => void send()}>{copied ? 'Link copied' : 'Share recommendation'}</Button>
         </div>
+      </> : rows ? <>
+        <div role="group" aria-label="Venues found" className="grid gap-2">
+          {rows.map((row, index) => {
+            const done = savedRows[index];
+            const on = ticked.has(index) || !!done;
+            const hasAddress = !!row.venue.address.trim();
+            return <div key={index} className={cn('flex items-start gap-3 rounded-lg border p-3', on ? 'border-primary bg-primary-soft' : 'border-border bg-card')}>
+              <button type="button" role="checkbox" aria-checked={on} aria-label={`Save ${row.venue.name}`} disabled={!hasAddress || !!done || saving}
+                onClick={() => toggleRow(index)}
+                className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  on ? 'border-primary bg-primary text-primary-foreground' : 'border-border')}>
+                {on && <span aria-hidden="true">✓</span>}
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="break-words font-semibold">{row.venue.name}</p>
+                <p className="break-words text-sm">{hasAddress ? row.venue.address : 'No address found'}</p>
+                <p className="text-xs text-muted-foreground">{done ? 'Saved to My Venues'
+                  : row.verified ? 'Confirmed on Google Maps'
+                  : hasAddress ? unverifiedNote(row.venue) : 'This venue cannot be saved without an address.'}</p>
+              </div>
+              {done && <Button variant="outline" size="sm" onClick={() => { setVenue(row.venue); setShareUrl(''); setCopied(false); setSharing(true); setError(''); }}>Quick Share</Button>}
+            </div>;
+          })}
+        </div>
+        <Button disabled={saving || [...ticked].filter(index => !savedRows[index]).length === 0} onClick={() => void saveSelected()}>
+          {saving ? 'Saving…' : `Save selected (${[...ticked].filter(index => !savedRows[index]).length})`}
+        </Button>
       </> : choosing ? <>
         <div role="radiogroup" aria-label="Possible matches" className="grid gap-2">
           {choices.map((candidate, index) => {

@@ -145,13 +145,66 @@ describe('share venue persistence', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it('asks for review, without calling Google, when there are several candidates', async () => {
-    mocks.lookup.mockResolvedValue({ data: [], error: null });
-    mocks.extract.mockResolvedValue([venue, { ...venue, name: 'Other' }]);
-    const result = await identifySharedVenue(link);
-    expect(result.issue).toEqual({ stage: 'verify', retryable: false, reason: 'needs_review' });
-    expect(result.candidates).toHaveLength(2);
-    expect(mocks.match).not.toHaveBeenCalled();
+  describe('a post that names several venues', () => {
+    const item = (name: string, address = '1 Test St, Sydney NSW 2000') => ({ ...venue, name, address, order: 1, tags: ['pizza'] });
+
+    it('checks every venue with Google and returns one row each, confirmed or not', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('A'), item('B'), item('C')]);
+      mocks.match.mockImplementation(async (details: { name: string }) =>
+        details.name === 'B' ? null : { name: details.name + ' (Google)', address: '2 Real St', type: 'food', lat: 1, lon: 2 });
+      const result = await identifySharedVenue(link);
+      expect(result.issue).toBeUndefined();
+      expect(result.rows?.map(row => [row.venue.name, row.verified])).toEqual([['A (Google)', true], ['B', false], ['C (Google)', true]]);
+      expect(result.rows?.[0].venue).toMatchObject({ address: '2 Real St', lat: 1, lon: 2, link, tags: ['pizza'] });
+      expect(result.rows?.[1].venue).toMatchObject({ address: '1 Test St, Sydney NSW 2000', lat: null, lon: null });
+      expect(mocks.match).toHaveBeenCalledTimes(3);
+    });
+
+    it('takes at most five venues', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue(['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(name => item(name)));
+      mocks.match.mockResolvedValue(null);
+      const result = await identifySharedVenue(link);
+      expect(result.rows).toHaveLength(5);
+      expect(mocks.match).toHaveBeenCalledTimes(5);
+    });
+
+    it('keeps a venue with no address as an unconfirmed row without asking Google', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('A'), item('B', '')]);
+      mocks.match.mockResolvedValue({ name: 'A', address: '1 Test St', type: 'food', lat: 1, lon: 2 });
+      const result = await identifySharedVenue(link);
+      expect(result.rows?.map(row => row.verified)).toEqual([true, false]);
+      expect(mocks.match).toHaveBeenCalledOnce();
+    });
+
+    it('keeps the venues that were checked when one check fails, and reports a service problem only if all fail', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('A'), item('B')]);
+      mocks.match.mockRejectedValueOnce(new ProviderUnavailableError('unavailable', 503))
+        .mockResolvedValueOnce({ name: 'B', address: '1 Test St', type: 'food', lat: 1, lon: 2 });
+      const result = await identifySharedVenue(link);
+      expect(result.rows?.map(row => row.verified)).toEqual([false, true]);
+      mocks.match.mockRejectedValue(new ProviderUnavailableError('unavailable', 503));
+      const failed = await identifySharedVenue(link, { checkedSaved: true, candidates: [item('A'), item('B')] });
+      expect(failed.rows).toBeUndefined();
+      expect(failed.issue).toMatchObject({ reason: 'unavailable' });
+    });
+
+    it('does not check again when the dialog is reopened', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('A'), item('B')]);
+      mocks.match.mockResolvedValue(null);
+      const progress = {};
+      await identifySharedVenue(link, progress);
+      mocks.match.mockClear();
+      mocks.extract.mockClear();
+      const again = await identifySharedVenue(link, progress);
+      expect(again.rows).toHaveLength(2);
+      expect(mocks.match).not.toHaveBeenCalled();
+      expect(mocks.extract).not.toHaveBeenCalled();
+    });
   });
 
   it('reports a Google answer that matched nothing as no match', async () => {
