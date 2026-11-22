@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   shareRecommendationOrigin: () => 'https://www.theunsaved.app',
 }));
 vi.mock('../lib/aiSave', () => mocks);
+const store = vi.hoisted(() => ({ readProgress: vi.fn(), writeProgress: vi.fn() }));
+vi.mock('../lib/progressStore', () => store);
 vi.mock('../lib/supabase', () => ({ updateSavedVenue: vi.fn() }));
 vi.mock('../lib/openai', () => ({ UserFacingError: Error }));
 
@@ -310,5 +312,57 @@ describe('A post that names several venues', () => {
     expect(mocks.saveSharedVenue).toHaveBeenCalledTimes(3);
     expect(mocks.saveSharedVenue.mock.calls[2][0]).toBe(alpha.venue);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('Picking up where it stopped, and keeping tags', () => {
+  beforeEach(() => vi.resetAllMocks());
+  const needsReview = { stage: 'verify' as const, retryable: false, reason: 'needs_review' as const };
+
+  it('continues from the progress kept for this link instead of starting over', async () => {
+    const earlier = { candidates: [{ ...candidate, tags: ['pizza'] }], searched: true };
+    store.readProgress.mockResolvedValue(earlier);
+    mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} />));
+    expect(store.readProgress).toHaveBeenCalledWith(link);
+    expect(mocks.identifySharedVenue.mock.calls[0][1]).toBe(earlier);
+    expect(store.writeProgress).toHaveBeenCalledWith(link, earlier);
+  });
+
+  it('does not read kept progress when the caller already gave progress', async () => {
+    mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
+    const given = { candidates: [candidate] };
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} initialProgress={given} />));
+    expect(store.readProgress).not.toHaveBeenCalled();
+    expect(mocks.identifySharedVenue.mock.calls[0][1]).toBe(given);
+  });
+
+  it('saves the tags AI Save read with the Google place the user confirmed', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    const places = [{ ...candidate, name: 'Real Cafe', lat: 3, lon: 4 }];
+    mocks.identifySharedVenue.mockResolvedValueOnce({ candidates: places, choices: places, issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
+    const given = { candidates: [{ ...candidate, tags: ['pizza', 'vegan'] }] };
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} initialProgress={given} />));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm & Save' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Real Cafe', tags: ['pizza', 'vegan'] });
+  });
+
+  it('keeps the tags for the same venue', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    const given = { candidates: [{ ...candidate, tags: ['pizza'] }] };
+    mocks.identifySharedVenue.mockResolvedValueOnce({ candidates: [{ ...candidate, lat: null, lon: null }], issue: needsReview });
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} initialProgress={given} />));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Test cafe', tags: ['pizza'] });
+  });
+
+  it('drops the tags when the venue name is typed over by hand', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    const given = { candidates: [{ ...candidate, tags: ['pizza'] }] };
+    mocks.identifySharedVenue.mockResolvedValueOnce({ candidates: [{ ...candidate, lat: null, lon: null }], issue: needsReview });
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} initialProgress={given} />));
+    fireEvent.change(screen.getByLabelText('Venue name'), { target: { value: 'A different place' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'A different place', tags: [] });
   });
 });

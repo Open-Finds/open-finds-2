@@ -1,6 +1,6 @@
 import { isGoogleMapsLink, verifyVenuePlaceDetailed } from './apiKeys';
 import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
-import { supabase, type SavedVenue, type VenueType } from './supabase';
+import { supabase, updateSavedVenue, type SavedVenue, type VenueType } from './supabase';
 import { shareOrCopy } from './invite';
 import { ProviderUnavailableError, type ProviderReason } from './providerErrors';
 import { attemptIdFor, forgetAttempt } from './attemptId';
@@ -22,14 +22,27 @@ export function sourceUrl(input: string): string {
   return url.href;
 }
 
-export async function saveSharedVenue(venue: PublicVenue, link: string, position?: { lat: number; lon: number }): Promise<SavedVenue> {
+export async function saveSharedVenue(venue: PublicVenue & { tags?: string[] }, link: string, position?: { lat: number; lon: number }): Promise<SavedVenue> {
+  const { tags, ...details } = venue;
   const { data, error } = await supabase.rpc('save_shared_venue', {
-    p_venue: { ...venue, ...position, link: sourceUrl(link) },
+    p_venue: { ...details, ...position, link: sourceUrl(link) },
   });
   if (error || !data) throw error ?? new Error('Saving returned no venue.');
   // The save ends this AI Save attempt: the next intentional save of the link starts a new one.
   await forgetAttempt(sourceUrl(link));
-  return data as SavedVenue;
+  const row = data as SavedVenue;
+  // The tags AI Save read (cuisine, dietary, category) are what make "dessert" or "pho" find this venue later.
+  // They are added after the save; if that fails the venue is still saved.
+  const have = new Set((row.tags ?? []).map(tag => tag.toLowerCase()));
+  const missing = (tags ?? []).filter(tag => !have.has(tag.toLowerCase()));
+  if (missing.length) {
+    try {
+      return await updateSavedVenue(row.id, { tags: [...(row.tags ?? []), ...missing] });
+    } catch (cause) {
+      console.warn('[ai-save] the venue was saved but its tags were not', cause);
+    }
+  }
+  return row;
 }
 
 export type SharedVenue = PublicVenue & { lat?: number | null; lon?: number | null; tags?: string[] };

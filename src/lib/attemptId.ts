@@ -16,7 +16,7 @@ export const ATTEMPT_REUSE_MS = 25 * 60 * 1000;
 const PREFIX = 'unsaved:ai-save-attempt:';
 
 /** A short, stable fingerprint of the link, so the link itself is not written into storage keys. */
-function fingerprint(link: string): string {
+export function fingerprint(link: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < link.length; i++) {
     hash ^= link.charCodeAt(i);

@@ -7,6 +7,7 @@ import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
 import { ProviderUnavailableError, waitText } from '../lib/providerErrors';
 import { hasStreetNumber, searchGooglePlaces } from '../lib/apiKeys';
+import { readProgress, writeProgress } from '../lib/progressStore';
 import { fallbackImage } from '../lib/publicRecommendation.js';
 import { typeWithIcon } from '../lib/partners';
 import { cn } from '../lib/utils';
@@ -76,6 +77,8 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   const [ticked, setTicked] = useState<Set<number>>(new Set());
   const [savedRows, setSavedRows] = useState<Record<number, SavedVenue>>({});
   const progress = useRef<SharedVenueProgress>(initialProgress ?? {});
+  /** Progress handed in by the caller wins over progress kept on the phone. Read once, when the dialog opens. */
+  const hadInitialProgress = useRef(initialProgress !== undefined);
   const progressListener = useRef(onProgress);
   progressListener.current = onProgress;
   const job = useRef<{ attempt: number; promise: ReturnType<typeof identifySharedVenue> }>();
@@ -84,12 +87,23 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   useEffect(() => {
     let active = true;
     if (job.current?.attempt !== attempt) {
-      job.current = { attempt, promise: identifySharedVenue(link, progress.current) };
+      job.current = {
+        attempt,
+        promise: (async () => {
+          // Sharing the same link again, soon after, picks up where it stopped (the overlay closes when you switch apps).
+          if (attempt === 0 && !hadInitialProgress.current) {
+            const earlier = await readProgress(link);
+            if (earlier) progress.current = earlier;
+          }
+          return identifySharedVenue(link, progress.current);
+        })(),
+      };
     }
     void job.current.promise.then(result => {
       if (!active) return;
       if (result.saved) setSaved(result.saved);
       progressListener.current?.(progress.current);
+      void writeProgress(link, progress.current);
       setRows(result.rows);
       // Venues Google confirmed start ticked; the rest are the user's choice.
       setTicked(new Set((result.rows ?? []).flatMap((row, index) => row.verified && row.venue.address.trim() ? [index] : [])));
@@ -136,10 +150,19 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     retry(value => value + 1);
   };
 
+  /**
+   * The tags the AI read for this post (cuisine, dietary, category). They belong to the venue the post is about:
+   * kept for a Google place picked for it or the same name, dropped for a venue typed in from scratch.
+   */
+  const readTags = (venueName: string, fromGoogle: boolean): string[] => {
+    const first = progress.current.candidates?.[0];
+    return first && (fromGoogle || first.name.trim().toLowerCase() === venueName.trim().toLowerCase()) ? first.tags : [];
+  };
+
   const verifyCorrection = () => {
     progress.current = {
       checkedSaved: true,
-      candidates: [{ name: name.trim(), address: address.trim(), type, order: 1, tags: [] }],
+      candidates: [{ name: name.trim(), address: address.trim(), type, order: 1, tags: readTags(name, !!position) }],
     };
     setShareUrl('');
     setIssue({ stage: 'verify', retryable: true });
@@ -174,7 +197,9 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     setSaving(true);
     setError('');
     try {
-      const details: SharedVenue = { name: picked.name, address: picked.address, type: picked.type, link, lat: picked.lat, lon: picked.lon };
+      const details: SharedVenue = {
+        name: picked.name, address: picked.address, type: picked.type, link, lat: picked.lat, lon: picked.lon, tags: readTags(picked.name, true),
+      };
       setSaved(await saveSharedVenue(details, link));
       onSaved?.();
       setVenue(details);
@@ -358,6 +383,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         event.preventDefault();
         if (validDetails && !busy && !correctionSaved) void save({
           name: name.trim(), address: address.trim(), type, link, lat: position?.lat ?? null, lon: position?.lon ?? null,
+          tags: readTags(name, !!position),
         });
       }}>
         {googlePlaces.length > 0 && !saved && <fieldset className="grid gap-2 text-sm">

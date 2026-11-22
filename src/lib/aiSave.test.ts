@@ -3,7 +3,7 @@ import { guestSave, identifySharedVenue, publishVenue, readGuestSave, saveShared
 import { ProviderUnavailableError } from './providerErrors';
 
 const mocks = vi.hoisted(() => ({
-  extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), session: { id: 'test-user' },
+  extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), updateTags: vi.fn(), session: { id: 'test-user' },
 }));
 vi.mock('./openai', () => ({ extractVenuesFromLink: mocks.extract, hasSourceAddress: () => false }));
 vi.mock('./apiKeys', () => ({
@@ -16,6 +16,7 @@ vi.mock('./supabase', () => ({
     from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ limit: mocks.lookup }) }) }) }),
     rpc: mocks.rpc,
   },
+  updateSavedVenue: mocks.updateTags,
 }));
 
 const link = 'https://www.instagram.com/reel/test/';
@@ -28,6 +29,38 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.resetAllMocks();
   vi.unstubAllEnvs();
+});
+
+describe('tags saved with a venue', () => {
+  const row = { ...venue, id: 'persisted', tags: null as string[] | null };
+
+  it('adds the tags AI Save read after the save, so a search for them finds the venue', async () => {
+    mocks.rpc.mockResolvedValue({ data: row, error: null });
+    mocks.updateTags.mockResolvedValue({ ...row, tags: ['pizza', 'dessert'] });
+    const saved = await saveSharedVenue({ ...venue, tags: ['pizza', 'dessert'] }, link);
+    expect(mocks.rpc.mock.calls[0][1].p_venue).not.toHaveProperty('tags');
+    expect(mocks.updateTags).toHaveBeenCalledWith('persisted', { tags: ['pizza', 'dessert'] });
+    expect(saved.tags).toEqual(['pizza', 'dessert']);
+  });
+
+  it('adds only the tags the saved venue does not already have', async () => {
+    mocks.rpc.mockResolvedValue({ data: { ...row, tags: ['Pizza'] }, error: null });
+    mocks.updateTags.mockResolvedValue({ ...row, tags: ['Pizza', 'vegan'] });
+    await saveSharedVenue({ ...venue, tags: ['pizza', 'vegan'] }, link);
+    expect(mocks.updateTags).toHaveBeenCalledWith('persisted', { tags: ['Pizza', 'vegan'] });
+    mocks.updateTags.mockClear();
+    mocks.rpc.mockResolvedValue({ data: { ...row, tags: ['pizza'] }, error: null });
+    await saveSharedVenue({ ...venue, tags: ['pizza'] }, link);
+    await saveSharedVenue(venue, link);
+    expect(mocks.updateTags).not.toHaveBeenCalled();
+  });
+
+  it('still saves the venue when its tags cannot be added', async () => {
+    mocks.rpc.mockResolvedValue({ data: row, error: null });
+    mocks.updateTags.mockRejectedValue(new Error('offline'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await expect(saveSharedVenue({ ...venue, tags: ['pizza'] }, link)).resolves.toEqual(row);
+  });
 });
 
 describe('share venue persistence', () => {
