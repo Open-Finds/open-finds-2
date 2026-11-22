@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAddresses, extractVenuesFromLink, hasSourceAddress, normalizeType, setCreditPrompt, withoutKnownVenues, type ExtractedVenueItem } from './openai';
+import { checkAddresses, extractVenuesFromLink, hasSourceAddress, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
 
 // Google lookups for checkAddresses: answers by venue name, so each test says
 // what Google "knows". Unknown names find nothing.
@@ -124,6 +124,33 @@ it.each([
     .resolves.toMatchObject([{ name: 'Test Cafe', address: fullAddress, type: 'food' }]);
   expect(fetch).toHaveBeenCalledOnce();
   expect(hasSourceAddress(progress, fullAddress + ', Australia')).toBe(true);
+});
+
+describe('an address the AI did not really give', () => {
+  const link = 'https://www.instagram.com/reel/test/';
+
+  it.each([
+    'Shop location not explicitly provided in caption; externally known address: Strathfield, NSW, Australia (near Strathfield Station). Use full street address if known from source: not provided.',
+    'Not provided', 'unknown', 'N/A', 'Address not specified in the caption', 'x'.repeat(201),
+  ])('counts %#: that text as no address', address => {
+    expect(usableAddress(address)).toBe('');
+  });
+
+  it.each([
+    '1/1-3 The Boulevarde, Strathfield NSW', 'Chatswood, NSW', '215B Nguyen Trai, Cau Ong Lanh, Ho Chi Minh City, Vietnam',
+    'Unknown Pleasures Road, Sydney', 'Know How Lane, Newtown NSW',
+  ])('keeps a real address %#: %s', address => {
+    // Only filler and bare placeholders are dropped, never a real street that contains one of those words.
+    expect(usableAddress(address)).toBe(address);
+  });
+
+  it('gives a venue with filler text no address, so the next step (a search or the web AI) runs', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Dumplings' }))
+      .mockResolvedValueOnce(aiVenues({ name: 'Daruma Dumpling Beer House', address: 'Shop location not explicitly provided in caption; externally known address: Strathfield, NSW. Use full street address if known from source: not provided.', type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, search: false }))
+      .resolves.toMatchObject([{ name: 'Daruma Dumpling Beer House', address: '' }]);
+  });
 });
 
 describe('the plain AI and the AI with web search', () => {

@@ -414,6 +414,18 @@ function reconcileCaption(caption: CaptionEvidence, name: string, items: Extract
   return items.length > 1 ? [candidate, ...items.filter(item => captionKey(item.name) !== captionKey(name))] : [candidate];
 }
 
+/**
+ * A small model sometimes writes its reasoning where the address belongs ("Shop location not explicitly provided in
+ * caption; externally known address: ... Use full street address if known from source: not provided."). That is not an
+ * address: it would be searched on Google as one. It counts as no address, so the next step (a search or the web AI) runs.
+ */
+const NOT_AN_ADDRESS = /\b(?:not (?:explicitly |specifically )?(?:provided|specified|available|stated|given|mentioned|known)|externally known|no address|if known)\b/i;
+/** A bare placeholder: the whole value says "no address". A street that merely contains such a word is a real address. */
+const PLACEHOLDER = /^\s*(?:unknown|n\/?a|unspecified|none|null|undefined|-+)\s*\.?\s*$/i;
+export function usableAddress(address: string): string {
+  return address.length > 200 || NOT_AN_ADDRESS.test(address) || PLACEHOLDER.test(address) ? '' : address;
+}
+
 export type VenueExtractionProgress = {
   metadata?: MetaResult;
   structuredAddress?: boolean;
@@ -504,7 +516,7 @@ export async function extractVenuesFromLink(
     if (!item || typeof item !== 'object') continue;
     const obj = item as Record<string, unknown>;
     const name = typeof obj.name === 'string' ? obj.name.trim() : '';
-    const address = typeof obj.address === 'string' ? obj.address.trim() : '';
+    const address = usableAddress(typeof obj.address === 'string' ? obj.address.trim() : '');
     if (!name || (!address && !options?.verifySeparately)) continue;
     const type = normalizeType(obj.type);
     if (!type) continue;

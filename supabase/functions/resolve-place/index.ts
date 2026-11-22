@@ -343,9 +343,20 @@ const ADDRESS_FILLER = new Set([
   "australia", "vietnam", "viet", "nam", "nsw", "vic", "qld", "sa", "wa", "tas", "act", "nt", "the", "of", "and", "at", "near",
 ]);
 
+/**
+ * A state written out in full at the end of an address ("Chatswood, New South Wales, Australia") never appears that way
+ * in Google's address ("NSW"), so it is not evidence of place on either side. Taken off, it cannot make a good match
+ * look bad. Only at the end, so a venue called "Victoria Park" keeps its name.
+ */
+const TRAILING_STATE = /(?:^|,)\s*(new south wales|australian capital territory|northern territory|south australia|western australia|queensland|tasmania|victoria)\s*(?:,\s*australia)?\s*$/;
+const STATE_ABBREVIATION: Record<string, string> = {
+  "new south wales": "NSW", "australian capital territory": "ACT", "northern territory": "NT", "south australia": "SA",
+  "western australia": "WA", queensland: "QLD", tasmania: "TAS", victoria: "VIC",
+};
+
 /** The words of an address that say where it is, accents and punctuation ignored. */
 function addressWords(address: string): string[] {
-  return foldLatin(address.normalize("NFKC")).toLowerCase().split(/[^\p{L}\p{N}]+/u)
+  return foldLatin(address.normalize("NFKC")).toLowerCase().replace(TRAILING_STATE, " ").split(/[^\p{L}\p{N}]+/u)
     .filter((word) => word && !ADDRESS_FILLER.has(word));
 }
 
@@ -436,8 +447,14 @@ const AU_STATE = /\b(ACT|NSW|NT|QLD|SA|TAS|VIC|WA)\b/i;
 const AU_POSTCODE = /\b(\d{4})\b/;
 /** Two addresses in different states, or with different postcodes, are different places. */
 function stateAndPostcodeAgree(source: string, found: string): boolean {
-  const sourceState = source.match(AU_STATE)?.[1].toUpperCase();
-  const foundState = found.match(AU_STATE)?.[1].toUpperCase();
+  const stateOf = (text: string): string | undefined => {
+    const abbreviation = text.match(AU_STATE)?.[1].toUpperCase();
+    if (abbreviation) return abbreviation;
+    const full = text.toLowerCase().match(TRAILING_STATE)?.[1];
+    return full ? STATE_ABBREVIATION[full] : undefined;
+  };
+  const sourceState = stateOf(source);
+  const foundState = stateOf(found);
   if (sourceState && foundState && sourceState !== foundState) return false;
   const sourcePostcode = source.match(AU_POSTCODE)?.[1];
   const foundPostcode = found.match(AU_POSTCODE)?.[1];

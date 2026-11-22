@@ -101,6 +101,25 @@ describe('resolve-place verification', () => {
     expect(await (await request(input)).json()).toMatchObject(EMPTY);
   });
 
+  it('reads a state written out in full the same as Google\'s short form, in both directions', async () => {
+    places(place({ displayName: { text: 'Test Cafe' }, formattedAddress: '5 Victoria Ave, Chatswood NSW 2067, Australia' }));
+    const input = { ...details, address: 'Chatswood, New South Wales, Australia' };
+    expect(await (await request(input)).json()).toMatchObject({ verified: true, address: '5 Victoria Ave, Chatswood NSW 2067, Australia' });
+    // Another suburb, or the same suburb name in another state, is still not the place.
+    places(place({ formattedAddress: '5 King St, Newtown NSW 2042, Australia' }));
+    expect(await (await request(input)).json()).toMatchObject(EMPTY);
+    places(place({ formattedAddress: '5 High St, Chatswood VIC 3000, Australia' }));
+    expect(await (await request(input)).json()).toMatchObject(EMPTY);
+    places(place({ formattedAddress: '5 High St, Chatswood NSW 2067, Australia' }));
+    expect(await (await request({ ...details, address: 'Chatswood, Victoria, Australia' })).json()).toMatchObject(EMPTY);
+  });
+
+  it('does not treat a venue called Victoria Park as a state', async () => {
+    places(place({ displayName: { text: 'Victoria Park Cafe' }, formattedAddress: 'Victoria Park, Zetland NSW 2017, Australia' }));
+    expect(await (await request({ verify: true, name: 'Victoria Park Cafe', address: 'Victoria Park, Zetland NSW' })).json())
+      .toMatchObject({ verified: true });
+  });
+
   it('does not verify a suburb-only match when two places fit', async () => {
     places(place({ formattedAddress: '5 Victoria Ave, Chatswood NSW 2067, Australia' }),
       place({ id: 'ChIJsecond00001', formattedAddress: '88 Archer St, Chatswood NSW 2067, Australia' }));
