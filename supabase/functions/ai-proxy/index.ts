@@ -172,8 +172,9 @@ Deno.serve(withStagingProviderControls("ai-proxy", async (req: Request) => {
       payload.response_format = response_format;
     }
 
+    // A plain model answers in a few seconds; one with web search needs longer. Neither should hang for minutes.
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120_000);
+    const timeout = setTimeout(() => controller.abort(), requestedModel.endsWith(":online") ? 30_000 : 20_000);
 
     try {
       const res = await providerFetch("https://openrouter.ai/api/v1/chat/completions", {

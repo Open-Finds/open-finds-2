@@ -126,6 +126,31 @@ it.each([
   expect(hasSourceAddress(progress, fullAddress + ', Australia')).toBe(true);
 });
 
+describe('the plain AI and the AI with web search', () => {
+  const link = 'https://www.instagram.com/reel/test/';
+  const meta = () => Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Cafe in Chatswood' });
+  const aiRequest = () => JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body));
+
+  it('asks the plain model, and tells it not to search, when search is false', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(meta()).mockResolvedValueOnce(aiVenues({ name: 'Cafe', address: 'Chatswood', type: 'food' }));
+    await extractVenuesFromLink(link, { verifySeparately: true, search: false });
+    const request = aiRequest();
+    expect(request.model).toBe('openai/gpt-4o-mini');
+    expect(request.messages[0].content).toContain('cannot search the web');
+    expect(request.messages[0].content).not.toContain('web search when useful');
+  });
+
+  it('keeps the server default model, and the search instructions, otherwise', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(meta()).mockResolvedValueOnce(aiVenues({ name: 'Cafe', address: 'Chatswood', type: 'food' }));
+    await extractVenuesFromLink(link, { verifySeparately: true });
+    const request = aiRequest();
+    expect(request).not.toHaveProperty('model');
+    expect(request.messages[0].content).toContain('web search when useful');
+  });
+});
+
 describe('free evidence for venues with no street address', () => {
   const link = 'https://www.instagram.com/reel/test/';
 

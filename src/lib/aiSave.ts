@@ -41,7 +41,18 @@ export type SharedVenueProgress = {
   verified?: SharedVenue;
   /** Sent with every request of this attempt, so the server counts it once. Kept across retries and reopened dialogs. */
   attemptId?: string;
+  /** The AI with web search has already been asked for this link, so it is not asked again. */
+  searched?: boolean;
 };
+
+/** The AI found at least one venue with something to look up: a street address or an area. */
+function hasAddressEvidence(candidates: ExtractedVenueItem[]): boolean {
+  return candidates.length > 0 && candidates.some(item => !!item.address?.trim());
+}
+
+function sameVenues(a: ExtractedVenueItem[], b: ExtractedVenueItem[]): boolean {
+  return a.length === b.length && a.every((item, index) => item.name === b[index].name && item.address === b[index].address);
+}
 
 /**
  * Why AI Save stopped short of a verified venue.
@@ -99,45 +110,70 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
     }
     stage = 'identify';
     progress.attemptId ??= await attemptIdFor(link);
+    const url = link;
+    // Cheapest first: the plain AI reads the evidence; the AI with web search runs only when needed.
+    const identify = (search: boolean) => extractVenuesFromLink(url, {
+      verifySeparately: true, progress: progress.identification, attemptId: progress.attemptId, search,
+    });
+    let readByAI = false;
     if (!mapsLink && !progress.candidates) {
       progress.identification ??= {};
-      progress.candidates = await extractVenuesFromLink(link, {
-        verifySeparately: true, progress: progress.identification, attemptId: progress.attemptId,
-      });
+      readByAI = true;
+      progress.candidates = await identify(false);
+      if (!hasAddressEvidence(progress.candidates)) {
+        progress.searched = true;
+        progress.candidates = await identify(true);
+      }
     }
     if (!progress.verified) {
       stage = 'verify';
-      const candidates = progress.candidates ?? [];
-      if (!mapsLink && !candidates.length) {
-        progress.candidates = undefined;
-        return { candidates, issue: { stage: 'identify', retryable: true } };
-      }
-      const candidate = candidates.length === 1 ? candidates[0] : undefined;
-      const details = mapsLink && !candidate ? { url: link } : candidate?.address && !candidate.requiresManualCorrection
-        ? {
-          name: candidate.name, address: candidate.address, outdoor: candidate.type === 'activity',
-          addressFromSource: hasSourceAddress(progress.identification, candidate.address),
-        } : null;
-      if (!details) return { candidates, issue: { stage, retryable: false, reason: 'needs_review' } };
-      const check = await verifyVenuePlaceDetailed(details, progress.attemptId);
-      const match = check.match;
-      if (!match) {
-        // Google's places for this search are the choices to offer; nothing is saved from them automatically.
-        const choices: ExtractedVenueItem[] = check.candidates.map((place, index) => ({
-          name: place.name, address: place.address, type: place.type ?? candidate?.type ?? 'food',
-          order: index + 1, tags: [], lat: place.lat, lon: place.lon,
-        }));
-        return {
-          candidates: choices.length ? choices : candidates,
-          choices,
-          issue: { stage, retryable: false, reason: check.reason ?? 'no_match', ...(check.weak ? { weak: true } : {}) },
+      let candidates = progress.candidates ?? [];
+      for (;;) {
+        if (!mapsLink && !candidates.length) {
+          progress.candidates = undefined;
+          return { candidates, issue: { stage: 'identify', retryable: true } };
+        }
+        const candidate = candidates.length === 1 ? candidates[0] : undefined;
+        const details = mapsLink && !candidate ? { url: link } : candidate?.address && !candidate.requiresManualCorrection
+          ? {
+            name: candidate.name, address: candidate.address, outdoor: candidate.type === 'activity',
+            addressFromSource: hasSourceAddress(progress.identification, candidate.address),
+          } : null;
+        if (!details) return { candidates, issue: { stage, retryable: false, reason: 'needs_review' } };
+        const check = await verifyVenuePlaceDetailed(details, progress.attemptId);
+        const match = check.match;
+        if (!match) {
+          // The plain AI named a venue Google cannot match: ask the AI with web search once, then check Google again.
+          // Only for what the AI itself read in this call, never for details the user corrected.
+          if (readByAI && !progress.searched && !mapsLink && (check.reason ?? 'no_match') === 'no_match') {
+            progress.searched = true;
+            stage = 'identify';
+            const retry = await identify(true);
+            stage = 'verify';
+            if (hasAddressEvidence(retry) && !sameVenues(retry, candidates)) {
+              candidates = retry;
+              progress.candidates = retry;
+              continue;
+            }
+          }
+          // Google's places for this search are the choices to offer; nothing is saved from them automatically.
+          const choices: ExtractedVenueItem[] = check.candidates.map((place, index) => ({
+            name: place.name, address: place.address, type: place.type ?? candidate?.type ?? 'food',
+            order: index + 1, tags: [], lat: place.lat, lon: place.lon,
+          }));
+          return {
+            candidates: choices.length ? choices : candidates,
+            choices,
+            issue: { stage, retryable: false, reason: check.reason ?? 'no_match', ...(check.weak ? { weak: true } : {}) },
+          };
+        }
+        progress.verified = {
+          name: match.name, address: match.address, link,
+          type: match.type ?? candidate?.type ?? 'activity', lat: match.lat, lon: match.lon, tags: candidate?.tags ?? [],
         };
+        progress.candidates ??= [{ ...progress.verified, order: 1, tags: [] }];
+        break;
       }
-      progress.verified = {
-        name: match.name, address: match.address, link,
-        type: match.type ?? candidate?.type ?? 'activity', lat: match.lat, lon: match.lon, tags: candidate?.tags ?? [],
-      };
-      progress.candidates ??= [{ ...progress.verified, order: 1, tags: [] }];
     }
     return { venue: progress.verified, candidates: progress.candidates ?? [] };
   } catch (cause) {

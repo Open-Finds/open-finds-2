@@ -62,6 +62,69 @@ describe('share venue persistence', () => {
     });
   });
 
+  describe('the cheap AI first, the AI with web search only when needed', () => {
+    const real = { ...venue, name: 'Real Cafe', address: '9 Real St, Sydney NSW 2000' };
+    const searches = () => mocks.extract.mock.calls.map(([, options]) => options.search);
+
+    it('asks the plain AI first and does not search the web when Google confirms', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([venue]);
+      mocks.match.mockResolvedValue({ ...venue, lat: 1, lon: 2 });
+      await identifySharedVenue(link);
+      expect(searches()).toEqual([false]);
+    });
+
+    it('asks the AI with web search when the plain AI found nothing to look up', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([{ ...venue, address: '' }]).mockResolvedValueOnce([venue]);
+      mocks.match.mockResolvedValue({ ...venue, lat: 1, lon: 2 });
+      const result = await identifySharedVenue(link);
+      expect(searches()).toEqual([false, true]);
+      expect(result.venue).toBeDefined();
+    });
+
+    it('searches the web once when Google cannot match the plain answer, then checks Google again', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([venue]).mockResolvedValueOnce([real]);
+      mocks.match.mockResolvedValueOnce(null).mockResolvedValueOnce({ ...real, lat: 1, lon: 2 });
+      const progress = {};
+      const result = await identifySharedVenue(link, progress);
+      expect(searches()).toEqual([false, true]);
+      expect(mocks.match).toHaveBeenCalledTimes(2);
+      expect(result.venue).toMatchObject({ name: 'Real Cafe' });
+      expect(progress).toMatchObject({ searched: true });
+    });
+
+    it('never searches a second time, and offers Google choices when nothing matches', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([venue]).mockResolvedValueOnce([real]);
+      mocks.match.mockResolvedValue(null);
+      const progress = {};
+      const result = await identifySharedVenue(link, progress);
+      expect(searches()).toEqual([false, true]);
+      expect(result.issue).toMatchObject({ reason: 'no_match' });
+      mocks.extract.mockClear();
+      await identifySharedVenue(link, { ...progress, candidates: [venue] });
+      expect(mocks.extract).not.toHaveBeenCalled();
+    });
+
+    it('does not send the same answer to Google twice', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([venue]);
+      mocks.match.mockResolvedValue(null);
+      await identifySharedVenue(link);
+      expect(searches()).toEqual([false, true]);
+      expect(mocks.match).toHaveBeenCalledOnce();
+    });
+
+    it('never replaces details the user corrected', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.match.mockResolvedValue(null);
+      await identifySharedVenue(link, { checkedSaved: true, candidates: [venue] });
+      expect(mocks.extract).not.toHaveBeenCalled();
+    });
+  });
+
   it('does not save ambiguous, missing, or unverified addresses', async () => {
     mocks.lookup.mockResolvedValue({ data: [], error: null });
     mocks.extract.mockResolvedValueOnce([venue, { ...venue, name: 'Other' }])

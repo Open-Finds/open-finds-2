@@ -341,6 +341,22 @@ describe('what differs between the deployed functions', () => {
     });
   });
 
+  it('ai-proxy sends a request for the plain mini model as asked: no nano, no web search', async () => {
+    const m = await load(stagingEnv, 'AI_PROXY');
+    const plain = async () => {
+      await m.providerFetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST', body: JSON.stringify({ model: 'openai/gpt-4o-mini', temperature: 0, messages: [{ role: 'user', content: 'hi' }], response_format: { type: 'json_object' } }),
+      });
+      return Response.json({ ok: true });
+    };
+    expect((await m.withStagingProviderControls('ai-proxy', plain)(post({ purpose: 'extract' }))).status).toBe(200);
+    expect(sentBody()).toEqual({
+      model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }], temperature: 0, max_tokens: 1024,
+      provider: { allow_fallbacks: false }, response_format: { type: 'json_object' },
+    });
+    expect(sentBody()).not.toHaveProperty('plugins');
+  });
+
   it('the other functions rewrite AI calls to the mini model at temperature 0', async () => {
     const m = await load(stagingEnv, 'GEOCODE');
     await m.withStagingProviderControls('geocode', ai(m))(post({ a: 1 }));

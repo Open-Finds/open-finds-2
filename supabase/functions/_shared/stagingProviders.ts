@@ -486,7 +486,7 @@ function classify(url: URL): Kind {
 }
 
 function aiBody(v: StagingVariant, init: RequestInit): string {
-  let payload: { messages?: unknown; response_format?: unknown };
+  let payload: { messages?: unknown; response_format?: unknown; model?: unknown };
   try {
     payload = JSON.parse(String(init.body));
   } catch {
@@ -497,7 +497,9 @@ function aiBody(v: StagingVariant, init: RequestInit): string {
     messages.some((m) => !m || !["user", "system", "assistant"].includes(m.role) || typeof m.content !== "string") ||
     new TextEncoder().encode(JSON.stringify(messages)).length > 8e3) throw failure(413, "ai_input_limit");
   const responseFormat = payload.response_format ? { response_format: { type: "json_object" } } : {};
-  if (v.ai === "gpt-5-nano-exa") {
+  // A request for the plain model (no web search) is the cheap first try: it is sent as asked, never upgraded to a search.
+  // Every other request keeps the function's own rewrite.
+  if (v.ai === "gpt-5-nano-exa" && payload.model !== "openai/gpt-4o-mini") {
     return JSON.stringify({
       model: "openai/gpt-5-nano",
       messages,
