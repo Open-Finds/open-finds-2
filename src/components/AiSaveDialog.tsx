@@ -83,6 +83,9 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   progressListener.current = onProgress;
   const job = useRef<{ attempt: number; promise: ReturnType<typeof identifySharedVenue> }>();
   const swipe = useRef<number>();
+  /** When nothing could be confirmed, Google is searched once on its own so the user can tap a place instead of typing. */
+  const autoSearch = useRef<(query: string) => void>();
+  const autoSearched = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -123,6 +126,17 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
       // A search box that starts with what we know: the name we read, else the creator's handle as words.
       const handle = progress.current.identification?.metadata?.handle ?? '';
       setPlaceQuery(progress.current.candidates?.[0]?.name || handle.replace(/[._]+/g, ' ').trim());
+      // Nothing confirmed and no Google places to pick from, but the post named a venue: ask Google once, by that name and
+      // whatever place the post gave, and show the results to tap. Never from the creator's handle (that finds unrelated places),
+      // and never when the service itself is the problem.
+      const named = progress.current.candidates?.[0];
+      const serviceDown = !!result.issue?.reason && (result.issue.reason in serviceProblem || result.issue.reason === 'testing_limit');
+      if (!result.venue && !result.rows && !result.saved && !result.choices?.length && named?.name && !serviceDown && !autoSearched.current) {
+        autoSearched.current = true;
+        const query = [named.name, named.address].filter(Boolean).join(', ');
+        setPlaceQuery(query);
+        autoSearch.current?.(query);
+      }
       if (!result.issue) return;
       const { stage, cause, retryable, reason, retryAfterSeconds } = result.issue;
       // A service problem is never worded as a verdict on the venue.
@@ -170,25 +184,29 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   };
 
   /** Change location: Google places for what the user typed. Choosing one is still a separate Save. */
-  const searchPlaces = async () => {
-    const query = placeQuery.trim();
+  const searchPlaces = async (automatic?: string) => {
+    const query = (automatic ?? placeQuery).trim();
     if (!query || searching) return;
     setSearching(true);
-    setError('');
+    // An automatic search keeps the message already on screen; only a search the user asked for replaces it.
+    if (automatic === undefined) setError('');
     try {
       const found = await searchGooglePlaces(query, progress.current.attemptId);
-      setCandidates(found.map((place, index) => ({
-        name: place.name, address: place.address, type: place.type ?? 'food', order: index + 1, tags: [], lat: place.lat, lon: place.lon,
-      })));
-      if (!found.length) setError('Google Places found nothing for that search. Try another name, or save it as entered.');
+      if (found.length || automatic === undefined) {
+        setCandidates(found.map((place, index) => ({
+          name: place.name, address: place.address, type: place.type ?? 'food', order: index + 1, tags: [], lat: place.lat, lon: place.lon,
+        })));
+      }
+      if (!found.length && automatic === undefined) setError('Google Places found nothing for that search. Try another name, or save it as entered.');
     } catch (cause) {
-      setError(cause instanceof ProviderUnavailableError && cause.reason in serviceProblem
+      if (automatic === undefined) setError(cause instanceof ProviderUnavailableError && cause.reason in serviceProblem
         ? serviceProblem[cause.reason as keyof typeof serviceProblem]
         : 'Place search is temporarily unavailable. Try again, or enter the details yourself.');
     } finally {
       setSearching(false);
     }
   };
+  autoSearch.current = query => { void searchPlaces(query); };
 
   /** Confirm & Save: save the Google place the user picked, with its coordinates, then show the usual actions. */
   const confirmChoice = async () => {

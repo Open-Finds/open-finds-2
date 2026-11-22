@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../lib/aiSave', () => mocks);
 const store = vi.hoisted(() => ({ readProgress: vi.fn(), writeProgress: vi.fn() }));
 vi.mock('../lib/progressStore', () => store);
+const places = vi.hoisted(() => ({ search: vi.fn() }));
+vi.mock('../lib/apiKeys', async importOriginal => ({ ...(await importOriginal<typeof import('../lib/apiKeys')>()), searchGooglePlaces: places.search }));
 vi.mock('../lib/supabase', () => ({ updateSavedVenue: vi.fn() }));
 vi.mock('../lib/openai', () => ({ UserFacingError: Error }));
 
@@ -364,5 +366,68 @@ describe('Picking up where it stopped, and keeping tags', () => {
     fireEvent.change(screen.getByLabelText('Venue name'), { target: { value: 'A different place' } });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
     expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'A different place', tags: [] });
+  });
+});
+
+describe('Asking Google on its own when nothing could be confirmed', () => {
+  beforeEach(() => vi.resetAllMocks());
+  const needsReview = { stage: 'verify' as const, retryable: false, reason: 'needs_review' as const };
+  const found = [{ name: 'Real Cafe', address: '9 Real St, Sydney NSW', lat: 3, lon: 4, type: 'food' as const }];
+  const render_ = async (result: SharedVenueResult, progress?: object) => {
+    mocks.identifySharedVenue.mockResolvedValueOnce(result);
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} initialProgress={progress} />));
+  };
+  const named = { candidates: [{ ...candidate, address: 'Chatswood, NSW', lat: null, lon: null }] };
+
+  it('searches Google once by the venue name and its place, and offers the results to tap', async () => {
+    places.search.mockResolvedValue(found);
+    await render_({ ...named, issue: needsReview }, { candidates: named.candidates });
+    expect(places.search).toHaveBeenCalledTimes(1);
+    expect(places.search.mock.calls[0][0]).toBe('Test cafe, Chatswood, NSW');
+    expect(screen.getByRole('button', { name: /Real Cafe/ })).toBeInTheDocument();
+    // The message already on screen stays: nothing was confirmed yet.
+    expect(screen.getByRole('alert')).toHaveTextContent('could not confirm it automatically');
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('keeps what the AI read in the form when Google finds nothing, and says nothing extra', async () => {
+    places.search.mockResolvedValue([]);
+    await render_({ ...named, issue: needsReview }, { candidates: named.candidates });
+    expect(places.search).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Venue name')).toHaveValue('Test cafe');
+    expect(screen.queryByRole('group', { name: 'Places found' })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).not.toHaveTextContent('found nothing');
+  });
+
+  it('keeps going when the automatic search fails', async () => {
+    places.search.mockRejectedValue(new Error('offline'));
+    await render_({ ...named, issue: needsReview }, { candidates: named.candidates });
+    expect(screen.getByLabelText('Venue name')).toHaveValue('Test cafe');
+    expect(screen.getByRole('alert')).toHaveTextContent('could not confirm it automatically');
+  });
+
+  it('never searches from the creator handle, when the post named no venue', async () => {
+    await render_({ candidates: [], issue: { stage: 'identify', retryable: true } },
+      { identification: { metadata: { handle: 'wanlineating' } } });
+    expect(places.search).not.toHaveBeenCalled();
+  });
+
+  it('does not search when the service is the problem, when Google already offered places, or when a venue was confirmed', async () => {
+    await render_({ ...named, issue: { stage: 'verify', retryable: true, reason: 'unavailable' } }, { candidates: named.candidates });
+    expect(places.search).not.toHaveBeenCalled();
+    const choices = [{ ...candidate, name: 'Real Cafe', lat: 3, lon: 4 }];
+    await render_({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'no_match' } }, { candidates: named.candidates });
+    expect(places.search).not.toHaveBeenCalled();
+    await render_({ venue, candidates: [candidate] }, { candidates: named.candidates });
+    expect(places.search).not.toHaveBeenCalled();
+  });
+
+  it('lets the user tap a found place and save it with its coordinates', async () => {
+    places.search.mockResolvedValue(found);
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await render_({ ...named, issue: needsReview }, { candidates: [{ ...named.candidates[0], tags: ['pizza'] }] });
+    fireEvent.click(screen.getByRole('button', { name: /Real Cafe/ }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save this place' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Real Cafe', address: '9 Real St, Sydney NSW', lat: 3, lon: 4, tags: ['pizza'] });
   });
 });
