@@ -23,6 +23,8 @@ type PlaceResult = {
   type?: VenueType | null;
   /** 'review': the link is to a Google review, which names no place. */
   hint?: "review";
+  /** Google's place id, when the answer is one Google place. */
+  placeId?: string;
 };
 
 const EMPTY: PlaceResult = { name: null, address: null, lat: null, lon: null };
@@ -233,8 +235,11 @@ type PlacesApiResult = {
  * Places API (New) Text Search: up to `pageSize` candidates with the real
  * name, address, pin, kind of place and Google place id.
  */
-async function searchPlaces(query: string, near: Coord | null, apiKey: string, pageSize: number): Promise<Place[]> {
-  const body: Record<string, unknown> = { textQuery: query, languageCode: "en", regionCode: "AU", pageSize };
+async function searchPlaces(
+  query: string, near: Coord | null, apiKey: string, pageSize: number, region: string | null = "AU",
+): Promise<Place[]> {
+  // The region only biases the ranking; it is left off for places outside Australia.
+  const body: Record<string, unknown> = { textQuery: query, languageCode: "en", ...(region ? { regionCode: region } : {}), pageSize };
   if (near) {
     body.locationBias = { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: 500 } };
   }
@@ -315,7 +320,66 @@ function nameKey(name: string): string {
   const normal = name.normalize("NFKC");
   const alias = normal.match(/^(.+?)\s*\(([A-Za-z][A-Za-z .-]*)\)$/);
   const base = alias && /[^\p{Script=Latin}\p{P}\p{Z}\p{N}]/u.test(alias[1]) ? alias[1] : normal;
-  return base.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return foldLatin(base).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+/** Latin letters without accents ("Trần" is "Tran", "Đồng" is "Dong"); other scripts are left exactly as they are. */
+function foldLatin(value: string): string {
+  return value.replace(/[đĐ]/g, (letter) => (letter === "đ" ? "d" : "D"))
+    .normalize("NFD").replace(/(\p{Script=Latin})\p{M}+/gu, "$1").normalize("NFC");
+}
+
+/** The venue's own name: no brackets, and no descriptor after a dash or bar ("Pour - Matcha cafe" is "Pour"). */
+function coreName(name: string): string {
+  const core = name.replace(/\([^)]*\)/g, " ").split(/\s+[-–—|]\s+/)[0].trim();
+  return core || name;
+}
+
+/** Words that say what kind of address part it is, not where: they do not count as evidence of place. */
+const ADDRESS_FILLER = new Set([
+  "street", "st", "road", "rd", "avenue", "ave", "highway", "hwy", "drive", "dr", "place", "pl", "lane", "ln", "terrace", "tce",
+  "parade", "pde", "crescent", "cres", "court", "ct", "close", "cl", "boulevard", "bvd", "square", "sq", "shop", "unit", "suite",
+  "level", "floor", "ward", "district", "city", "province", "phuong", "quan", "huyen", "tinh", "thanh", "pho", "duong", "dist",
+  "australia", "vietnam", "viet", "nam", "nsw", "vic", "qld", "sa", "wa", "tas", "act", "nt", "the", "of", "and", "at", "near",
+]);
+
+/** The words of an address that say where it is, accents and punctuation ignored. */
+function addressWords(address: string): string[] {
+  return foldLatin(address.normalize("NFKC")).toLowerCase().split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word && !ADDRESS_FILLER.has(word));
+}
+
+/** The house number of a street address ("215B Nguyen Trai" is "215b"), or null. */
+function houseNumber(address: string): string | null {
+  return foldLatin(address).toLowerCase().match(/(?:^|[\s,])(\d+[a-z]?)(?:\s*[-/]\s*\d+[a-z]?)?\s+\p{L}/u)?.[1] ?? null;
+}
+
+/**
+ * Any country: the same house number and most of the same place words ("120 Pham Van Dong street, Ward 3, Go Vap" is
+ * "120 Phạm Văn Đồng, Phường 3, Gò Vấp"). Australian addresses keep the stricter check below.
+ */
+function looseStreetMatch(source: string, found: string): boolean {
+  const number = houseNumber(source);
+  if (!number || number !== houseNumber(found)) return false;
+  return mostWordsPresent(addressWords(source).filter((word) => word !== number), new Set(addressWords(found)), 0.6);
+}
+
+/** An address with no street number, only a suburb or city: its words must be in Google's address. */
+function areaMatch(source: string, found: string): boolean {
+  return mostWordsPresent(addressWords(source), new Set(addressWords(found)), 0.5);
+}
+
+function mostWordsPresent(words: string[], inFound: Set<string>, share: number): boolean {
+  if (!words.length) return false;
+  return words.filter((word) => inFound.has(word)).length / words.length >= share;
+}
+
+/** Guesses where the place is, only to bias Google's ranking: Australia unless the address says otherwise. */
+function regionFor(address: string | undefined): string | null {
+  if (!address) return "AU";
+  if (/vietnam|việt nam|ho chi minh|hồ chí minh|hanoi|hà nội|phường|quận|đ|ư|ơ|ă/i.test(address)) return "VN";
+  if (/\b(australia|ACT|NSW|NT|QLD|SA|TAS|VIC|WA)\b/i.test(address)) return "AU";
+  return /[^\p{ASCII}]/u.test(address) || /\b(japan|thailand|indonesia|singapore|korea|china|usa|uk|france|italy|india|malaysia)\b/i.test(address) ? null : "AU";
 }
 
 /** Staging reads the Google key from its own environment; everywhere else it is the shared secret. */
@@ -342,7 +406,7 @@ type VerifyDiagnostics = {
  * More than one match, or none, is "no match".
  */
 /** A place offered to the user to choose from (never saved by itself). */
-export type Candidate = { name: string; address: string; lat: number; lon: number; type: VenueType | null };
+export type Candidate = { name: string; address: string; lat: number; lon: number; type: VenueType | null; placeId?: string };
 /** Why a name+address check did not verify, and the Google places the user can choose from instead. */
 export type VerifyOutcome = { reason?: "ambiguous" | "no_match"; candidates?: Candidate[]; weak?: boolean };
 
@@ -388,7 +452,10 @@ function validCoords(place: Place): place is Place & { name: string; address: st
 /** Up to `limit` usable Google places, in Google's order, for the user to choose from. */
 function toCandidates(places: Place[], limit = 3): Candidate[] {
   return places.filter(validCoords).slice(0, limit)
-    .map((place) => ({ name: place.name, address: place.address, lat: place.lat, lon: place.lon, type: place.type }));
+    .map((place) => ({
+      name: place.name, address: place.address, lat: place.lat, lon: place.lon, type: place.type,
+      ...(place.id ? { placeId: place.id } : {}),
+    }));
 }
 
 async function verifyPlace(
@@ -419,37 +486,44 @@ async function verifyPlace(
   if (!expectedName) return null;
   const fullStreet = !!address && (!!australianStreetAddress(address) ||
     /^\s*(?:[^,]{0,30},\s*)?\d+[a-z]?(?:[-/]\d+[a-z]?)?\s+[^,]+,\s*\S/i.test(address));
-  const outdoorArea = input.outdoor && !!address && address.replace(/,\s*Australia\s*$/i, "").includes(",");
-  if (!placeId && !pin && !fullStreet && !outdoorArea) return null;
+  // A suburb or city is enough to search Google with the name; the match still needs the name and place words to agree.
+  const areaOnly = !fullStreet && !!address && addressWords(address).length > 0;
+  if (!placeId && !pin && !fullStreet && !areaOnly) return null;
   const query = address ? `${name}, ${address}` : name;
   if (diagnostics) diagnostics.query = query;
-  const places = await searchPlaces(query, pin, apiKey, 5);
+  const places = await searchPlaces(query, pin, apiKey, 5, regionFor(address));
   // "Sculpture by the Sea, Bondi": the venue's own name, with the locality after the comma.
   const { base, locality } = splitLocality(name);
   const baseName = locality ? nameKey(base) : null;
+  const coreKey = nameKey(coreName(locality ? base : name));
   const nameFits = (place: Place): boolean => !!place.name && (nameKey(place.name) === expectedName ||
     (baseName !== null && nameKey(place.name) === baseName));
+  // Looser: Google adds a branch or a descriptor ("heytea bake lab+" is "heytea bake lab+ Chatswood Store"). Accents never matter.
+  const sameWords = (a: string, b: string): boolean => !!a && !!b && Math.min(a.length, b.length) >= 4 && wordsContain(a, b);
+  const looseFits = (place: Place): boolean => {
+    if (!place.name) return false;
+    if (nameFits(place)) return true;
+    const placeKey = nameKey(place.name);
+    const placeCore = nameKey(coreName(place.name));
+    return [expectedName, baseName ?? "", coreKey].some((key) => !!key && (placeCore === key || sameWords(placeKey, key) || sameWords(placeCore, key)));
+  };
+  const streetMatches = (found: string): boolean => !!address && (australianStreetAddress(address)
+    ? matchesStreetAddress(address, found, input.addressFromSource === true) : looseStreetMatch(address, found));
   const ambiguousName = !placeId && !pin && !input.addressFromSource &&
     places.filter((place) => nameFits(place)).length > 1;
   const compare = (place: Place): string => {
     if (!validCoords(place)) return "missing_or_invalid_place_data";
     if (placeId) return place.id === placeId ? "match" : "place_id_mismatch";
     // The locality part of the name must really be in Google's address, or the short name is not enough.
-    const localityFits = nameKey(place.name ?? "") === expectedName ||
-      (!!locality && hasPlaceWords(place.address, locality));
-    if (!nameFits(place) || !localityFits) return "name_mismatch";
+    if (!looseFits(place)) return "name_mismatch";
+    if (locality && nameKey(place.name ?? "") !== expectedName && !hasPlaceWords(place.address, locality)) return "name_mismatch";
     if (pin) return kmBetween(pin, { lat: place.lat, lng: place.lon }) <= 0.1 ? "match" : "pin_mismatch";
     if (!address) return "missing_source_address";
-    if (fullStreet) return matchesStreetAddress(address, place.address, input.addressFromSource === true) ? "match" : "street_address_mismatch";
-    if (!outdoorArea || !place.outdoor) return "not_an_outdoor_listing";
-    // Outdoor places have no street number, so the state and postcode must agree and the locality must be in the address.
-    if (!stateAndPostcodeAgree(address, place.address)) return "outdoor_locality_mismatch";
-    if (locality) return hasPlaceWords(place.address, locality) ? "match" : "outdoor_locality_mismatch";
-    const expected = addressKey(address);
-    const actual = addressKey(place.address);
-    const sameLocality = expected === actual || (input.addressFromSource &&
-      /\b(?:act|nsw|nt|qld|sa|tas|vic|wa)$/.test(expected) && expected === actual.replace(/ \d{4}$/, ""));
-    return sameLocality ? "match" : "outdoor_locality_mismatch";
+    if (fullStreet) return streetMatches(place.address) ? "match" : "street_address_mismatch";
+    // No street number (a suburb, a city, or an outdoor place): any Australian state or postcode must agree, then the place words.
+    if (!stateAndPostcodeAgree(address, place.address)) return "area_locality_mismatch";
+    if (locality) return hasPlaceWords(place.address, locality) ? "match" : "area_locality_mismatch";
+    return areaMatch(address, place.address) ? "match" : "area_locality_mismatch";
   };
   const evaluated = places.map((place) => ({ place, outcome: compare(place) }));
   const matches = evaluated.filter((candidate) => candidate.outcome === "match").map((candidate) => candidate.place);
@@ -465,12 +539,14 @@ async function verifyPlace(
   if (outcome && !placeId && !pin) {
     // Choices come from this same search: no second paid request. The user picks one; nothing is saved from here.
     // Related = the name fits, or one name sits inside the other (a branch: "Kiddo Coffee Redfern").
-    const related = (place: Place): boolean => nameFits(place) || (!!place.name && (
+    const related = (place: Place): boolean => looseFits(place) || (!!place.name && (
       wordsContain(nameKey(place.name), expectedName) || (baseName !== null && wordsContain(nameKey(place.name), baseName))));
-    // Best first: the exact name, then the exact street address, then Google's own order.
+    // Best first: the exact name, then the same street address (or the same area), then Google's own order.
+    const addressAgrees = (place: Place): boolean => !!address && !!place.address &&
+      (fullStreet ? streetMatches(place.address) : areaMatch(address, place.address));
     const rankOf = (place: Place): number =>
       (place.name && (nameKey(place.name) === expectedName || (baseName !== null && nameKey(place.name) === baseName)) ? 0 : 2) +
-      (fullStreet && !!address && !!place.address && matchesStreetAddress(address, place.address, input.addressFromSource === true) ? 0 : 1);
+      (addressAgrees(place) ? 0 : 1);
     const ranked = (list: Place[]) => [...list].sort((a, b) => rankOf(a) - rankOf(b));
     if (ambiguousName || matches.length > 1) {
       outcome.reason = "ambiguous";
@@ -488,7 +564,10 @@ async function verifyPlace(
   }
   if (ambiguousName || matches.length !== 1) return null;
   const [place] = matches;
-  return { name: place.name, address: place.address, lat: place.lat, lon: place.lon, type: place.type, verified: true };
+  return {
+    name: place.name, address: place.address, lat: place.lat, lon: place.lon, type: place.type, verified: true,
+    ...(place.id ? { placeId: place.id } : {}),
+  };
 }
 
 /** Rough distance in km; enough to tell "same block" from "other suburb". */

@@ -42,6 +42,7 @@ describe('resolve-place verification', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       name: 'Test Cafe', address: '1 Test St, Sydney NSW 2000, Australia', lat: -33.8, lon: 151.2, type: 'food', verified: true,
+      placeId: 'ChIJtestplace01',
     });
   });
 
@@ -64,7 +65,7 @@ describe('resolve-place verification', () => {
   it.each([
     ['a different street number', place({ formattedAddress: '2 Test St, Sydney NSW 2000, Australia' })],
     ['a different suburb', place({ formattedAddress: '1 Test St, Newtown NSW 2042, Australia' })],
-    ['a different branch name', place({ displayName: { text: 'Test Cafe Newtown' } })],
+    ['a different venue name', place({ displayName: { text: 'Other Cafe' } })],
     ['no address in the result', place({ formattedAddress: undefined })],
     ['no coordinates in the result', place({ location: undefined })],
   ])('does not verify when Google returns %s', async (_label, result) => {
@@ -89,20 +90,67 @@ describe('resolve-place verification', () => {
     expect(await (await request({ ...details, addressFromSource: false })).json()).toMatchObject({ verified: true, name: 'Test Cafe' });
   });
 
-  it('never calls Google for an address that is only an area', async () => {
-    expect(await (await request({ ...details, address: 'Bondi Beach NSW 2026' })).json()).toMatchObject(EMPTY);
-    expect(fetch).not.toHaveBeenCalled();
+  it('searches Google for a suburb-only address, and verifies only one place that fits the name and the suburb', async () => {
+    const chatswood = place({ displayName: { text: 'Test Cafe' }, formattedAddress: '5 Victoria Ave, Chatswood NSW 2067, Australia' });
+    places(chatswood);
+    const input = { ...details, address: 'Chatswood, NSW' };
+    expect(await (await request(input)).json()).toMatchObject({ verified: true, address: '5 Victoria Ave, Chatswood NSW 2067, Australia' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    // The same name in another suburb is not the place.
+    places(place({ formattedAddress: '5 King St, Newtown NSW 2042, Australia' }));
+    expect(await (await request(input)).json()).toMatchObject(EMPTY);
   });
 
-  it('verifies a named outdoor place with no street number, only as an outdoor listing in the same locality', async () => {
+  it('does not verify a suburb-only match when two places fit', async () => {
+    places(place({ formattedAddress: '5 Victoria Ave, Chatswood NSW 2067, Australia' }),
+      place({ id: 'ChIJsecond00001', formattedAddress: '88 Archer St, Chatswood NSW 2067, Australia' }));
+    const body = await (await request({ ...details, address: 'Chatswood, NSW', addressFromSource: false })).json();
+    expect(body).not.toHaveProperty('verified');
+    expect(body.candidates).toHaveLength(2);
+  });
+
+  it('accepts the name Google adds a branch or descriptor to, when the place agrees', async () => {
+    const heytea = place({ displayName: { text: 'heytea bake lab+ Chatswood Store' }, formattedAddress: '420 Victoria Ave, Chatswood NSW 2067, Australia' });
+    places(heytea);
+    expect(await (await request({ verify: true, name: 'heytea bake lab+', address: 'Chatswood, NSW' })).json())
+      .toMatchObject({ verified: true, name: 'heytea bake lab+ Chatswood Store' });
+    places(place({ displayName: { text: 'Pour' }, formattedAddress: '1 Help St, Chatswood NSW 2067, Australia' }));
+    expect(await (await request({ verify: true, name: 'Pour - Matcha cafe', address: 'Chatswood, NSW' })).json())
+      .toMatchObject({ verified: true, name: 'Pour' });
+  });
+
+  it('works outside Australia: accents and street words do not matter, and Australia is not forced', async () => {
+    places(place({ displayName: { text: 'Trần Pizza' }, formattedAddress: '215B Nguyễn Trãi, Phường Cầu Ông Lãnh, Quận 1, Thành phố Hồ Chí Minh, Vietnam' }));
+    const body = await (await request({ verify: true, name: 'Tran Pizza', address: '215B Nguyen Trai, Cau Ong Lanh, Ho Chi Minh City, Vietnam' })).json();
+    expect(body).toMatchObject({ verified: true, name: 'Trần Pizza' });
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).not.toHaveProperty('regionCode', 'AU');
+    places(place({ displayName: { text: 'Grilldog' }, formattedAddress: '29 Ngô Đức Kế, Phường Bến Nghé, Quận 1, Hồ Chí Minh, Vietnam' }));
+    expect(await (await request({ verify: true, name: 'Grilldog', address: '29 Ngo Duc Ke, Ben Nghe Ward, District 1, Ho Chi Minh City, Vietnam' })).json())
+      .toMatchObject({ verified: true, name: 'Grilldog' });
+    places(place({ displayName: { text: 'Bò Nướng Lá Lốt' }, formattedAddress: '120 Phạm Văn Đồng, Phường 3, Gò Vấp, Hồ Chí Minh, Vietnam' }));
+    expect(await (await request({ verify: true, name: 'Bo Nuong La Lot (Pham Van Dong)', address: '120 Pham Van Dong street, Ward 3, Go Vap district, Ho Chi Minh city, Vietnam' })).json())
+      .toMatchObject({ verified: true });
+  });
+
+  it('keeps a different street number overseas as a choice, never as a verified place, best address first', async () => {
+    places(place({ displayName: { text: 'TEA WHITE' }, formattedAddress: '315 Elizabeth St, Melbourne VIC 3000, Australia' }),
+      place({ id: 'ChIJteawhite417', displayName: { text: 'TEA WHITE' }, formattedAddress: '417 Elizabeth St, Melbourne VIC 3000, Australia' }));
+    const body = await (await request({ verify: true, name: 'TEA WHITE', address: '417 Elizabeth St, Melbourne', addressFromSource: true })).json();
+    expect(body).toMatchObject({ verified: true, address: '417 Elizabeth St, Melbourne VIC 3000, Australia' });
+    places(place({ displayName: { text: 'TEA WHITE' }, formattedAddress: '315 Elizabeth St, Melbourne VIC 3000, Australia' }));
+    const wrong = await (await request({ verify: true, name: 'TEA WHITE', address: '417 Elizabeth St, Melbourne' })).json();
+    expect(wrong).not.toHaveProperty('verified');
+    expect(wrong.candidates[0]).toMatchObject({ address: '315 Elizabeth St, Melbourne VIC 3000, Australia' });
+  });
+
+  it('verifies a named outdoor place with no street number in the same locality', async () => {
     const park = place({ displayName: { text: 'Royal National Park' }, formattedAddress: 'Royal National Park NSW 2232, Australia', types: ['national_park'], primaryType: 'national_park' });
     const input = { verify: true, name: 'Royal National Park', address: 'Royal National Park, NSW', outdoor: true, addressFromSource: true };
     places(park);
     expect(await (await request(input)).json()).toMatchObject({ verified: true, type: 'activity', address: 'Royal National Park NSW 2232, Australia' });
-    places(place({ displayName: { text: 'Royal National Park' }, formattedAddress: 'Royal National Park NSW 2232, Australia', types: ['cafe'] }));
+    // Another state is never the same place.
+    places(place({ displayName: { text: 'Royal National Park' }, formattedAddress: 'Royal National Park VIC 3000, Australia' }));
     expect(await (await request(input)).json()).toMatchObject(EMPTY);
-    places(park);
-    expect(await (await request({ ...input, outdoor: false })).json()).toMatchObject(EMPTY);
   });
 
   it('answers a missing or malformed request with 400, and refuses to guess from a non-Maps link', async () => {
