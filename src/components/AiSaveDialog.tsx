@@ -6,7 +6,7 @@ import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendation,
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
 import { ProviderUnavailableError, waitText } from '../lib/providerErrors';
-import { searchGooglePlaces } from '../lib/apiKeys';
+import { hasStreetNumber, searchGooglePlaces } from '../lib/apiKeys';
 import { fallbackImage } from '../lib/publicRecommendation.js';
 import { typeWithIcon } from '../lib/partners';
 import { cn } from '../lib/utils';
@@ -21,6 +21,19 @@ const serviceProblem = {
   attempt_expired: 'This attempt timed out. Try again to start a fresh one, or enter the details yourself.',
   attempt_limit: 'This attempt made too many requests. Try again to start a fresh one, or enter the details yourself.',
 } as const;
+
+/** A venue is verified when it is a Google place: it has the coordinates Google gave. Anything else came from the post. */
+const isVerified = (venue: { lat?: number | null; lon?: number | null }) => venue.lat != null && venue.lon != null;
+
+/** The one line under an unverified venue, in plain words. A venue with no street gets a different line. */
+export function unverifiedNote(venue: { address: string }): string {
+  return hasStreetNumber(venue.address)
+    ? 'AI Save might not be accurate. Check the address before you go.'
+    : 'AI Save found the area only. Tap Edit to add the street address.';
+}
+
+/** What a friend reads next to a shared venue that Google has not confirmed. */
+export const unverifiedShareLine = 'Address not verified: check it before you go.';
 
 export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
   link: string;
@@ -181,11 +194,11 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         : await saveSharedVenue(details, details.link ?? link);
       setSaved(row);
       onSaved?.();
-      if (editing) {
-        setVenue(undefined);
-        setIssue(undefined);
-        setShareUrl('');
-      }
+      // Every save, verified or not, shows the saved venue with Save, Quick Share and Create Plan.
+      setVenue(details);
+      setEditing(false);
+      setIssue(undefined);
+      setShareUrl('');
     } catch {
       setError('Could not save this venue. Try again.');
     } finally {
@@ -200,7 +213,9 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     try {
       const url = shareUrl || await publishVenue(venue);
       setShareUrl(url);
-      const result = await sendRecommendation(message, url);
+      // A friend is told when Google has not confirmed the address.
+      const text = isVerified(venue) ? message : [message.trim(), unverifiedShareLine].filter(Boolean).join('\n');
+      const result = await sendRecommendation(text, url);
       if (result === 'copied') setCopied(true);
     } catch {
       setError('Could not share this venue. Try again.');
@@ -212,6 +227,8 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   /** Google found places that might be the venue: let the user pick instead of showing an error. */
   const choosing = !busy && !sharing && !manual && !venue && !saved && choices.length > 0 &&
     (issue?.reason === 'ambiguous' || issue?.reason === 'no_match');
+  /** Only Google places are offered to pick from. What the AI read is shown in the fields, never as a choice. */
+  const googlePlaces = candidates.filter(candidate => candidate.lat != null && candidate.lon != null);
   const validDetails = Boolean(name.trim() && address.trim());
   const detailsMatchSaved = !!saved && saved.name === venue?.name && saved.address === venue?.address;
   const correctionSaved = !!saved && saved.name === name.trim() && saved.address === address.trim();
@@ -244,6 +261,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
           <div className="min-w-0">
             <p className="break-words font-semibold">{venue?.name}</p>
             <p className="break-words text-sm">{venue?.address}</p>
+            {venue && !isVerified(venue) && <p className="text-xs text-muted-foreground">{unverifiedShareLine}</p>}
             <p className="break-all text-xs text-muted-foreground">{shareRecommendationOrigin()?.replace(/^https:\/\//, '') ?? 'Public sharing is unavailable'}</p>
           </div>
         </div>
@@ -280,9 +298,9 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
           name: name.trim(), address: address.trim(), type, link, lat: position?.lat ?? null, lon: position?.lon ?? null,
         });
       }}>
-        {candidates.length > 0 && !saved && <fieldset className="grid gap-2 text-sm">
+        {googlePlaces.length > 0 && !saved && <fieldset className="grid gap-2 text-sm">
           <legend className="text-label">Places found</legend>
-          {candidates.map((candidate, index) => {
+          {googlePlaces.map((candidate, index) => {
             const chosen = position?.lat === candidate.lat && position?.lon === candidate.lon && name === candidate.name && address === candidate.address;
             return <Button key={index} type="button" variant={chosen ? 'secondary' : 'outline'} aria-pressed={chosen}
               className="h-auto justify-start whitespace-normal py-2 text-left" onClick={() => {
@@ -323,6 +341,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
             <p className="text-sm">{venue.address}</p>
             {candidates[0]?.address && candidates[0].address !== venue.address &&
               <p className="text-xs text-muted-foreground">Extracted address: {candidates[0].address}</p>}
+            {!isVerified(venue) && <p className="text-xs text-muted-foreground">{unverifiedNote(venue)}</p>}
           </div>
           <Button variant="ghost" size="sm" disabled={saving} onClick={() => { setEditing(true); setError(''); }}>Edit</Button>
         </div>

@@ -197,3 +197,61 @@ describe('No Google choices', () => {
     expect(screen.getByRole('button', { name: 'Save without verification' })).toBeEnabled();
   });
 });
+
+describe('Saving and sharing a venue Google has not confirmed', () => {
+  beforeEach(() => vi.resetAllMocks());
+  const unconfirmed = { ...candidate, lat: null, lon: null };
+  const review = { candidates: [unconfirmed], issue: { stage: 'verify' as const, retryable: false, reason: 'needs_review' as const } };
+
+  it('shows the saved venue with Quick Share and Create Plan after a save without verification', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, lat: null, lon: null });
+    await start(review);
+    expect(screen.queryByRole('button', { name: 'Quick Share' })).not.toBeInTheDocument();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
+    expect(screen.getByRole('button', { name: 'Saved to My Venues' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Quick Share' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Create Plan' })).toBeEnabled();
+    expect(screen.getByText('AI Save might not be accurate. Check the address before you go.')).toBeInTheDocument();
+  });
+
+  it('tells the user when only the area is known, and does not call that accurate', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, address: 'Chatswood, NSW', lat: null, lon: null });
+    await start({ ...review, candidates: [{ ...unconfirmed, address: 'Chatswood, NSW' }] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
+    expect(screen.getByText('AI Save found the area only. Tap Edit to add the street address.')).toBeInTheDocument();
+    expect(screen.queryByText(/might not be accurate/)).not.toBeInTheDocument();
+  });
+
+  it('shows no warning for a Google-verified venue', async () => {
+    await start();
+    expect(screen.queryByText(/might not be accurate|area only/)).not.toBeInTheDocument();
+  });
+
+  it('adds the unverified line to the message a friend gets, and not for a verified venue', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, lat: null, lon: null });
+    mocks.publishVenue.mockResolvedValue('https://www.theunsaved.app/v/id');
+    mocks.sendRecommendation.mockResolvedValue('shared');
+    await start(review);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
+    expect(screen.getAllByText('Address not verified: check it before you go.').length).toBeGreaterThan(0);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Share recommendation' })));
+    expect(mocks.sendRecommendation.mock.calls[0][0]).toContain('Address not verified: check it before you go.');
+  });
+
+  it('sends a verified venue with the message as typed', async () => {
+    mocks.publishVenue.mockResolvedValue('https://www.theunsaved.app/v/id');
+    mocks.sendRecommendation.mockResolvedValue('shared');
+    await start();
+    fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Share recommendation' })));
+    expect(mocks.sendRecommendation.mock.calls[0][0]).toBe("Let's check this out! 🤩");
+  });
+
+  it('lists only Google places under Places found, never what the AI read', async () => {
+    await start({ ...review, candidates: [unconfirmed, { ...candidate, name: 'Real Cafe', lat: 3, lon: 4 }] });
+    expect(screen.getByRole('button', { name: /Real Cafe/ })).toBeInTheDocument();
+    const found = screen.getByRole('group', { name: 'Places found' });
+    expect(found).not.toHaveTextContent('Test cafe');
+  });
+});
