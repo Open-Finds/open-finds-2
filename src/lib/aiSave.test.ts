@@ -104,7 +104,7 @@ describe('share venue persistence', () => {
       expect(searches()).toEqual([false, true]);
       expect(result.issue).toMatchObject({ reason: 'no_match' });
       mocks.extract.mockClear();
-      await identifySharedVenue(link, { ...progress, candidates: [venue] });
+      await identifySharedVenue(link, { ...progress, candidates: [{ ...venue, order: 1, tags: [] }] });
       expect(mocks.extract).not.toHaveBeenCalled();
     });
 
@@ -120,7 +120,7 @@ describe('share venue persistence', () => {
     it('never replaces details the user corrected', async () => {
       mocks.lookup.mockResolvedValue({ data: [], error: null });
       mocks.match.mockResolvedValue(null);
-      await identifySharedVenue(link, { checkedSaved: true, candidates: [venue] });
+      await identifySharedVenue(link, { checkedSaved: true, candidates: [{ ...venue, order: 1, tags: [] }] });
       expect(mocks.extract).not.toHaveBeenCalled();
     });
   });
