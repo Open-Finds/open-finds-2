@@ -289,6 +289,23 @@ Private function. Maps free-text type strings to one of `food`, `activity`, `des
 ### `extractVenuesFromLink(link): Promise<ExtractedVenueItem[]>`
 Takes any social media or website link. If it's a Google Maps link, resolves directly via `resolveGoogleMapsLink`. Otherwise: (1) fetches page metadata via edge function, (2) builds context, (3) asks AI to extract all venues mentioned (name, full address, type, tags, coordinates), (4) validates and sorts results by order of appearance. Returns an array of venue items.
 
+### AI Save: from a shared link to a saved venue
+**Files:** `src/lib/aiSave.ts` (the logic), `src/components/AiSaveDialog.tsx` (the screen), `src/lib/venueEvidence.ts`, `src/lib/progressStore.ts`.
+
+`identifySharedVenue(link, progress)` works out which venue or venues a shared link is about and checks them against Google. It does the cheapest thing first and only goes further when it has to:
+1. **Already saved?** An exact-link match for this account is reused (one saved venue for the link).
+2. **Read the post with plain code.** `extract-venue-meta` returns the caption, the creator handle, the page keywords and, for TikTok, the location the creator tagged. The caption parser reads pin lines (`📍 Name, address`) and `Address:` lines in any country.
+3. **Free evidence for a venue with no street address** (`venueEvidence.ts`): the address in the venue's own Instagram bio (found through an `@handle` in the caption that matches its name, at most 3 lookups), else the suburb or city the creator tagged.
+4. **The plain AI** (`openai/gpt-4o-mini`, no web search, told not to guess) reads the evidence. **The AI with web search** runs only if the plain one found nothing to look up, or once if Google cannot match its answer. Details the user corrected are never replaced. An address that is really the model's reasoning ("not provided in caption...") counts as no address.
+5. **Google** (`resolve-place`, verify mode) confirms the venue. If it cannot, Google's own results are offered to tap (never what the AI read). If nothing was confirmed but the post named a venue, Google is searched once on its own so the user can tap a place.
+6. **A post that names several venues** (up to 5) is checked venue by venue at the same time and shown as a tick list: venues Google confirmed start ticked, the rest are the user's choice, "Save selected" saves the ticked ones.
+
+**What the user sees and can save.** Every save, verified or not, shows Save, Quick Share and Create Plan. A venue Google has not confirmed shows "AI Save might not be accurate", or "AI Save found the area only" when there is no street address, and the message a friend receives says the address is not verified. Tags the AI read (cuisine, dietary, category) are added to the venue after it is saved, so searching for them finds it.
+
+**Picking up where it stopped.** What was worked out for a link is kept on the phone for 20 minutes (same account, never sent anywhere), so sharing the same link again after switching apps continues instead of starting over.
+
+**Known limits.** The staging web search is the small model with 2 results (a cost cap). A reel that never names or locates the venue cannot be identified (audio and on-screen text are not read). If one venue of a list was saved earlier, reopening the link shows only that venue. Duplicate detection is by name and address text, so a venue saved unverified and later saved verified (a different address string) can appear twice; storing the Google place id would fix that and needs a database change.
+
 ### `extractVenueFromLink(link): Promise<ExtractedVenue>`
 Wrapper around `extractVenuesFromLink` that returns only the first venue found (or null fields if none).
 
@@ -356,16 +373,16 @@ Calls the `geocode` edge function to convert a street address to coordinates.
 All edge functions run on Supabase's Deno runtime and are called from the client.
 
 ### `ai-proxy/index.ts`
-Receives chat messages and options (temperature, response_format), forwards them to OpenAI's Chat Completions API using a server-side API key, and returns the response. This keeps the OpenAI key secret.
+Receives chat messages and options (temperature, response_format, an optional `model`), forwards them to OpenRouter using a server-side API key, and returns the response. This keeps the key secret. Only two models are allowed: `openai/gpt-4o-mini:online` (with web search, the default) and plain `openai/gpt-4o-mini`. A plain request times out after 20 seconds, one with web search after 30. On staging a request for the plain model is sent as asked; every other request is rewritten to a small model with a two-result web search (see `_shared/stagingProviders.ts`).
 
 ### `extract-venue-meta/index.ts`
-Fetches a URL's HTML, extracts metadata: og:title, og:description, og:site_name, meta description, JSON-LD structured data, oEmbed data (title, author, html), page title, raw text excerpt. Detects platform (Instagram, Facebook, TikTok, Google Maps, generic website) and content type (reel, video, post, profile, website). Returns a `MetaResult` object.
+Fetches a URL's HTML, extracts metadata: og:title, og:description, og:site_name, meta description, JSON-LD structured data, oEmbed data (title, author, html), page title, raw text excerpt. Detects platform (Instagram, Facebook, TikTok, Google Maps, generic website) and content type (reel, video, post, profile, website). Also returns the page's own keywords and, for TikTok, the location the creator tagged (name, address and kind only). Returns a `MetaResult` object. A request that gets as far as reading the link writes one safe log line (stage, milliseconds, outcome code; never captions, names, addresses or links).
 
 ### `geocode/index.ts`
 Receives an address string, calls Google Maps Geocoding API (server-side key), returns `{lat, lon}`.
 
 ### `resolve-place/index.ts`
-Receives a Google Maps short link, follows redirects to resolve the full URL, then calls Google Maps Places API to extract the place name, address, and coordinates.
+Three modes. **Link:** receives a Google Maps link, follows redirects to the full URL, and returns the place name, address and coordinates. **Search** (`search: true`): one Places text search for what the user typed, up to 5 Google places, nothing saved. **Verify** (`verify: true` with a name and address, or a Maps link): returns `verified: true` and the Google place (with its place id) only when exactly one place fits; otherwise the empty result plus up to 3 of Google's own places to choose from. The match works in any country: accents are ignored (Tran / Trần), words like Ward or Phuong do not count, a house number must agree for a street address, and a suburb or city alone is enough only when exactly one Google place fits both the name and the place words. Google may add a branch or descriptor to the name. A state written out in full at the end of an address ("Chatswood, New South Wales, Australia") is read the same as "NSW".
 
 ### `send-push-notification/index.ts`
 Receives a user ID, title, body, and data payload. Looks up the user's push subscription from the database and sends a web push notification via the Web Push API (server-side VAPID keys).

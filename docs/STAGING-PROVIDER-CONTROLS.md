@@ -53,7 +53,7 @@ keeps each as a named preset in `stagingProviders.ts`.
 |---|---|---|---|---|
 | `resolve-place` | `STAGING_RESOLVE_PLACE_ENABLED` | general flag must be `false` | identical requests refused | `verify: true` path (exact place match); reads the Google key from its environment |
 | `extract-venue-meta` | `STAGING_ANDROID_PROVIDERS_ENABLED` | that flag must be `true` or `false` | none (random salt) | fetches once not 3-4 times; Instagram caption embed first |
-| `ai-proxy` | `STAGING_ANDROID_PROVIDERS_ENABLED` | general flag must be `false` | none (random salt) | extraction only; every call rewritten to `gpt-5-nano` with a two-result web search |
+| `ai-proxy` | `STAGING_ANDROID_PROVIDERS_ENABLED` | general flag must be `false` | none (random salt) | extraction only; every call rewritten to `gpt-5-nano` with a two-result web search, except a request for the plain `openai/gpt-4o-mini` (the cheap first try), which is sent as asked with no web search |
 | `geocode` | `STAGING_ANDROID_PROVIDERS_ENABLED` | general flag must be `false` | identical requests refused | |
 | `discover-venues` | `STAGING_PROVIDER_ENABLED` | general flag must be `false` | identical requests refused | can never be enabled on staging: it needs the flag `true` and boots only if it is `false` |
 
