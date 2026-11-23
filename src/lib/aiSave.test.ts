@@ -10,6 +10,7 @@ vi.mock('./apiKeys', () => ({
   isGoogleMapsLink: mocks.maps,
   verifyVenuePlaceDetailed: async (...args: unknown[]) => ({ match: await mocks.match(...args), candidates: [] }),
 }));
+vi.mock('./edgeAuth', () => ({ edgeAuthHeaders: async () => ({ Authorization: 'Bearer session' }) }));
 vi.mock('./supabase', () => ({
   supabase: {
     auth: { getSession: async () => ({ data: { session: { user: { id: mocks.session.id } } } }) },
@@ -484,5 +485,52 @@ describe('AI Save attempt ids', () => {
     await identifySharedVenue(link, {});
     expect(idsUsed()).toEqual([]);
     expect(localStorage.length).toBe(0);
+  });
+});
+
+describe('saves linked to the shared venue', () => {
+  const stamped = { ...venue, lat: 1, lon: 2, tags: ['category:cafe'], venueToken: 'stamp' };
+  const row = { ...venue, id: 'linked', venue_id: 'shared-1', tags: [] as string[] };
+
+  it('saves a stamped Google place through save-verified-venue', async () => {
+    const fetchMock = vi.fn(async () => Response.json(row));
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.updateTags.mockResolvedValue({ ...row, tags: ['category:cafe'] });
+    await expect(saveSharedVenue(stamped, link)).resolves.toMatchObject({ id: 'linked' });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/functions\/v1\/save-verified-venue$/);
+    expect(JSON.parse(String(init.body))).toEqual({
+      venueToken: 'stamp', name: 'Cafe', address: '1 Test St', type: 'food', link, category: 'cafe',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to the usual save when the linked save is refused', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'invalid_venue_token' }, { status: 400 })));
+    mocks.rpc.mockResolvedValue({ data: { ...row, id: 'plain', venue_id: null }, error: null });
+    mocks.updateTags.mockImplementation(async (id: string, patch: object) => ({ ...row, id, venue_id: null, ...patch }));
+    await expect(saveSharedVenue(stamped, link)).resolves.toMatchObject({ id: 'plain' });
+    expect(mocks.rpc).toHaveBeenCalledWith('save_shared_venue', {
+      p_venue: { name: 'Cafe', address: '1 Test St', type: 'food', lat: 1, lon: 2, link },
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back when the network fails, and never sends the stamp to the database', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    mocks.rpc.mockResolvedValue({ data: { ...row, id: 'plain' }, error: null });
+    await saveSharedVenue(stamped, link);
+    expect(JSON.stringify(mocks.rpc.mock.calls)).not.toContain('stamp');
+    vi.unstubAllGlobals();
+  });
+
+  it('saves an unstamped venue the usual way without calling the server', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.rpc.mockResolvedValue({ data: { ...row, id: 'plain' }, error: null });
+    await saveSharedVenue(venue, link);
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

@@ -1,4 +1,6 @@
 import { isGoogleMapsLink, verifyVenuePlaceDetailed } from './apiKeys';
+import { edgeAuthHeaders } from './edgeAuth';
+import { categoryOf } from './taxonomy';
 import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
 import { supabase, updateSavedVenue, type SavedVenue, type VenueType } from './supabase';
 import { shareOrCopy } from './invite';
@@ -22,10 +24,36 @@ export function sourceUrl(input: string): string {
   return url.href;
 }
 
-export async function saveSharedVenue(venue: PublicVenue & { tags?: string[] }, link: string, position?: { lat: number; lon: number }): Promise<SavedVenue> {
-  const { tags, ...details } = venue;
-  const { data, error } = await supabase.rpc('save_shared_venue', {
-    p_venue: { ...details, ...position, link: sourceUrl(link) },
+/**
+ * Saves a Google place through save-verified-venue, which links the save to the shared venue record.
+ * Null when that is not possible (no stamp, expired stamp, service down): the caller then saves it the usual way.
+ */
+async function saveVerifiedVenue(venue: SharedVenue, link: string): Promise<SavedVenue | null> {
+  try {
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-verified-venue`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({
+        venueToken: venue.venueToken, name: venue.name, address: venue.address, type: venue.type, link,
+        category: categoryOf({ type: venue.type, tags: venue.tags ?? [], name: venue.name }),
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    const row = await res.json().catch(() => null);
+    return row && typeof row.id === 'string' ? row as SavedVenue : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSharedVenue(venue: SharedVenue, link: string, position?: { lat: number; lon: number }): Promise<SavedVenue> {
+  const { tags, venueToken, ...details } = venue;
+  // A Google place with its stamp is saved linked to the shared venue; anything else, or any failure there,
+  // is saved exactly as before (unlinked), so a venue is never lost.
+  const linked = venueToken && !position ? await saveVerifiedVenue(venue, sourceUrl(link)) : null;
+  const { data, error } = linked ? { data: linked, error: null } : await supabase.rpc('save_shared_venue', {
+    p_venue: { name: details.name, address: details.address, type: details.type, lat: details.lat ?? null, lon: details.lon ?? null, ...position, link: sourceUrl(link) },
   });
   if (error || !data) throw error ?? new Error('Saving returned no venue.');
   // The save ends this AI Save attempt: the next intentional save of the link starts a new one.
@@ -45,7 +73,7 @@ export async function saveSharedVenue(venue: PublicVenue & { tags?: string[] }, 
   return row;
 }
 
-export type SharedVenue = PublicVenue & { lat?: number | null; lon?: number | null; tags?: string[] };
+export type SharedVenue = PublicVenue & { lat?: number | null; lon?: number | null; tags?: string[]; venueToken?: string };
 
 export type SharedVenueProgress = {
   checkedSaved?: boolean;
@@ -81,7 +109,7 @@ async function verifyEach(items: ExtractedVenueItem[], link: string, attemptId: 
     }, attemptId);
     const match = check.match;
     return match
-      ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon }, verified: true }
+      ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon, venueToken: match.venueToken }, verified: true }
       : { venue: read(item), verified: false };
   }));
   const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
@@ -211,7 +239,7 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
           // Google's places for this search are the choices to offer; nothing is saved from them automatically.
           const choices: ExtractedVenueItem[] = check.candidates.map((place, index) => ({
             name: place.name, address: place.address, type: place.type ?? candidate?.type ?? 'food',
-            order: index + 1, tags: [], lat: place.lat, lon: place.lon,
+            order: index + 1, tags: [], lat: place.lat, lon: place.lon, venueToken: place.venueToken,
           }));
           return {
             candidates: choices.length ? choices : candidates,
@@ -222,6 +250,7 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
         progress.verified = {
           name: match.name, address: match.address, link,
           type: match.type ?? candidate?.type ?? 'activity', lat: match.lat, lon: match.lon, tags: candidate?.tags ?? [],
+          venueToken: match.venueToken,
         };
         progress.candidates ??= [{ ...progress.verified, order: 1, tags: [] }];
         break;

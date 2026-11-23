@@ -3,6 +3,7 @@ import { json, preflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
 import { stageLog } from "../_shared/stagelog.ts";
+import { categoryFromGoogle, signVenueToken, suburbFromGoogle, type VenueCategory } from "../_shared/venueToken.ts";
 import { type Coord, geocodeAU, getGoogleMapsApiKey, logGoogleError } from "../_shared/maps.ts";
 import {
   configureStagingProviders, isStagingProviderTarget, providerFetch, RESOLVE_PLACE, withStagingProviderControls,
@@ -25,6 +26,9 @@ type PlaceResult = {
   hint?: "review";
   /** Google's place id, when the answer is one Google place. */
   placeId?: string;
+  /** Kept server-side for the venue stamp; never sent to the app. */
+  suburb?: string | null;
+  category?: VenueCategory | null;
 };
 
 const EMPTY: PlaceResult = { name: null, address: null, lat: null, lon: null };
@@ -217,6 +221,8 @@ type Place = {
   lon: number | null;
   type: VenueType | null;
   outdoor: boolean;
+  suburb: string | null;
+  category: VenueCategory | null;
 };
 
 const OUTDOOR_TYPES = ["hiking_area", "park", "national_park", "beach"];
@@ -229,6 +235,7 @@ type PlacesApiResult = {
   location?: { latitude?: number; longitude?: number };
   types?: string[];
   primaryType?: string;
+  addressComponents?: unknown;
 };
 
 /**
@@ -248,7 +255,7 @@ async function searchPlaces(
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.primaryType",
+      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.primaryType,places.addressComponents",
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10000),
@@ -264,6 +271,8 @@ async function searchPlaces(
     lon: typeof p.location?.longitude === "number" ? p.location.longitude : null,
     type: venueTypeFrom([p.primaryType, ...(Array.isArray(p.types) ? p.types : [])]),
     outdoor: [p.primaryType, ...(Array.isArray(p.types) ? p.types : [])].some((type) => OUTDOOR_TYPES.includes(type)),
+    suburb: suburbFromGoogle(p.addressComponents),
+    category: categoryFromGoogle([p.primaryType, ...(Array.isArray(p.types) ? p.types : [])]),
   }));
 }
 
@@ -417,7 +426,11 @@ type VerifyDiagnostics = {
  * More than one match, or none, is "no match".
  */
 /** A place offered to the user to choose from (never saved by itself). */
-export type Candidate = { name: string; address: string; lat: number; lon: number; type: VenueType | null; placeId?: string };
+export type Candidate = {
+  name: string; address: string; lat: number; lon: number; type: VenueType | null; placeId?: string;
+  /** Kept server-side for the venue stamp; never sent to the app. */
+  suburb?: string | null; category?: VenueCategory | null;
+};
 /** Why a name+address check did not verify, and the Google places the user can choose from instead. */
 export type VerifyOutcome = { reason?: "ambiguous" | "no_match"; candidates?: Candidate[]; weak?: boolean };
 
@@ -471,7 +484,7 @@ function toCandidates(places: Place[], limit = 3): Candidate[] {
   return places.filter(validCoords).slice(0, limit)
     .map((place) => ({
       name: place.name, address: place.address, lat: place.lat, lon: place.lon, type: place.type,
-      ...(place.id ? { placeId: place.id } : {}),
+      ...(place.id ? { placeId: place.id } : {}), suburb: place.suburb, category: place.category,
     }));
 }
 
@@ -587,7 +600,7 @@ async function verifyPlace(
   const [place] = matches;
   return {
     name: place.name, address: place.address, lat: place.lat, lon: place.lon, type: place.type, verified: true,
-    ...(place.id ? { placeId: place.id } : {}),
+    ...(place.id ? { placeId: place.id } : {}), suburb: place.suburb, category: place.category,
   };
 }
 
@@ -701,6 +714,23 @@ async function resolve(url: string, apiKey: string): Promise<PlaceResult> {
   return name ? { ...EMPTY, name } : EMPTY;
 }
 
+/**
+ * Replaces the server-only suburb and category with a signed venue stamp for this user, so a later save can link the
+ * shared venue with Google's own details (save-verified-venue). No stamp when the place has no Google id or no key is set.
+ */
+async function stamped<T extends { name?: string | null; address?: string | null; lat?: number | null; lon?: number | null;
+  placeId?: string; suburb?: string | null; category?: VenueCategory | null }>(place: T, userId: string): Promise<Omit<T, "suburb" | "category"> & { venueToken?: string }> {
+  const { suburb, category, ...rest } = place;
+  if (!place.placeId || !place.name || !place.address || place.lat == null || place.lon == null) return rest;
+  const venueToken = await signVenueToken({
+    google_place_id: place.placeId, name: place.name, address: place.address, suburb: suburb ?? null,
+    lat: place.lat, lon: place.lon, category: category ?? null,
+  }, userId);
+  return venueToken ? { ...rest, venueToken } : rest;
+}
+
+const stampAll = <T extends Candidate>(list: T[], userId: string) => Promise.all(list.map((item) => stamped(item, userId)));
+
 const RATE_LIMIT = 60;
 const RATE_WINDOW_SECONDS = 60 * 60;
 
@@ -745,7 +775,7 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
       }
       const places = await searchPlaces(query.trim(), null, await resolverMapsKey(), 5);
       stageLog("resolve-place", "search", started, places.length ? "found" : "none", { count: places.length });
-      return json(req, { candidates: toCandidates(places, 5) }, 200, { "Cache-Control": "no-store" });
+      return json(req, { candidates: await stampAll(toCandidates(places, 5), auth.user.id) }, 200, { "Cache-Control": "no-store" });
     }
 
     if (verify === true) {
@@ -754,14 +784,14 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
         (Deno.env.get("STAGING_PROVIDER_USERS") ?? "").split(",").some((id) => id.trim() === auth.user.id);
       const diagnostics: VerifyDiagnostics | undefined = canDiagnose ? { outcome: "insufficient_source_evidence" } : undefined;
       // A non-match carries its reason and Google's candidates only when there are some; otherwise it is the plain empty result.
-      const verificationResponse = (place: PlaceResult | null, outcome: VerifyOutcome = {}, mode = "name_address") => {
+      const verificationResponse = async (place: PlaceResult | null, outcome: VerifyOutcome = {}, mode = "name_address") => {
         stageLog("resolve-place", "verify", started, place ? "match" : (outcome.reason ?? "empty"), {
           mode, count: outcome.candidates?.length ?? 0, weak: outcome.weak === true, outdoor: outdoor === true,
           source_address: addressFromSource === true,
         });
         const choices = outcome.candidates?.length
-          ? { reason: outcome.reason, candidates: outcome.candidates, ...(outcome.weak ? { weak: true } : {}) } : {};
-        const body = place ?? { ...EMPTY, ...choices };
+          ? { reason: outcome.reason, candidates: await stampAll(outcome.candidates, auth.user.id), ...(outcome.weak ? { weak: true } : {}) } : {};
+        const body = place ? await stamped(place, auth.user.id) : { ...EMPTY, ...choices };
         return diagnostics
           ? json(req, { ...body, verificationDiagnostics: diagnostics }, 200, { "Cache-Control": "no-store" })
           : json(req, body);

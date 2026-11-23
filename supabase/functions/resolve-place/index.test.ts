@@ -363,3 +363,52 @@ describe('resolve-place closest results', () => {
     expect(body.candidates).toHaveLength(1);
   });
 });
+
+/** Universal venues: each Google place carries a signed stamp so the save can link the shared venue. */
+describe('resolve-place venue stamps', () => {
+  let verify: typeof import('../_shared/venueToken').verifyVenueToken;
+  beforeEach(async () => {
+    vi.resetModules();
+    const env: Record<string, string> = { SUPABASE_SERVICE_ROLE_KEY: 'service-secret' };
+    vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] ?? '' }, serve: (fn: typeof handler) => { handler = fn; } });
+    await import('./index');
+    ({ verifyVenueToken: verify } = await import('../_shared/venueToken'));
+  });
+  const withParts = (over: Record<string, unknown> = {}) => place({
+    addressComponents: [{ longText: 'Sydney', types: ['locality', 'political'] }], ...over,
+  });
+
+  it('stamps a verified place with Google\'s details, suburb and category for this user only', async () => {
+    places(withParts());
+    const body = await (await request(details)).json();
+    expect(body).toMatchObject({ verified: true, placeId: 'ChIJtestplace01', venueToken: expect.any(String) });
+    expect(body).not.toHaveProperty('suburb');
+    expect(body).not.toHaveProperty('category');
+    expect(await verify(body.venueToken, 'user-1')).toEqual({
+      google_place_id: 'ChIJtestplace01', name: 'Test Cafe', address: '1 Test St, Sydney NSW 2000, Australia',
+      suburb: 'Sydney', lat: -33.8, lon: 151.2, category: 'cafe',
+    });
+    expect(await verify(body.venueToken, 'user-2')).toBeNull();
+    expect(new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers).get('X-Goog-FieldMask')).toContain('places.addressComponents');
+  });
+
+  it('stamps each place offered to choose from, and each search result', async () => {
+    places(withParts(), withParts({ id: 'ChIJelsewhere01', formattedAddress: '99 Other Rd, Newtown NSW 2042, Australia' }));
+    const choices = await (await request({ ...details, addressFromSource: false })).json();
+    expect(choices.candidates.length).toBeGreaterThan(0);
+    for (const candidate of choices.candidates) {
+      expect(await verify(candidate.venueToken, 'user-1')).toMatchObject({ google_place_id: candidate.placeId });
+      expect(candidate).not.toHaveProperty('suburb');
+    }
+    places(withParts());
+    const search = await (await request({ search: true, query: 'Test Cafe Sydney' })).json();
+    expect(await verify(search.candidates[0].venueToken, 'user-1')).toMatchObject({ google_place_id: 'ChIJtestplace01' });
+  });
+
+  it('does not stamp a place without a Google id', async () => {
+    places(withParts({ id: undefined }));
+    const body = await (await request(details)).json();
+    expect(body).toMatchObject({ verified: true });
+    expect(body).not.toHaveProperty('venueToken');
+  });
+});

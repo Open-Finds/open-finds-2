@@ -431,3 +431,41 @@ describe('Asking Google on its own when nothing could be confirmed', () => {
     expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Real Cafe', address: '9 Real St, Sydney NSW', lat: 3, lon: 4, tags: ['pizza'] });
   });
 });
+
+describe('Linking saves to the shared venue', () => {
+  beforeEach(() => vi.resetAllMocks());
+  const google = { ...candidate, name: 'Real Cafe', address: '9 Real St, Sydney NSW 2000', lat: 3, lon: 4, venueToken: 'stamp-real' };
+  const review = { candidates: [google], issue: { stage: 'verify' as const, retryable: false, reason: 'needs_review' as const } };
+
+  it('passes the stamp of a verified venue to the save', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await start({ venue: { ...venue, venueToken: 'stamp-verified' }, candidates: [candidate] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ venueToken: 'stamp-verified' });
+  });
+
+  it('passes the stamp of the place chosen under Confirm the venue', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    const choices = [{ ...google, order: 1 }];
+    await start({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm & Save' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Real Cafe', venueToken: 'stamp-real' });
+  });
+
+  it('passes the stamp of a Google place picked in the form, but not once the address is edited', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await start(review);
+    fireEvent.click(screen.getByRole('button', { name: /Real Cafe/ }));
+    await act(async () => fireEvent.submit(screen.getByLabelText('Address').closest('form')!));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Real Cafe', venueToken: 'stamp-real' });
+  });
+
+  it('saves an edited address without a stamp', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await start(review);
+    fireEvent.click(screen.getByRole('button', { name: /Real Cafe/ }));
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: '10 Real St, Sydney NSW 2000' } });
+    await act(async () => fireEvent.submit(screen.getByLabelText('Address').closest('form')!));
+    expect(mocks.saveSharedVenue.mock.calls[0][0].venueToken).toBeUndefined();
+  });
+});

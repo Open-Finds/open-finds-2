@@ -122,6 +122,8 @@ export type ExtractedVenueItem = {
   lat?: number | null;
   lon?: number | null;
   tags: string[];
+  /** Set only for a Google place: links the save to the shared venue (see saveSharedVenue). */
+  venueToken?: string;
 };
 
 export type VenueCandidate = {

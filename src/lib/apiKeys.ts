@@ -278,10 +278,13 @@ export async function findVenueAddress(
   }
 }
 
-/** A Google place the user can choose from. Chosen by the user, so it is not verified by the app. */
-export type GooglePlaceChoice = { name: string; address: string; lat: number; lon: number; type?: VenueType | null };
+/**
+ * A Google place the user can choose from. Chosen by the user, so it is not verified by the app.
+ * `venueToken` is resolve-place's signed note of Google's details, used to link the save to the shared venue.
+ */
+export type GooglePlaceChoice = { name: string; address: string; lat: number; lon: number; type?: VenueType | null; venueToken?: string };
 
-export type VerifiedPlace = { name: string; address: string; lat: number; lon: number; type?: VenueType | null };
+export type VerifiedPlace = { name: string; address: string; lat: number; lon: number; type?: VenueType | null; venueToken?: string };
 
 /**
  * A name+address check: `match` only when Google confirmed exactly one place.

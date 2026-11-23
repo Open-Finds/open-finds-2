@@ -196,6 +196,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
       if (found.length || automatic === undefined) {
         setCandidates(found.map((place, index) => ({
           name: place.name, address: place.address, type: place.type ?? 'food', order: index + 1, tags: [], lat: place.lat, lon: place.lon,
+          venueToken: place.venueToken,
         })));
       }
       if (!found.length && automatic === undefined) setError('Google Places found nothing for that search. Try another name, or save it as entered.');
@@ -218,6 +219,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     try {
       const details: SharedVenue = {
         name: picked.name, address: picked.address, type: picked.type, link, lat: picked.lat, lon: picked.lon, tags: readTags(picked.name, true),
+        venueToken: picked.venueToken,
       };
       setSaved(await saveSharedVenue(details, link));
       onSaved?.();
@@ -403,6 +405,9 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         if (validDetails && !busy && !correctionSaved) void save({
           name: name.trim(), address: address.trim(), type, link, lat: position?.lat ?? null, lon: position?.lon ?? null,
           tags: readTags(name, !!position),
+          // Only a Google place picked above and left unedited is linked to the shared venue (editing clears position).
+          venueToken: position ? googlePlaces.find(place => place.lat === position.lat && place.lon === position.lon &&
+            place.name === name.trim() && place.address === address.trim())?.venueToken : undefined,
         });
       }}>
         {googlePlaces.length > 0 && !saved && <fieldset className="grid gap-2 text-sm">
