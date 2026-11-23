@@ -43,7 +43,8 @@ Rollback: supabase/rollback/20261123120000_universal_venues_foundation.rollback.
 CREATE TABLE public.venues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   google_place_id text UNIQUE
-    CHECK (google_place_id ~ '^[A-Za-z0-9_-]{10,300}$'),
+    -- Length is checked separately: Postgres regexes allow at most 255 repeats.
+    CHECK (char_length(google_place_id) BETWEEN 10 AND 300 AND google_place_id ~ '^[A-Za-z0-9_-]+$'),
   name text NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 200),
   address text NOT NULL CHECK (char_length(btrim(address)) BETWEEN 1 AND 500),
   suburb text CHECK (suburb IS NULL OR char_length(btrim(suburb)) BETWEEN 1 AND 100),

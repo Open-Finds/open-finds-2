@@ -20,6 +20,18 @@ BEGIN
   EXCEPTION WHEN unique_violation THEN ok := true; END;
   PERFORM rep('U2 a Google place is stored once', ok);
 
+  -- Regression: the place id rule once used a regex repeat over 255, which made
+  -- every insert with a place id fail.
+  INSERT INTO venues (google_place_id, name, address, category)
+    VALUES (repeat('A', 300), 'Long id', '1 Long St', 'food');
+  PERFORM rep('U20 a 300-character place id is valid', true);
+
+  BEGIN
+    INSERT INTO venues (google_place_id, name, address, category) VALUES ('bad id with spaces', 'Bad', '1 St', 'food');
+    ok := false;
+  EXCEPTION WHEN check_violation THEN ok := true; END;
+  PERFORM rep('U21 malformed place ids are refused', ok);
+
   BEGIN
     INSERT INTO venues (name, address, category) VALUES ('Bad', '1 St', 'nature');
     ok := false;
