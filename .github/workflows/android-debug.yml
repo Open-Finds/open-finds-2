@@ -2,7 +2,7 @@ name: Android staging APK
 
 on:
   push:
-    branches: [feature/ai-save-quick-share, feature/staging-reconciliation]
+    branches: [feature/ai-save-quick-share, feature/staging-reconciliation, feature/android-staging-signing]
   workflow_dispatch:
 
 permissions:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apk:
-    if: github.ref == 'refs/heads/feature/ai-save-quick-share' || github.ref == 'refs/heads/feature/staging-reconciliation'
+    if: github.ref == 'refs/heads/feature/ai-save-quick-share' || github.ref == 'refs/heads/feature/staging-reconciliation' || github.ref == 'refs/heads/feature/android-staging-signing'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -111,6 +111,23 @@ jobs:
             throw new Error('Staging public recommendation RPC failed its anonymous read check.');
           }
           JS
+      - name: Check Android signing configuration
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STAGING_CERT_SHA256: ${{ vars.ANDROID_STAGING_CERT_SHA256 }}
+        run: |
+          missing=()
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_STAGING_CERT_SHA256; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing signing configuration: ${missing[*]}. Add the four secrets and the ANDROID_STAGING_CERT_SHA256 repository variable before building the staging APK."
+            exit 1
+          fi
       - name: Install dependencies and build staging web bundle
         run: |
           npm ci
@@ -127,17 +144,47 @@ jobs:
             test -n "$manager"
             "$manager" "--sdk_root=$sdk" 'platforms;android-35' 'build-tools;35.0.0' 'build-tools;34.0.0'
           fi
+      - name: Decode staging release keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          keystore="$RUNNER_TEMP/unsaved-staging-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          echo "ANDROID_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
       - name: Assemble debug APK
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: bash gradlew --no-daemon :app:assembleDebug
+      - name: Remove staging keystore
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${ANDROID_KEYSTORE_PATH:-}" ]]; then rm -f "$ANDROID_KEYSTORE_PATH"; fi
       - name: Verify and prepare APK
         shell: bash
+        env:
+          ANDROID_STAGING_CERT_SHA256: ${{ vars.ANDROID_STAGING_CERT_SHA256 }}
         run: |
           set -euo pipefail
           apk=android/app/build/outputs/apk/debug/app-debug.apk
           tools="$ANDROID_HOME/build-tools/35.0.0"
           "$tools/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/signing.txt"
-          grep -q 'CN=Android Debug' "$RUNNER_TEMP/signing.txt"
+          expected=$(printf '%s' "$ANDROID_STAGING_CERT_SHA256" | tr 'A-F' 'a-f' | tr -d ': ')
+          actual=$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/signing.txt" | tr -d ' :')
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::APK signing key does not match the approved staging key (ANDROID_STAGING_CERT_SHA256)."
+            exit 1
+          fi
+          if grep -q 'CN=Android Debug' "$RUNNER_TEMP/signing.txt"; then
+            echo "::error::APK was signed with the Android debug key."
+            exit 1
+          fi
           "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
           grep -q "package: name='com.example.openfinds2.staging'" "$RUNNER_TEMP/badging.txt"
           "$tools/aapt" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/manifest.txt"

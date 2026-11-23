@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+// Permanent signing for the staging APK. The GitHub Actions workflow decodes the
+// keystore and passes its details as environment variables from secrets. No
+// secret value is written in this file.
+def stagingKeystoreVars = ['ANDROID_KEYSTORE_PATH', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD']
+def stagingSigningReady = stagingKeystoreVars.every { System.getenv(it) }
+// On CI (GitHub sets CI=true), refuse to build an APK that would fall back to the debug key.
+if (System.getenv('CI') != null && !stagingSigningReady) {
+    throw new GradleException('Android signing is not configured. Missing: ' +
+            stagingKeystoreVars.findAll { !System.getenv(it) }.join(', '))
+}
+
 android {
     namespace "com.example.openfinds2"
     compileSdk rootProject.ext.compileSdkVersion
@@ -17,8 +28,20 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        staging {
+            if (stagingSigningReady) {
+                storeFile file(System.getenv('ANDROID_KEYSTORE_PATH'))
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         debug {
+            // Local development (no CI) keeps Android's standard debug key.
+            signingConfig = stagingSigningReady ? signingConfigs.staging : signingConfigs.debug
             applicationIdSuffix ".staging"
             manifestPlaceholders = [appLabel: "The Unsaved Staging"]
         }
