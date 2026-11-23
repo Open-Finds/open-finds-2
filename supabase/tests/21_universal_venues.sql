@@ -97,17 +97,19 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN ok := true; END;
   PERFORM rep('U13 users cannot create venues', ok);
 
+  -- 01_write_policies grants every table to the API roles, so these check what
+  -- actually happens (RLS has no write policy), not the migration's REVOKE.
   BEGIN
     UPDATE venues SET name = 'Hijacked' WHERE id = '21000000-0000-0000-0000-0000000000c1';
-    ok := false;
-  EXCEPTION WHEN insufficient_privilege THEN ok := true; END;
-  PERFORM rep('U14 users cannot edit venues', ok);
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  PERFORM rep('U14 users cannot edit venues',
+    (SELECT name = 'Chatime' FROM venues WHERE id = '21000000-0000-0000-0000-0000000000c1'));
 
   BEGIN
     DELETE FROM venues WHERE id = '21000000-0000-0000-0000-0000000000c1';
-    ok := false;
-  EXCEPTION WHEN insufficient_privilege THEN ok := true; END;
-  PERFORM rep('U15 users cannot delete venues', ok);
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  PERFORM rep('U15 users cannot delete venues',
+    EXISTS (SELECT 1 FROM venues WHERE id = '21000000-0000-0000-0000-0000000000c1'));
 
   INSERT INTO saved_venues (name, address, type, venue_id)
     VALUES ('Sneaky', '3 Sneaky St', 'food', '21000000-0000-0000-0000-0000000000c1') RETURNING id INTO new_id;
@@ -128,13 +130,12 @@ RESET ROLE;
 -- Signed out: no access at all.
 SET LOCAL ROLE anon;
 DO $$
-DECLARE ok boolean;
+DECLARE seen bigint := 0;
 BEGIN
   BEGIN
-    PERFORM 1 FROM venues;
-    ok := false;
-  EXCEPTION WHEN insufficient_privilege THEN ok := true; END;
-  PERFORM rep('U19 signed-out users cannot read', ok);
+    SELECT count(*) INTO seen FROM venues;
+  EXCEPTION WHEN insufficient_privilege THEN seen := 0; END;
+  PERFORM rep('U19 signed-out users cannot read', seen = 0);
 END $$;
 RESET ROLE;
 ROLLBACK;
