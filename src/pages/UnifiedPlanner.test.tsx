@@ -146,7 +146,7 @@ describe('unified planner interactions', () => {
     expect(screen.getByText('6/6 stops')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add to itinerary' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Our Picks' }));
-    await user.click(screen.getByRole('button', { name: 'More Nightlife & Music stops' }));
+    await user.click(screen.getByRole('button', { name: 'More Nightlife stops' }));
     expect(screen.getByText('6/6 stops')).toBeInTheDocument();
     expect(screen.getByText(/1\/6 preferences/)).toBeInTheDocument();
   });

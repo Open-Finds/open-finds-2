@@ -10,6 +10,7 @@ import { hasStreetNumber, searchGooglePlaces } from '../lib/apiKeys';
 import { readProgress, writeProgress } from '../lib/progressStore';
 import { fallbackImage } from '../lib/publicRecommendation.js';
 import { typeWithIcon } from '../lib/partners';
+import { UnconfirmedAddressMark } from './UnconfirmedAddressMark';
 import { cn } from '../lib/utils';
 
 /** What the user sees when AI Save could not run. Manual entry and saving stay available in every case. */
@@ -363,7 +364,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
               </button>
               <div className="min-w-0 flex-1">
                 <p className="break-words font-semibold">{row.venue.name}</p>
-                <p className="break-words text-sm">{hasAddress ? row.venue.address : 'No address found'}</p>
+                <p className="flex items-start gap-1 break-words text-sm">{hasAddress && !row.verified && <UnconfirmedAddressMark />}<span>{hasAddress ? row.venue.address : 'No address found'}</span></p>
                 <p className="text-xs text-muted-foreground">{done ? 'Saved to My Venues'
                   : row.verified ? 'Confirmed on Google Maps'
                   : hasAddress ? unverifiedNote(row.venue) : 'This venue cannot be saved without an address.'}</p>
@@ -444,7 +445,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
           {detailsMatchSaved && saved?.photo_url && <img src={saved.photo_url} alt="" className="size-12 rounded object-cover" />}
           <div className="min-w-0 flex-1">
             <p className="break-words font-semibold">{venue.name}</p>
-            <p className="text-sm">{venue.address}</p>
+            <p className="flex items-start gap-1 text-sm">{!isVerified(venue) && <UnconfirmedAddressMark />}<span>{venue.address}</span></p>
             {candidates[0]?.address && candidates[0].address !== venue.address &&
               <p className="text-xs text-muted-foreground">Extracted address: {candidates[0].address}</p>}
             {!isVerified(venue) && <p className="text-xs text-muted-foreground">{unverifiedNote(venue)}</p>}
