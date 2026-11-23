@@ -4,7 +4,7 @@ import { AiSaveDialog } from './AiSaveDialog';
 import type { SharedVenueResult } from '../lib/aiSave';
 
 const mocks = vi.hoisted(() => ({
-  identifySharedVenue: vi.fn(), publishVenue: vi.fn(), saveSharedVenue: vi.fn(), sendRecommendation: vi.fn(),
+  identifySharedVenue: vi.fn(), publishVenue: vi.fn(), saveSharedVenue: vi.fn(), sendRecommendationLink: vi.fn(), sendRecommendationMessage: vi.fn(),
   shareRecommendationOrigin: () => 'https://www.theunsaved.app',
 }));
 vi.mock('../lib/aiSave', () => mocks);

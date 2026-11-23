@@ -1,67 +1,47 @@
-const productionOrigin = 'https://www.theunsaved.app';
-const stagingOrigin = 'https://open-finds-2-bnuk-git-feature-ai-save-quick-share-date-planner.vercel.app';
-const stagingSupabase = 'https://crpkzysdtnoomzimibhe.supabase.co';
-const stagingBranch = 'feature/ai-save-quick-share';
+import { loadRecommendation, isUnverified } from './_recommendation.js';
+import { cleanVenueName, publicVenueLink } from '../src/lib/publicRecommendation.js';
+
 const escape = (text) => String(text).replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]);
 
-function httpsLink(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
 export default async function handler(req, res) {
   const id = req.query.id;
-  if (typeof id !== 'string' || !/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(id)) {
-    return res.status(404).send('Recommendation not found');
-  }
-  const url = process.env.VITE_SUPABASE_URL;
-  const key = process.env.VITE_SUPABASE_ANON_KEY;
-  const staging = url === stagingSupabase;
-  if (!url || !key || (process.env.VERCEL_GIT_COMMIT_REF === stagingBranch && !staging)) {
-    return res.status(503).send('Venue recommendations are unavailable');
-  }
+  const found = await loadRecommendation(id);
+  if (found.error) return res.status(found.error.status).send(found.error.message);
+  const { venue, staging, origin } = found;
   try {
-    const response = await fetch(new URL('/rest/v1/rpc/read_venue_recommendation', url), {
-      method: 'POST',
-      headers: { apikey: key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_id: id }),
-      redirect: 'error',
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) return res.status(503).send('Venue recommendations are unavailable');
-    const venue = await response.json();
-    if (!venue) return res.status(404).send('Recommendation not found');
-
-    const origin = staging ? stagingOrigin : productionOrigin;
     const canonical = origin + '/venue/' + id;
-    const name = escape(venue.name);
+    const name = escape(cleanVenueName(venue.name));
     const address = escape(venue.address);
     const maps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(venue.name + ', ' + venue.address);
-    const reel = httpsLink(venue.link);
+    const reel = publicVenueLink(venue.link);
+    const unverified = isUnverified(req);
+    // A generated card (category background, name, address) unless a real photograph is on file for this venue.
+    const card = origin + '/api/venue-image?id=' + id + (unverified ? '&u=1' : '');
     const photo = staging && id === '497dfa0b-29bf-446d-a272-f8a9211d53bd'
       ? 'https://tb-static.uber.com/prod/image-proc/processed_images/0e733286e4a4d55d86d5eb6acaacb847/1651207c9cb2a7942b37b3f3e4a0b899.jpeg'
-      : origin + '/icon-512.png';
+      : card;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     return res.status(200).send(
       '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<title>' + name + ' | The Unsaved</title>' +
+      '<title>' + name + '</title>' +
       '<meta property="og:type" content="website">' +
-      '<meta property="og:title" content="' + name + ' | The Unsaved">' +
-      '<meta property="og:description" content="' + address + '">' +
+      '<meta property="og:site_name" content="The Unsaved">' +
+      '<meta property="og:title" content="' + name + '">' +
+      '<meta property="og:description" content="' + address + (unverified ? ' (address not confirmed)' : '') + '">' +
       '<meta property="og:image" content="' + escape(photo) + '">' +
+      (photo === card ? '<meta property="og:image:type" content="image/png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">' : '') +
+      '<meta property="og:image:alt" content="' + name + '">' +
+      '<meta name="twitter:card" content="summary_large_image">' +
       '<meta property="og:url" content="' + canonical + '">' +
       '<link rel="canonical" href="' + canonical + '">' +
-      '<style>body{background:#f8fafc;color:#15202b;font:1rem system-ui,sans-serif;margin:0}main{max-width:36rem;margin:3rem auto;padding:1.5rem}img{display:block;max-width:100%;max-height:22rem;border-radius:1rem}a{color:#153a7b}nav{display:flex;gap:1rem;flex-wrap:wrap}</style>' +
+      '<style>body{background:#f8fafc;color:#15202b;font:1rem system-ui,sans-serif;margin:0}main{max-width:36rem;margin:3rem auto;padding:1.5rem}img{display:block;max-width:100%;max-height:22rem;border-radius:1rem}a{color:#153a7b}nav{display:flex;gap:1rem;flex-wrap:wrap}.note{color:#92400e}</style>' +
       '</head><body><main><p>The Unsaved</p><h1>' + name + '</h1><p>' + address + '</p>' +
+      (unverified ? '<p class="note">Address not confirmed on Google Maps. Check it before you go.</p>' : '') +
       '<img src="' + escape(photo) + '" alt="' + name + '"><nav>' +
       '<a href="' + escape(maps) + '">Open in Google Maps</a>' +
       (reel ? '<a href="' + escape(reel) + '">Watch original Reel</a>' : '') +

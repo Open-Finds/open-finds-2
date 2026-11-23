@@ -4,7 +4,7 @@ import { AiSaveDialog } from './AiSaveDialog';
 import type { SharedVenueResult } from '../lib/aiSave';
 
 const mocks = vi.hoisted(() => ({
-  identifySharedVenue: vi.fn(), publishVenue: vi.fn(), saveSharedVenue: vi.fn(), sendRecommendation: vi.fn(),
+  identifySharedVenue: vi.fn(), publishVenue: vi.fn(), saveSharedVenue: vi.fn(), sendRecommendationLink: vi.fn(), sendRecommendationMessage: vi.fn(),
   shareRecommendationOrigin: () => 'https://www.theunsaved.app',
 }));
 vi.mock('../lib/aiSave', () => mocks);
@@ -56,16 +56,17 @@ describe('Shared venue actions', () => {
   it('publishes without saving and reuses the URL after a cancelled share', async () => {
     const url = 'https://www.theunsaved.app/v/id';
     mocks.publishVenue.mockResolvedValue(url);
-    mocks.sendRecommendation.mockResolvedValue('cancelled');
+    mocks.sendRecommendationLink.mockResolvedValue('cancelled');
     await start();
     fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
     expect(mocks.publishVenue).not.toHaveBeenCalled();
     for (let i = 0; i < 2; i++) {
-      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Share recommendation' })));
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Send link' })));
     }
     expect(mocks.publishVenue).toHaveBeenCalledOnce();
-    expect(mocks.publishVenue).toHaveBeenCalledWith(venue);
-    expect(mocks.sendRecommendation).toHaveBeenLastCalledWith(expect.any(String), url);
+    expect(mocks.publishVenue).toHaveBeenCalledWith(venue, undefined, { unverified: false });
+    expect(mocks.sendRecommendationLink).toHaveBeenLastCalledWith(url, 'Test cafe');
+    expect(mocks.sendRecommendationMessage).not.toHaveBeenCalled();
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
   });
 
@@ -231,25 +232,61 @@ describe('Saving and sharing a venue Google has not confirmed', () => {
     expect(screen.queryByText(/might not be accurate|area only/)).not.toBeInTheDocument();
   });
 
-  it('adds the unverified line to the message a friend gets, and not for a verified venue', async () => {
+  it('flags an unverified venue on the shared page, not in the chat message', async () => {
     mocks.saveSharedVenue.mockResolvedValue({ ...saved, lat: null, lon: null });
-    mocks.publishVenue.mockResolvedValue('https://www.theunsaved.app/v/id');
-    mocks.sendRecommendation.mockResolvedValue('shared');
+    mocks.publishVenue.mockResolvedValue('https://www.theunsaved.app/v/id?u=1');
+    mocks.sendRecommendationLink.mockResolvedValue('shared');
     await start(review);
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
     fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
-    expect(screen.getAllByText('Address not verified: check it before you go.').length).toBeGreaterThan(0);
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Share recommendation' })));
-    expect(mocks.sendRecommendation.mock.calls[0][0]).toContain('Address not verified: check it before you go.');
+    expect(screen.getAllByText(/Address not verified/).length).toBeGreaterThan(0);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Send link' })));
+    expect(mocks.publishVenue.mock.calls[0][2]).toEqual({ unverified: true });
+    expect(mocks.sendRecommendationMessage).not.toHaveBeenCalled();
+    expect(mocks.sendRecommendationLink).toHaveBeenCalledWith('https://www.theunsaved.app/v/id?u=1', expect.any(String));
   });
 
-  it('sends a verified venue with the message as typed', async () => {
+  it('sends the message first on its own, then the link alone, with the chips filled in', async () => {
     mocks.publishVenue.mockResolvedValue('https://www.theunsaved.app/v/id');
-    mocks.sendRecommendation.mockResolvedValue('shared');
+    mocks.sendRecommendationMessage.mockResolvedValue('shared');
+    mocks.sendRecommendationLink.mockResolvedValue('shared');
     await start();
     fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Share recommendation' })));
-    expect(mocks.sendRecommendation.mock.calls[0][0]).toBe("Let's check this out! 🤩");
+    fireEvent.change(screen.getByRole('textbox', { name: 'Write a message' }), { target: { value: 'Down?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Venue name' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Address' }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '1. Send message' })));
+    expect(mocks.sendRecommendationMessage).toHaveBeenCalledWith('Down? Test cafe 1 Test St');
+    expect(mocks.sendRecommendationLink).not.toHaveBeenCalled();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '2. Send link' })));
+    expect(mocks.sendRecommendationLink).toHaveBeenCalledWith('https://www.theunsaved.app/v/id', 'Test cafe');
+  });
+
+  it('only offers the link step when there is no message', async () => {
+    await start();
+    fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
+    expect(screen.queryByRole('button', { name: '1. Send message' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send link' })).toBeInTheDocument();
+  });
+
+  it('lets the message be written while the venue is still being checked', async () => {
+    let finish: (result: SharedVenueResult) => void = () => undefined;
+    mocks.identifySharedVenue.mockReturnValueOnce(new Promise<SharedVenueResult>(resolve => { finish = resolve; }));
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} />));
+    const box = screen.getByRole('textbox', { name: 'Write a message' });
+    fireEvent.change(box, { target: { value: 'Can we try this?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Venue name' }));
+    await act(async () => finish({ venue, candidates: [candidate] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
+    expect(screen.getByRole('textbox', { name: 'Write a message' })).toHaveValue('Can we try this? [venue name]');
+  });
+
+  it('cycles the preset message with the shuffle button', async () => {
+    await start();
+    fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
+    expect(screen.getByRole('button', { name: "Let's check this out! 🤩" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Shuffle message' }));
+    expect(screen.getByRole('button', { name: '🤤🤤🤤' })).toBeInTheDocument();
   });
 
   it('lists only Google places under Places found, never what the AI read', async () => {

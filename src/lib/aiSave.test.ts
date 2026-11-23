@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { guestSave, identifySharedVenue, publishVenue, readGuestSave, saveSharedVenue, sendRecommendation, sourceUrl } from './aiSave';
+import { guestSave, identifySharedVenue, publishVenue, readGuestSave, saveSharedVenue, sendRecommendation, sendRecommendationLink, sendRecommendationMessage, sourceUrl } from './aiSave';
 import { ProviderUnavailableError } from './providerErrors';
 
 const mocks = vi.hoisted(() => ({
@@ -326,6 +326,31 @@ describe('share venue persistence', () => {
     await expect(publishVenue(details))
       .resolves.toBe('https://staging.example.test/venue/recommendation-id');
     expect(mocks.rpc).toHaveBeenCalledWith('publish_standalone_venue_recommendation', { p_venue: venue });
+  });
+
+  it('flags an unverified venue in the public link, and only then', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://crpkzysdtnoomzimibhe.supabase.co');
+    vi.stubEnv('VITE_STAGING_RECOMMENDATION_ORIGIN', 'https://staging.example.test');
+    mocks.rpc.mockResolvedValue({ data: 'recommendation-id', error: null });
+    await expect(publishVenue(venue, undefined, { unverified: true }))
+      .resolves.toBe('https://staging.example.test/venue/recommendation-id?u=1');
+    await expect(publishVenue(venue, undefined, { unverified: false }))
+      .resolves.toBe('https://staging.example.test/venue/recommendation-id');
+  });
+
+  it('shares the message and the link as two separate shares', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    try {
+      await expect(sendRecommendationMessage('Down?')).resolves.toBe('shared');
+      await expect(sendRecommendationLink('https://example.com/v/test', 'Yee3')).resolves.toBe('shared');
+      expect(share.mock.calls).toEqual([
+        [{ title: 'Venue recommendation', text: 'Down?' }],
+        [{ title: 'Yee3', url: 'https://example.com/v/test' }],
+      ]);
+    } finally {
+      Reflect.deleteProperty(navigator, 'share');
+    }
   });
 
   it('fails before publishing when a staging URL is missing or points to production', async () => {

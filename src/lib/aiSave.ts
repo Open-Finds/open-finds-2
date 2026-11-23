@@ -3,7 +3,7 @@ import { edgeAuthHeaders } from './edgeAuth';
 import { categoryOf } from './taxonomy';
 import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
 import { supabase, updateSavedVenue, type SavedVenue, type VenueType } from './supabase';
-import { shareOrCopy } from './invite';
+import { shareOrCopy, shareTextOnly } from './invite';
 import { ProviderUnavailableError, type ProviderReason } from './providerErrors';
 import { attemptIdFor, forgetAttempt } from './attemptId';
 import { recommendationOrigin, recommendationPath, stagingSupabase } from './publicRecommendation.js';
@@ -280,14 +280,18 @@ export function shareRecommendationOrigin(): string | null {
     import.meta.env.VITE_RECOMMENDATION_ORIGIN, import.meta.env.VITE_STAGING_RECOMMENDATION_ORIGIN);
 }
 
-export async function publishVenue({ name, address, type, link }: PublicVenue, savedVenueId?: string): Promise<string> {
+/**
+ * The public link for a venue. `unverified` adds a flag the public page reads to say Google has not confirmed the address;
+ * the flag only changes a label, never what is shown about the venue.
+ */
+export async function publishVenue({ name, address, type, link }: PublicVenue, savedVenueId?: string, options: { unverified?: boolean } = {}): Promise<string> {
   const origin = shareRecommendationOrigin();
   if (!origin) throw new Error('Public recommendation URL is unavailable.');
   const { data, error } = savedVenueId
     ? await supabase.rpc('publish_venue_recommendation', { p_venue_id: savedVenueId })
     : await supabase.rpc('publish_standalone_venue_recommendation', { p_venue: { name, address, type, link } });
   if (error || typeof data !== 'string') throw error ?? new Error('No share link returned.');
-  return origin + recommendationPath(data, import.meta.env.VITE_SUPABASE_URL === stagingSupabase);
+  return origin + recommendationPath(data, import.meta.env.VITE_SUPABASE_URL === stagingSupabase) + (options.unverified ? '?u=1' : '');
 }
 
 export async function readPublicVenue(id: string): Promise<PublicVenue | null> {
@@ -308,6 +312,16 @@ export function readGuestSave(id: string): PublicVenue | null {
   } catch {
     return null;
   }
+}
+
+/** Step one of a Quick Share: the optional message, on its own. */
+export function sendRecommendationMessage(message: string) {
+  return shareTextOnly('Venue recommendation', message);
+}
+
+/** Step two: the link alone, so the other app shows it as a preview card instead of a long address. */
+export function sendRecommendationLink(url: string, title = 'Venue recommendation') {
+  return shareOrCopy(title, '', url);
 }
 
 export function sendRecommendation(message: string, url: string) {

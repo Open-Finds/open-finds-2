@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendation, shareRecommendationOrigin, type ExtractedVenueItem, type SharedVenue, type SharedVenueProgress, type SharedVenueResult, type VenueRow } from '../lib/aiSave';
+import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendationLink, sendRecommendationMessage, shareRecommendationOrigin, type ExtractedVenueItem, type SharedVenue, type SharedVenueProgress, type SharedVenueResult, type VenueRow } from '../lib/aiSave';
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
 import { ProviderUnavailableError, waitText } from '../lib/providerErrors';
 import { hasStreetNumber, searchGooglePlaces } from '../lib/apiKeys';
 import { readProgress, writeProgress } from '../lib/progressStore';
-import { fallbackImage } from '../lib/publicRecommendation.js';
+import { cleanVenueName, fallbackImage } from '../lib/publicRecommendation.js';
+import { resolveMessage } from '../lib/shareMessage';
+import { ShareMessageComposer } from './ShareMessageComposer';
 import { typeWithIcon } from '../lib/partners';
 import { UnconfirmedAddressMark } from './UnconfirmedAddressMark';
 import { cn } from '../lib/utils';
@@ -34,8 +36,8 @@ function unverifiedNote(venue: { address: string }): string {
     : 'AI Save found the area only. Tap Edit to add the street address.';
 }
 
-/** What a friend reads next to a shared venue that Google has not confirmed. */
-const unverifiedShareLine = 'Address not verified: check it before you go.';
+/** What the person sharing is told when Google has not confirmed the address. The friend sees it on the venue page, not in the chat. */
+const unverifiedShareLine = 'Address not verified. Your friend will be told to check it before they go.';
 
 export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
   link: string;
@@ -69,9 +71,12 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   /** Google places for the Confirm the venue list. Never what the AI read. */
   const [choices, setChoices] = useState<ExtractedVenueItem[]>([]);
   const [sharing, setSharing] = useState(false);
-  const [message, setMessage] = useState("Let's check this out! 🤩");
+  /** The optional message, as typed (venue chips still show as placeholders). Can be written while the venue is being checked. */
+  const [message, setMessage] = useState('');
   const [shareUrl, setShareUrl] = useState('');
   const [shareBusy, setShareBusy] = useState(false);
+  /** Quick Share is two steps: the message goes first on its own, then the link. */
+  const [messageSent, setMessageSent] = useState(false);
   const [copied, setCopied] = useState(false);
   /** A post that names several venues: each one, to tick and save. */
   const [rows, setRows] = useState<VenueRow[]>();
@@ -286,16 +291,42 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     setSaving(false);
   };
 
-  const send = async () => {
+  /** The message with the venue chips filled in from the verified details. */
+  const outgoing = resolveMessage(message, venue);
+
+  const startSharing = (forVenue?: SharedVenue) => {
+    if (forVenue) setVenue(forVenue);
+    setShareUrl('');
+    setCopied(false);
+    setMessageSent(false);
+    setSharing(true);
+    setError('');
+  };
+
+  /** Step one: the message, on its own. */
+  const sendMessage = async () => {
+    if (!outgoing || shareBusy) return;
+    setShareBusy(true);
+    setError('');
+    try {
+      const result = await sendRecommendationMessage(outgoing);
+      if (result !== 'cancelled') setMessageSent(true);
+    } catch {
+      setError('Could not send the message. Try again.');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  /** Step two: the link alone, so the other app shows it as a preview card. */
+  const sendLink = async () => {
     if (!venue || shareBusy) return;
     setShareBusy(true);
     setError('');
     try {
-      const url = shareUrl || await publishVenue(venue);
+      const url = shareUrl || await publishVenue(venue, undefined, { unverified: !isVerified(venue) });
       setShareUrl(url);
-      // A friend is told when Google has not confirmed the address.
-      const text = isVerified(venue) ? message : [message.trim(), unverifiedShareLine].filter(Boolean).join('\n');
-      const result = await sendRecommendation(text, url);
+      const result = await sendRecommendationLink(url, cleanVenueName(venue.name));
       if (result === 'copied') setCopied(true);
     } catch {
       setError('Could not share this venue. Try again.');
@@ -336,20 +367,29 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
           : editing ? 'Check the venue details.' : 'Choose what to do with this venue.'}</DialogDescription>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {busy && !sharing && <div className="grid gap-2">
+        <p className="text-small text-muted-foreground">While we check the venue, write a message to send with it.</p>
+        <ShareMessageComposer value={message} onChange={setMessage} />
+      </div>}
       {sharing ? <>
+        <ShareMessageComposer value={message} onChange={setMessage} disabled={shareBusy} />
         <div className="flex items-center gap-3 rounded-xl border bg-muted p-3">
           <img className="size-14 shrink-0 rounded-lg" src={fallbackImage} alt="" />
           <div className="min-w-0">
-            <p className="break-words font-semibold">{venue?.name}</p>
-            <p className="break-words text-sm">{venue?.address}</p>
+            <p className="break-words text-lg font-semibold">{cleanVenueName(venue?.name)}</p>
+            <p className="break-words text-sm text-muted-foreground">{venue?.address}</p>
             {venue && !isVerified(venue) && <p className="text-xs text-muted-foreground">{unverifiedShareLine}</p>}
-            <p className="break-all text-xs text-muted-foreground">{shareRecommendationOrigin()?.replace(/^https:\/\//, '') ?? 'Public sharing is unavailable'}</p>
+            <p className="text-xs text-muted-foreground">The Unsaved</p>
           </div>
         </div>
-        <label className="grid gap-1 text-sm">Message (optional)<Input value={message} onChange={event => setMessage(event.target.value)} /></label>
-        <div className="flex gap-2">
-          <Button variant="outline" disabled={shareBusy} onClick={() => { setSharing(false); setError(''); setCopied(false); }}>Back</Button>
-          <Button disabled={shareBusy || !shareRecommendationOrigin()} onClick={() => void send()}>{copied ? 'Link copied' : 'Share recommendation'}</Button>
+        <div className="grid gap-2">
+          {outgoing && <Button variant="outline" disabled={shareBusy} onClick={() => void sendMessage()}>
+            {messageSent ? 'Message sent. Send again' : '1. Send message'}
+          </Button>}
+          <Button disabled={shareBusy || !shareRecommendationOrigin()} onClick={() => void sendLink()}>
+            {copied ? 'Link copied' : outgoing ? '2. Send link' : 'Send link'}
+          </Button>
+          <Button variant="ghost" disabled={shareBusy} onClick={() => { setSharing(false); setError(''); setCopied(false); }}>Back</Button>
         </div>
       </> : rows ? <>
         <div role="group" aria-label="Venues found" className="grid gap-2">
@@ -371,7 +411,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
                   : row.verified ? 'Confirmed on Google Maps'
                   : hasAddress ? unverifiedNote(row.venue) : 'This venue cannot be saved without an address.'}</p>
               </div>
-              {done && <Button variant="outline" size="sm" onClick={() => { setVenue(row.venue); setShareUrl(''); setCopied(false); setSharing(true); setError(''); }}>Quick Share</Button>}
+              {done && <Button variant="outline" size="sm" onClick={() => startSharing(row.venue)}>Quick Share</Button>}
             </div>;
           })}
         </div>
@@ -461,7 +501,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
           <Button disabled={saving || detailsMatchSaved} onClick={() => void save(venue)}>
             {saving ? 'Saving…' : detailsMatchSaved ? 'Saved to My Venues' : 'Save Venue'}
           </Button>
-          <Button variant="outline" onClick={() => { setSharing(true); setError(''); }}>Quick Share</Button>
+          <Button variant="outline" onClick={() => startSharing()}>Quick Share</Button>
           <Button variant="outline" onClick={() => onPlan(venue)}>Create Plan</Button>
         </div>
       </>}
