@@ -7,8 +7,9 @@ android {
         applicationId "com.example.openfinds2"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // The build number rises on every GitHub build (the run number), so a new APK can update the one already installed.
+        versionCode (System.getenv("ANDROID_VERSION_CODE") ?: "1").toInteger()
+        versionName "1.0." + (System.getenv("ANDROID_VERSION_CODE") ?: "0")
         manifestPlaceholders = [appLabel: "The Unsaved"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -17,8 +18,21 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // The permanent staging key. GitHub supplies it from repository secrets; it is never stored in the project.
+        staging {
+            def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         debug {
+            if (System.getenv("ANDROID_KEYSTORE_PATH")) signingConfig signingConfigs.staging
             applicationIdSuffix ".staging"
             manifestPlaceholders = [appLabel: "The Unsaved Staging"]
         }

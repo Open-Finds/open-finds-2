@@ -127,8 +127,24 @@ jobs:
             test -n "$manager"
             "$manager" "--sdk_root=$sdk" 'platforms;android-35' 'build-tools;35.0.0' 'build-tools;34.0.0'
           fi
-      - name: Assemble debug APK
+      - name: Prepare the permanent signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" ]]; then
+            echo "::error::Add the ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets. Without them every build gets a new key and cannot update the installed app."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/staging.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/staging.keystore" >> "$GITHUB_ENV"
+      - name: Assemble signed staging APK
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
         run: bash gradlew --no-daemon :app:assembleDebug
       - name: Verify and prepare APK
         shell: bash
@@ -137,9 +153,12 @@ jobs:
           apk=android/app/build/outputs/apk/debug/app-debug.apk
           tools="$ANDROID_HOME/build-tools/35.0.0"
           "$tools/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/signing.txt"
-          grep -q 'CN=Android Debug' "$RUNNER_TEMP/signing.txt"
+          # Signed with our own permanent key, never the throwaway debug key a runner makes.
+          if grep -q 'CN=Android Debug' "$RUNNER_TEMP/signing.txt"; then echo "::error::The APK was signed with the throwaway debug key."; exit 1; fi
+          grep 'certificate SHA-256 digest' "$RUNNER_TEMP/signing.txt"
           "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
           grep -q "package: name='com.example.openfinds2.staging'" "$RUNNER_TEMP/badging.txt"
+          grep -o "versionCode='[0-9]*'" "$RUNNER_TEMP/badging.txt"
           "$tools/aapt" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/manifest.txt"
           grep -q 'android.intent.action.SEND' "$RUNNER_TEMP/manifest.txt"
           grep -q 'text/plain' "$RUNNER_TEMP/manifest.txt"

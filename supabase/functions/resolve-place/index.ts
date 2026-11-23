@@ -574,7 +574,11 @@ async function verifyPlace(
       if (relatedPlaces.length) outcome.candidates = toCandidates(ranked(relatedPlaces));
       else {
         // Nothing resembles the name: offer Google's closest results, labelled as weak, so the user can search or pick.
-        outcome.candidates = toCandidates(places);
+        // When the source says the place is in Australia (a state, or "Australia"), results from other countries are not offered
+        // (a Las Vegas buffet for a Sydney post). Anywhere else, or when nothing Australian came back, every result stays.
+        const inAustralia = (text: string): boolean => /\bAustralia\b/i.test(text) || AU_STATE.test(text);
+        const here = address && inAustralia(address) ? places.filter((place) => /,\s*Australia\s*$/i.test(place.address ?? "")) : [];
+        outcome.candidates = toCandidates(here.length ? here : places);
         outcome.weak = true;
       }
     }

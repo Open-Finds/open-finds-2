@@ -1,13 +1,13 @@
 /** Six product categories mapped onto the existing four-value storage contract.
  * Explicit category tags win; legacy Activity is never guessed to be Outdoors. */
-export const CATEGORIES = ['food', 'dessert', 'bar', 'activity', 'nightlife', 'outdoors'] as const;
+export const CATEGORIES = ['food', 'dessert', 'cafe', 'bar', 'nightlife', 'activity', 'outdoors'] as const;
 export type Category = typeof CATEGORIES[number];
 export const CATEGORY_LABELS: Record<Category, string> = {
-  food: 'Food', dessert: 'Dessert', bar: 'Bar', activity: 'Activity',
-  nightlife: 'Nightlife & Music', outdoors: 'Outdoors & Adventure',
+  food: 'Food', dessert: 'Dessert', cafe: 'Cafe', bar: 'Bar', activity: 'Activity',
+  nightlife: 'Nightlife', outdoors: 'Nature',
 };
-export const CATEGORY_SHORT: Record<Category, string> = { ...CATEGORY_LABELS, nightlife: 'Nightlife', outdoors: 'Outdoors' };
-export const CATEGORY_EMOJI: Record<Category, string> = { food: '🍔', dessert: '🍰', bar: '🍸', activity: '🎯', nightlife: '🎵', outdoors: '🏞️' };
+export const CATEGORY_SHORT: Record<Category, string> = { ...CATEGORY_LABELS };
+export const CATEGORY_EMOJI: Record<Category, string> = { food: '🍔', dessert: '🍰', cafe: '☕', bar: '🍸', activity: '🎯', nightlife: '🎵', outdoors: '🏞️' };
 export type StorageType = 'food' | 'dessert' | 'bar' | 'activity';
 const key = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim();
 const aliases: Record<string, string> = {
@@ -21,6 +21,15 @@ const aliases: Record<string, string> = {
   'nightlife music': 'category:nightlife', 'nightlife & music': 'category:nightlife', nightlife: 'category:nightlife',
   'live music': 'category:nightlife', 'dj night': 'category:nightlife',
   'outdoors adventure': 'category:outdoors', 'outdoors & adventure': 'category:outdoors', outdoors: 'category:outdoors',
+  // Descriptive tags people search by. Each is kept only when the venue's own name or caption says it.
+  ...Object.fromEntries(['mexican', 'indian', 'greek', 'french', 'spanish', 'turkish', 'lebanese', 'malaysian', 'indonesian', 'american', 'mediterranean', 'middle eastern']
+    .map((v) => [v, `cuisine:${v.replace(/ /g, '_')}`])),
+  ...Object.fromEntries(['buffet', 'matcha', 'brunch', 'burgers', 'bbq', 'seafood', 'tapas', 'gelato', 'cocktails', 'craft beer', 'bakery', 'ice cream', 'coffee', 'steak', 'hot pot', 'dim sum', 'tacos', 'curry']
+    .map((v) => [v, `specialty:${v.replace(/ /g, '_')}`])),
+  'all you can eat': 'specialty:buffet', ayce: 'specialty:buffet',
+  ...Object.fromEntries(['hike', 'walk', 'loop track', 'lookout', 'waterfall', 'beach', 'picnic', 'coastal walk', 'swimming', 'camping', 'rooftop', 'date night']
+    .map((v) => [v, `attribute:${v.replace(/ /g, '_')}`])),
+  hiking: 'attribute:hike', walking: 'attribute:walk', 'date spot': 'attribute:date_night',
 };
 export const SPECIALTY_PARENTS: Record<string, string> = { pho: 'noodle_soup', ramen: 'noodle_soup' };
 /** Automatic structured tags require explicit venue-specific evidence.
@@ -33,12 +42,23 @@ export function supportedExtractionTags(tags: string[], evidence: string): strin
     return Object.entries(aliases).some(([alias, value]) => value === canonical && text.includes(` ${alias} `));
   }));
 }
+/** Descriptive tags (not categories) that a venue's own name or caption says outright, e.g. "hike", "matcha", "loop track". */
+export function tagsFromText(text: string): string[] {
+  const padded = ` ${key(text).replace(/[^\p{L}\p{N}\s]/gu, ' ')} `;
+  return normalizeTags(Object.entries(aliases)
+    .filter(([alias, value]) => !value.startsWith('category:') && padded.includes(` ${alias} `))
+    .map(([, value]) => value));
+}
 export function normalizeTags(tags: string[]): string[] {
   const seen = new Set<string>();
   return tags.filter((t) => typeof t === 'string').map((t) => {
     const raw = t.trim();
     return aliases[key(raw)] ?? raw;
   }).filter((t) => { const id = key(t); if (!t || seen.has(id)) return false; seen.add(id); return true; });
+}
+/** Descriptive tags for display. Category tags are shown once as the category chip, not repeated as tags. */
+export function displayTags(tags: string[]): string[] {
+  return normalizeTags(tags).filter((t) => !t.startsWith('category:'));
 }
 export function tagLabel(tag: string): string {
   const normalized = normalizeTags([tag])[0] ?? tag;
@@ -62,7 +82,7 @@ export function categoriesOf(v: { type: string; tags?: string[] | null; name?: s
 export function categoryStorage(category: Category, tags: string[]): { type: StorageType; tags: string[] } {
   // Changing the primary category removes only category markers, never custom tags.
   const remaining = normalizeTags(tags).filter((t) => !t.startsWith('category:'));
-  return { type: category === 'outdoors' ? 'activity' : category === 'nightlife' ? 'bar' : category,
+  return { type: category === 'outdoors' ? 'activity' : category === 'nightlife' ? 'bar' : category === 'cafe' ? 'food' : category,
     tags: [...remaining, `category:${category}`] };
 }
 export function classifyVenue(v: { type: string; tags?: string[] | null; name?: string }) {

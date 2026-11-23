@@ -338,3 +338,28 @@ describe('resolve-place choices for the user', () => {
     expect(body.candidates).toHaveLength(1);
   });
 });
+
+describe('resolve-place closest results', () => {
+  const vegas = place({ id: 'vegas', displayName: { text: 'Ayce Buffet' }, formattedAddress: '3655 S Las Vegas Blvd, Las Vegas, NV 89109, USA' });
+  const sydneyOther = place({ id: 'syd', displayName: { text: 'Totally Different Place' }, formattedAddress: '1 Elsewhere St, Sydney NSW 2000, Australia' });
+  const askSydney = { verify: true, name: 'Seoul Garden', address: 'Sydney NSW', addressFromSource: false };
+
+  it('does not offer a Las Vegas place for a Sydney post when Google also returned Sydney places', async () => {
+    places(vegas, sydneyOther);
+    const body = await (await request(askSydney)).json();
+    expect(body.reason).toBe('no_match');
+    expect(body.candidates.map((c: { name: string }) => c.name)).toEqual(['Totally Different Place']);
+  });
+
+  it('still offers what Google found when nothing Australian came back', async () => {
+    places(vegas);
+    const body = await (await request(askSydney)).json();
+    expect(body.candidates).toHaveLength(1);
+  });
+
+  it('does not filter anything for a post that is not in Australia', async () => {
+    places(vegas);
+    const body = await (await request({ ...askSydney, name: 'Seoul Garden', address: 'Seoul, South Korea' })).json();
+    expect(body.candidates).toHaveLength(1);
+  });
+});
