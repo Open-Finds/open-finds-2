@@ -30,7 +30,7 @@ export function localDate(date = new Date()): string {
 }
 export function emptyDraft(): PlannerDraft {
   return { version: 1, name: '', date: localDate(), startTime: '19:00', location: '', origin: null,
-    radiusKm: 10, mood: '', travelMode: 'driving', maxTravelMinutes: 20, mode: 'saved', step: 0, counts: { food: 0, dessert: 0, bar: 0, activity: 0, nightlife: 0, outdoors: 0 },
+    radiusKm: 10, mood: '', travelMode: 'driving', maxTravelMinutes: 20, mode: 'saved', step: 0, counts: { food: 0, dessert: 0, cafe: 0, bar: 0, activity: 0, nightlife: 0, outdoors: 0 },
     endTime: '', endNextDay: false, vibes: [],
     stops: [], collectionId: '', savedAt: Date.now() };
 }

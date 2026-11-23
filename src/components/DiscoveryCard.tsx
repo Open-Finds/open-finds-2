@@ -1,8 +1,8 @@
-import { MapPin, Music2, Utensils, Wine, IceCream, Compass, Mountain, Plus, Check } from 'lucide-react';
+import { MapPin, Music2, Utensils, Wine, IceCream, Coffee, Compass, Mountain, Plus, Check } from 'lucide-react';
 import { CATEGORY_LABELS, type PlannerVenue } from '../lib/planner';
 import { RatingLine } from './PartnerBits';
 import { CATEGORY_SHORT } from '../lib/taxonomy';
-const icons = { food: Utensils, dessert: IceCream, bar: Wine, activity: Compass, nightlife: Music2, outdoors: Mountain };
+const icons = { food: Utensils, dessert: IceCream, cafe: Coffee, bar: Wine, activity: Compass, nightlife: Music2, outdoors: Mountain };
 
 export function DiscoveryCard({ venue, selected, onSelect, onOpen, disabled = false, actionLabel, travelLabel, onSave, saved, saving, reviewSummary, onReviews }: {
   reviewSummary?: { average: number; count: number }; onReviews?: () => void;

@@ -3,7 +3,8 @@ import { venueKey, type PlannerVenue } from './planner';
 import { validCoordinate, type Coordinate } from './travel';
 export function providerCategories(types: string[]): PlannerVenue['category'][] {
   const categories: PlannerVenue['category'][] = [];
-  if (types.some((t) => /restaurant|food|cafe/.test(t))) categories.push('food');
+  if (types.some((t) => /restaurant|food/.test(t))) categories.push('food');
+  if (types.some((t) => /cafe|coffee/.test(t))) categories.push('cafe');
   if (types.some((t) => /bakery|dessert|ice_cream/.test(t))) categories.push('dessert');
   if (types.some((t) => ['bar', 'pub', 'wine_bar'].includes(t))) categories.push('bar');
   if (types.some((t) => ['night_club', 'live_music_venue', 'concert_hall'].includes(t))) categories.push('nightlife');

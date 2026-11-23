@@ -3,6 +3,9 @@ import { normalizeTags } from './taxonomy';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const stagingEmailRedirect = supabaseUrl === 'https://crpkzysdtnoomzimibhe.supabase.co'
+  ? 'https://open-finds-2-bnuk-git-feature-ai-save-quick-share-date-planner.vercel.app/'
+  : undefined;
 
 // Catches Safari private-mode SecurityError so the app never crashes on startup,
 // while still persisting sessions normally in regular browsers.
@@ -112,8 +115,15 @@ let signingUp = false;
 export const isSigningUp = () => signingUp;
 export const setSigningUp = (on: boolean) => { signingUp = on; };
 
-export async function signUp(email: string, password: string) {
-  const { data, error } = await supabase.auth.signUp({ email, password });
+export async function signUp(email: string, password: string, displayName: string, username: string) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: stagingEmailRedirect,
+      data: { signup_display_name: displayName, signup_username: username },
+    },
+  });
   if (error) throw error;
   return data;
 }
@@ -128,7 +138,7 @@ export async function signIn(email: string, password: string) {
 export async function sendPasswordReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     // No hash route here: the reset link appends its own #access_token=….
-    redirectTo: `${window.location.origin}/`,
+    redirectTo: stagingEmailRedirect ?? `${window.location.origin}/`,
   });
   if (error) throw error;
 }
@@ -1012,8 +1022,34 @@ export async function insertSavedVenue(
     .insert({ ...venue, tags: normalizeTags(venue.tags ?? []) })
     .select()
     .single();
+  if (error?.code === DUPLICATE_VENUE_CODE) {
+    // The database allows one saved venue per person per name and address
+    // (migration 20261118130000). Saving it again is not an error: return the one they have.
+    const existing = await findSavedVenueByNameAndAddress(venue.name, venue.address);
+    if (existing) return existing;
+    throw new Error(DUPLICATE_VENUE_MESSAGE);
+  }
   if (error) throw error;
   return data as SavedVenue;
+}
+
+const DUPLICATE_VENUE_CODE = '23505';
+export const DUPLICATE_VENUE_MESSAGE = 'You already have a venue with that name and address.';
+
+const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The caller's saved venue with this name and address, ignoring capitals and edge spaces. */
+async function findSavedVenueByNameAndAddress(name: string, address: string): Promise<SavedVenue | null> {
+  const exact = (text: string) => text.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+  const { data, error } = await supabase
+    .from('saved_venues')
+    .select('*')
+    .ilike('name', exact(name))
+    .ilike('address', exact(address))
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  const rows = (data ?? []) as SavedVenue[];
+  return rows.find((row) => sameText(row.name, name) && sameText(row.address, address)) ?? null;
 }
 
 export async function deleteSavedVenue(id: string) {
@@ -1026,7 +1062,7 @@ export async function deleteSavedVenue(id: string) {
 
 export async function updateSavedVenue(
   id: string,
-  updates: Partial<Pick<SavedVenue, 'name' | 'address' | 'type' | 'tags' | 'collection' | 'visited' | 'personal_note' | 'rating'>>
+  updates: Partial<Pick<SavedVenue, 'name' | 'address' | 'type' | 'tags' | 'collection' | 'visited' | 'personal_note' | 'rating' | 'lat' | 'lon'>>
 ) {
   const { data, error } = await supabase
     .from('saved_venues')
@@ -1034,6 +1070,7 @@ export async function updateSavedVenue(
     .eq('id', id)
     .select()
     .single();
+  if (error?.code === DUPLICATE_VENUE_CODE) throw new Error(DUPLICATE_VENUE_MESSAGE);
   if (error) throw error;
   return data as SavedVenue;
 }

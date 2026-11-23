@@ -7,8 +7,8 @@ import { ChooseUsernamePage } from './ChooseUsername';
 describe('generic profile examples', () => {
   it('renders generic placeholders as empty inputs and never auto-saves them', () => {
     render(<ChooseUsernamePage />);
-    expect(screen.getByPlaceholderText('Alex Taylor')).toHaveValue('');
-    expect(screen.getByPlaceholderText('alex.taylor')).toHaveValue('');
+    expect(screen.getByPlaceholderText('Your display name')).toHaveValue('');
+    expect(screen.getByPlaceholderText('your_username')).toHaveValue('');
     expect(api.save).not.toHaveBeenCalled();
   });
 });

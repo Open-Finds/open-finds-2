@@ -1,4 +1,5 @@
-import { tagLabel } from '../lib/taxonomy';
+import { displayTags, tagLabel } from '../lib/taxonomy';
+import { UnconfirmedAddressMark } from './UnconfirmedAddressMark';
 import { useState } from 'react';
 import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2, Trash2, BookmarkCheck } from 'lucide-react';
 import {
@@ -346,7 +347,7 @@ export function SavedVenueCard({
       <div className="min-w-0 w-full flex-1">
         <h3 className="pr-8 font-semibold text-foreground">{onOpen ? <button className="text-left" onClick={onOpen}>{venue.name}</button> : venue.name}</h3>
         <p className="mt-1 flex items-start gap-1 text-sm text-muted-foreground">
-          <MapPin size={13} className="mt-1 shrink-0 text-muted-foreground" /> {venue.address}
+          <MapPin size={13} className="mt-1 shrink-0 text-muted-foreground" /> {venue.address}{(venue.lat == null || venue.lon == null) && <UnconfirmedAddressMark />}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {!readOnly && <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2.5 py-0.5 text-xs font-medium text-info"><BookmarkCheck size={11} />Saved</span>}
@@ -368,7 +369,7 @@ export function SavedVenueCard({
           <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
             {CATEGORY_EMOJI[categoryOf(venue)]} {CATEGORY_LABELS[categoryOf(venue)]}
           </span>
-          {tags.map((tag) => (
+          {displayTags(tags).map((tag) => (
             <span
               key={tag}
               className="inline-flex items-center gap-1 rounded-full bg-ai-soft px-2 py-0.5 text-xs font-medium text-ai-soft-foreground"

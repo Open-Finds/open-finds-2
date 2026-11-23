@@ -3,8 +3,14 @@ import { json, preflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
 import { getGoogleMapsApiKey } from "../_shared/maps.ts";
+import { configureStagingProviders, DISCOVER_VENUES, providerFetch, withStagingProviderControls } from "../_shared/stagingProviders.ts";
+
+// Staging only: deployed discover-venues can never be enabled there (its boot check forbids it).
+// Elsewhere this is a pass-through. See _shared/stagingProviders.ts.
+configureStagingProviders(DISCOVER_VENUES);
+
 type Place = { id?: string; displayName?: { text?: string }; formattedAddress?: string; location?: { latitude?: number; longitude?: number }; types?: string[]; businessStatus?: string; attributions?: { provider?: string; providerUri?: string }[] };
-export async function handler(req: Request): Promise<Response> {
+async function rawHandler(req: Request): Promise<Response> {
   const pre = preflight(req); if (pre) return pre;
   if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
   try {
@@ -15,7 +21,7 @@ export async function handler(req: Request): Promise<Response> {
     const limit = await consumeRateLimit("discover-venues", auth.user.id, 20, 3600, { failClosed: true });
     if (!limit.allowed) return json(req, { error: "Discovery allowance unavailable. Try again later." }, limit.available ? 429 : 503);
     const key = await getGoogleMapsApiKey();
-    const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    const response = await providerFetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST", headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key,
         "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.businessStatus,places.attributions" },
       body: JSON.stringify({ textQuery: query.trim(), pageSize: 20, languageCode: "en", locationBias: { circle: { center: { latitude: origin.lat, longitude: origin.lon }, radius: 50000 } } }),
@@ -32,4 +38,5 @@ export async function handler(req: Request): Promise<Response> {
     return json(req, { venues, provider: "Google Maps" });
   } catch { return json(req, { error: "Verified venue discovery is unavailable" }, 503); }
 }
+export const handler = withStagingProviderControls("discover-venues", rawHandler);
 Deno.serve(handler);

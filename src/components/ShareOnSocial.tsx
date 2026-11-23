@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Copy, Share2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
-import { copyToClipboard } from '../lib/invite';
+import { copyToClipboard, shareOrCopy } from '../lib/invite';
 
 const OPTION =
   'flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-6 py-3 text-sm font-bold text-primary-text transition-all active:scale-[0.98] hover:bg-muted';
@@ -28,9 +28,9 @@ export function ShareOnSocialDialog({
 }) {
   const [copied, setCopied] = useState(false);
   const full = `${message}\n${url}`;
-  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   const copy = async () => {
+    if (!url) return;
     if (await copyToClipboard(full)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -38,7 +38,7 @@ export function ShareOnSocialDialog({
   };
   const shareMore = async () => {
     try {
-      await navigator.share({ title, text: message, url });
+      if (await shareOrCopy(title, message, url) === 'copied') setCopied(true);
     } catch { /* cancelled */ }
   };
 
@@ -52,7 +52,7 @@ export function ShareOnSocialDialog({
         <p className="break-words rounded-lg border border-border bg-background px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
           {message} <span className="text-muted-foreground">{url}</span>
         </p>
-        <div className="grid gap-3">
+        {!url ? <p>Public sharing is unavailable.</p> : <div className="grid gap-3">
           <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer" className={OPTION}>Facebook</a>
           <button
             onClick={copy}
@@ -71,13 +71,10 @@ export function ShareOnSocialDialog({
           >
             <span aria-hidden="true">✈️</span> Telegram
           </a>
-          {canShare && (
             <button onClick={shareMore} className={OPTION}>
               <Share2 size={18} /> Instagram, Messages &amp; more
             </button>
-          )}
-          {!canShare && <button onClick={copy} className={OPTION}>Instagram · copy invitation to share manually</button>}
-        </div>
+        </div>}
       </DialogContent>
     </Dialog>
   );

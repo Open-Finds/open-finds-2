@@ -77,6 +77,11 @@
   --primary-gradient-active: linear-gradient(120deg, hsl(var(--primary-active)), hsl(25 89% 52%));
 }
 .ux-page { width:100%; max-width:1120px; margin:0 auto; padding:28px 18px 112px; min-height:100dvh; }
+html.android-share-window,
+html.android-share-window body {
+  background: transparent;
+}
+
 .ux-field, .ux-page select:not([class]) { min-height:44px; max-width:100%; padding:12px 14px; border:1px solid hsl(var(--input)); border-radius:12px; background:hsl(var(--card)); color:hsl(var(--foreground)); font:inherit; }
 .ux-field::placeholder { color:hsl(var(--muted-foreground)); }
 .ux-page button:disabled { cursor:not-allowed; opacity:.45; }

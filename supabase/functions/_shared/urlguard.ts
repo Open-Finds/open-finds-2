@@ -6,7 +6,11 @@
  * purpose request proxy sitting inside our infrastructure: a caller could
  * reach cloud metadata endpoints, internal services, or anything else the
  * function's network can see, and read the response back.
+ *
+ * Outbound requests go through providerFetch, which is plain fetch except in
+ * a function running under the staging provider controls.
  */
+import { providerFetch } from "./stagingProviders.ts";
 
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
@@ -136,7 +140,7 @@ export async function followRedirects(raw: string, maxRedirects = 5): Promise<st
     if (!destination) return hop === 0 ? raw : current;
     let res: Response;
     try {
-      res = await fetch(destination.toString(), {
+      res = await providerFetch(destination.toString(), {
         redirect: "manual",
         headers: {
           "User-Agent":
@@ -175,7 +179,7 @@ export async function safeFetch(
     const destination = await publicDestination(current);
     if (!destination) return null;
 
-    const res = await fetch(destination.toString(), { ...init, redirect: "manual" });
+    const res = await providerFetch(destination.toString(), { ...init, redirect: "manual" });
 
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("location");

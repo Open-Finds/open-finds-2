@@ -1,2 +1,6 @@
 # Keep executable shell scripts portable across Windows and Linux.
 *.sh text eol=lf
+
+# Staging-recovered migrations are stored byte-for-byte (CRLF) so their checksums match staging.
+supabase/migrations/20261112100000_standalone_venue_recommendations.sql -text
+supabase/migrations/20261112110000_require_plan_invite_ownership.sql -text

@@ -14,11 +14,14 @@ import { Label } from '@/components/ui/label';
 export function ChooseUsernamePage() {
   const { session, refreshProfile } = useAuth();
   const meta = session?.user.user_metadata ?? {};
-  // Google's name if there is one; never the email-based placeholder.
+  // Prefill signup choices or the social provider's name. The form checks availability on save.
   const [displayName, setDisplayName] = useState<string>(
-    (meta.full_name as string) || (meta.name as string) || ''
+    (typeof meta.signup_display_name === 'string' && meta.signup_display_name)
+      || (meta.full_name as string) || (meta.name as string) || ''
   );
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(
+    typeof meta.signup_username === 'string' ? meta.signup_username : ''
+  );
   const [available, setAvailable] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,8 +82,8 @@ export function ChooseUsernamePage() {
                 id="choose-display-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Alex Taylor"
-                autoComplete="name"
+                placeholder="Your display name"
+                autoComplete="off"
                 className="pl-11"
               />
             </div>
@@ -97,7 +100,7 @@ export function ChooseUsernamePage() {
                   setAvailable(null);
                 }}
                 onBlur={() => check(username.trim())}
-                placeholder="alex.taylor"
+                placeholder="your_username"
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}

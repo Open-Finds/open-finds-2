@@ -2,7 +2,15 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
+import { stageLog } from "../_shared/stagelog.ts";
 import { assertPublicUrl, followRedirects, safeFetch } from "../_shared/urlguard.ts";
+import {
+  configureStagingProviders, EXTRACT_VENUE_META, isStagingProviderTarget, providerFetch, withStagingProviderControls,
+} from "../_shared/stagingProviders.ts";
+
+// Staging only: requests pass the access/budget/ledger controls and trim retries.
+// Everywhere else this is a pass-through. See _shared/stagingProviders.ts.
+configureStagingProviders(EXTRACT_VENUE_META);
 
 const RATE_LIMIT = 60;
 const RATE_WINDOW_SECONDS = 60 * 60;
@@ -27,7 +35,30 @@ type MetaResult = {
   oembedAuthor: string | null;
   oembedHtml: string | null;
   fetched: boolean;
+  /** The place the creator tagged on a TikTok (often only a suburb or city), when the page carries one. */
+  location?: { name: string; address: string; kind: string } | null;
+  /** The page's own search keywords: creators often list the venue and its suburb here. */
+  keywords?: string | null;
 };
+
+/**
+ * The location tag in a TikTok page: a flat "poi" object with a name, an address
+ * and a kind ("City", "Other Places", "Restaurant" ...). Only those three short
+ * strings are read, never anything else on the page.
+ */
+export function tiktokLocation(html: string): { name: string; address: string; kind: string } | null {
+  const found = html.match(/"poi":(\{[^{}]{0,800}\})/);
+  if (!found) return null;
+  try {
+    const poi = JSON.parse(found[1]) as Record<string, unknown>;
+    const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+    const name = text(poi.name, 120);
+    if (!name) return null;
+    return { name, address: text(poi.address, 200), kind: text(poi.ttTypeNameTiny, 40) };
+  } catch {
+    return null;
+  }
+}
 
 function detectPlatform(url: string): Platform {
   const lower = url.toLowerCase();
@@ -104,6 +135,7 @@ function extractMeta(html: string): {
   metaDescription: string | null;
   jsonLd: string | null;
   rawText: string | null;
+  keywords: string | null;
 } {
   const getMeta = (property: string): string | null => {
     const re = new RegExp(
@@ -128,6 +160,7 @@ function extractMeta(html: string): {
   const ogDescription = getMeta("og:description");
   const ogSiteName = getMeta("og:site_name");
   const metaDescription = getMeta("description");
+  const keywords = getMeta("keywords")?.trim().slice(0, 400) || null;
 
   // Extract JSON-LD blocks
   const jsonLdMatches = html.matchAll(
@@ -156,7 +189,7 @@ function extractMeta(html: string): {
   if (text.length > 6000) text = text.slice(0, 6000);
   const rawText = text || null;
 
-  return { ogTitle, ogDescription, ogSiteName, pageTitle, metaDescription, jsonLd, rawText };
+  return { ogTitle, ogDescription, ogSiteName, pageTitle, metaDescription, jsonLd, rawText, keywords };
 }
 
 async function fetchWithHeaders(
@@ -256,7 +289,7 @@ async function fetchMetaOEmbed(
       return null;
     }
 
-    const res = await fetch(oembedUrl, {
+    const res = await providerFetch(oembedUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -310,12 +343,13 @@ function canonicalTikTokUrl(url: string): string {
  * TikTok turns away some requests from cloud servers (about one in three in
  * testing, for any video), sometimes for a few seconds at a time, so a failed
  * lookup is retried over ~6s. The AI step after this takes far longer.
+ * On staging every attempt is a counted provider call, so it tries once.
  */
 async function fetchTikTokOEmbed(
   videoUrl: string
 ): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
   const url = canonicalTikTokUrl(videoUrl);
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < (isStagingProviderTarget() ? 1 : 4); attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1000 * attempt));
     const result = await fetchTikTokOEmbedOnce(url);
     if (result?.title || result?.author) return result;
@@ -328,7 +362,7 @@ async function fetchTikTokOEmbedOnce(
 ): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
   try {
     const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(videoUrl)}`;
-    const res = await fetch(oembedUrl, {
+    const res = await providerFetch(oembedUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -349,7 +383,7 @@ async function fetchTikTokOEmbedOnce(
   }
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request) => {
   const pre = preflight(req);
   if (pre) return pre;
 
@@ -357,6 +391,7 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Method not allowed" }, 405);
   }
 
+  const started = Date.now();
   try {
     // Fetching arbitrary URLs on a caller's behalf is only offered to
     // signed-in users, and is capped per user.
@@ -365,6 +400,7 @@ Deno.serve(async (req: Request) => {
 
     const limit = await consumeRateLimit("extract-venue-meta", auth.user.id, RATE_LIMIT, RATE_WINDOW_SECONDS);
     if (!limit.allowed) {
+      stageLog("extract-venue-meta", "extract", started, "rate_limited");
       return json(
         req,
         { error: "Rate limit reached. Try again shortly." },
@@ -380,6 +416,7 @@ Deno.serve(async (req: Request) => {
 
     const guard = assertPublicUrl(url);
     if (!guard.ok) {
+      stageLog("extract-venue-meta", "extract", started, "url_rejected");
       return json(req, { error: guard.error }, 400);
     }
 
@@ -389,6 +426,22 @@ Deno.serve(async (req: Request) => {
     const platform = detectPlatform(target);
     const contentType = detectContentType(target, platform);
     const handle = extractHandle(target, platform);
+
+    // The public caption embed often has the caption when the Reel page serves a login shell.
+    if (platform === "instagram" && (contentType === "post" || contentType === "reel")) {
+      const shortcode = new URL(target).pathname.match(/\/(?:p|reel)\/([A-Za-z0-9_-]+)\/?$/)?.[1];
+      if (shortcode) {
+        const embed = await fetchWithHeaders("https://www.instagram.com/p/" + shortcode + "/embed/captioned/", false);
+        const captionHtml = embed?.match(/<div\b[^>]*class=["']Caption["'][^>]*>([\s\S]*?)<\/div>/i)?.[1];
+        const caption = captionHtml ? extractMeta(captionHtml).rawText?.slice(0, 1200) : null;
+        if (caption) {
+          stageLog("extract-venue-meta", "extract", started, "caption_embed", {
+            platform, content: contentType, caption_chars: caption.length, has_handle: !!handle,
+          });
+          return json(req, { platform, contentType, url: target, handle, ogDescription: caption, fetched: true });
+        }
+      }
+    }
 
     // Kick off oEmbed and HTML scrape in parallel for maximum speed
     const oembedPromises: Promise<{ title: string | null; author: string | null; html: string | null } | null>[] = [];
@@ -411,9 +464,10 @@ Deno.serve(async (req: Request) => {
     // HTML scrape — try mobile UA first for Instagram reels, desktop for everything else
     const scrapePromise = (async () => {
       if (platform === "instagram" && contentType === "reel") {
+        // On staging each fetch is a counted provider call, so the fallbacks are skipped.
         let h = await fetchWithHeaders(target, true);
-        if (!h) h = await fetchWithHeaders(target, false);
-        if (!h) {
+        if (!h && !isStagingProviderTarget()) h = await fetchWithHeaders(target, false);
+        if (!h && !isStagingProviderTarget()) {
           const variant = target.includes("?") ? target + "&__d=1" : target + "?__d=1";
           h = await fetchWithHeaders(variant, true);
         }
@@ -465,6 +519,10 @@ Deno.serve(async (req: Request) => {
         oembedHtml,
         fetched: oembedTitle !== null || oembedAuthor !== null,
       };
+      stageLog("extract-venue-meta", "extract", started, result.fetched ? "oembed_only" : "nothing_fetched", {
+        platform, content: contentType, caption_chars: oembedTitle?.length ?? 0, has_handle: !!creatorHandle,
+        tiktok_oembed: tiktokOembed !== null, meta_oembed: metaOembed !== null, html: false,
+      });
       return json(req, result);
     }
 
@@ -513,11 +571,18 @@ Deno.serve(async (req: Request) => {
       oembedAuthor,
       oembedHtml,
       fetched: true,
+      location: platform === "tiktok" ? tiktokLocation(html) : null,
+      keywords: meta.keywords,
     };
 
+    stageLog("extract-venue-meta", "extract", started, finalOgDescription ? "ok" : "no_caption", {
+      platform, content: contentType, caption_chars: finalOgDescription?.length ?? 0, has_handle: !!result.handle,
+      tiktok_oembed: tiktokOembed !== null, meta_oembed: metaOembed !== null, html: true,
+    });
     return json(req, result);
   } catch (err) {
+    stageLog("extract-venue-meta", "extract", started, "internal_error");
     console.error("[extract-venue-meta] internal error", String(err));
     return json(req, { error: "Internal error" }, 500);
   }
-});
+}));

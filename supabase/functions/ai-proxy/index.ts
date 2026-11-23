@@ -2,6 +2,12 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { json, preflight } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
+import { stageLog } from "../_shared/stagelog.ts";
+import { AI_PROXY, configureStagingProviders, providerFetch, withStagingProviderControls } from "../_shared/stagingProviders.ts";
+
+// Staging only: extraction requests pass the access/budget/ledger controls.
+// Everywhere else this is a pass-through. See _shared/stagingProviders.ts.
+configureStagingProviders(AI_PROXY);
 
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
 if (!OPENROUTER_API_KEY) {
@@ -51,7 +57,7 @@ function validateMessages(raw: unknown): { ok: true; messages: ChatMessage[] } |
   return { ok: true, messages };
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withStagingProviderControls("ai-proxy", async (req: Request) => {
   const pre = preflight(req);
   if (pre) return pre;
 
@@ -61,6 +67,7 @@ Deno.serve(async (req: Request) => {
 
   // Gives back a credit spent on a request that then failed.
   let refundCredit = async () => {};
+  const started = Date.now();
 
   try {
     // 1. Prove a real signed-in user, not just possession of the public anon key.
@@ -165,11 +172,12 @@ Deno.serve(async (req: Request) => {
       payload.response_format = response_format;
     }
 
+    // A plain model answers in a few seconds; one with web search needs longer. Neither should hang for minutes.
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120_000);
+    const timeout = setTimeout(() => controller.abort(), requestedModel.endsWith(":online") ? 30_000 : 20_000);
 
     try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const res = await providerFetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -183,12 +191,14 @@ Deno.serve(async (req: Request) => {
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         console.error("[ai-proxy] upstream error", res.status, text.slice(0, 300));
+        stageLog("ai-proxy", "ai", started, "upstream_error", { status: res.status, model: requestedModel, purpose: purpose as string });
         await refundCredit();
         // Upstream detail can echo account information, so it is logged but not returned.
         return json(req, { error: `AI request failed (${res.status})` }, res.status);
       }
 
       const data = await res.json();
+      stageLog("ai-proxy", "ai", started, "ok", { model: requestedModel, purpose: purpose as string, online: requestedModel.endsWith(":online") });
       return json(req, data, 200, {
         "X-RateLimit-Remaining": String(limit.remaining),
       });
@@ -196,8 +206,9 @@ Deno.serve(async (req: Request) => {
       clearTimeout(timeout);
     }
   } catch (err) {
+    stageLog("ai-proxy", "ai", started, err instanceof Error && err.name === "AbortError" ? "timeout" : "internal_error");
     console.error("[ai-proxy] internal error", String(err));
     await refundCredit();
     return json(req, { error: "Internal error" }, 500);
   }
-});
+}));
