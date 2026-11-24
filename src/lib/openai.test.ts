@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAddresses, extractVenuesFromLink, hasSourceAddress, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
+import { checkAddresses, extractVenuesFromLink, hasSourceAddress, mentionedInSource, NO_CAPTION_MESSAGE, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
 
 // Google lookups for checkAddresses: answers by venue name, so each test says
 // what Google "knows". Unknown names find nothing.
@@ -50,11 +50,11 @@ describe('AI Save provider failures', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it('keeps going when the link itself was rejected as invalid (HTTP 400)', async () => {
+  it('keeps going when a website link itself was rejected as invalid (HTTP 400)', async () => {
     vi.mocked(fetch).mockClear();
     vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: 'bad url' }, { status: 400 }))
       .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
-    await expect(extractVenuesFromLink(link, strict)).resolves.toEqual([]);
+    await expect(extractVenuesFromLink('https://test.example/best-cafes', strict)).resolves.toEqual([]);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -77,6 +77,86 @@ describe('AI Save provider failures', () => {
       .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
     await expect(extractVenuesFromLink(link)).resolves.toEqual([]);
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * A TikTok or Instagram post whose caption never arrived (TikTok turns some requests away) used to go to the AI with only
+ * the link and the creator's name. It then guessed venues the post never named, and Google "confirmed" them.
+ */
+describe('a social post with no readable caption', () => {
+  it.each([
+    ['a TikTok video whose caption lookup was turned away', 'https://www.tiktok.com/@sydney_edited/video/123',
+      { platform: 'tiktok', contentType: 'video', url: 'https://www.tiktok.com/@sydney_edited/video/123', handle: 'sydney_edited', fetched: false }],
+    ['a TikTok photo post with an empty caption', 'https://www.tiktok.com/@someone/photo/456',
+      { platform: 'tiktok', contentType: 'video', url: 'https://www.tiktok.com/@someone/photo/456', fetched: true, oembedTitle: '  ' }],
+    ['an Instagram reel the metadata service rejected', 'https://www.instagram.com/reel/test/', null],
+  ])('stops before the AI for %s, and says to try again or search', async (_case, link, meta) => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(meta ? Response.json(meta) : Response.json({ error: 'bad url' }, { status: 400 }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true })).rejects.toThrow(NO_CAPTION_MESSAGE);
+    // Only the metadata request: no AI call, so nothing is guessed and nothing is spent.
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('still asks the AI when only the place the creator tagged came through', async () => {
+    const link = 'https://www.tiktok.com/@someone/video/789';
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'video', url: link, fetched: true,
+      location: { name: 'Ocean Royale', address: 'Auburn NSW', kind: 'poi' } }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
+    await extractVenuesFromLink(link, { verifySeparately: true, search: false });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('still asks the AI for a profile, and for callers other than AI Save', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'profile', url: 'https://www.tiktok.com/@cafe', fetched: false }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }))
+      .mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'video', url: 'https://www.tiktok.com/@a/video/1', fetched: false }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
+    await extractVenuesFromLink('https://www.tiktok.com/@cafe', { verifySeparately: true, search: false });
+    await extractVenuesFromLink('https://www.tiktok.com/@a/video/1');
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('whether the post itself names a venue', () => {
+  const progress = (caption: string, extra: Record<string, unknown> = {}) => ({ metadata: {
+    platform: 'tiktok', contentType: 'video', url: 'https://www.tiktok.com/@a/video/1', ogTitle: null, ogDescription: null,
+    ogSiteName: null, pageTitle: null, metaDescription: null, jsonLd: null, handle: null, rawText: null, oembedTitle: caption,
+    oembedAuthor: null, oembedHtml: null, fetched: true, ...extra,
+  } });
+  const oceanRoyale = progress('My top 3 favourites are in the video!\n\u{1F4CD}Ocean Royale at Club Auburn!\nlocated inside Club Auburn at 12-14 Northumberland Road, Auburn, NSW 2144');
+  const palace = progress('3. The Palace restaurant in the city.\n2. Feng You in Hurstville.\n1. Golden Sands, which is also in Hurstville.');
+
+  it('does not count a venue the AI found elsewhere, even a real one', () => {
+    expect(mentionedInSource(oceanRoyale, 'Oyama Ramen')).toBe(false);
+    expect(mentionedInSource(oceanRoyale, 'Gacha Cafe')).toBe(false);
+    expect(mentionedInSource(palace, 'Ame')).toBe(false);
+    expect(mentionedInSource(palace, 'Loa')).toBe(false);
+  });
+
+  it('counts the venues the caption names, including the longer names Google gives them', () => {
+    expect(mentionedInSource(oceanRoyale, 'Ocean Royale')).toBe(true);
+    expect(mentionedInSource(oceanRoyale, 'Ocean Royale Chinese Restaurant Auburn')).toBe(true);
+    expect(mentionedInSource(palace, 'The Palace Chinese Restaurant')).toBe(true);
+    expect(mentionedInSource(palace, 'Feng You')).toBe(true);
+    expect(mentionedInSource(palace, 'Golden Sands Restaurant')).toBe(true);
+  });
+
+  it('counts a name in the joined-up creator handle', () => {
+    expect(mentionedInSource(progress('So good', { handle: 'certifiedpizzastmarys' }), 'Certified Pizza St Marys')).toBe(true);
+  });
+
+  it('accepts either the AI name or the Google name', () => {
+    expect(mentionedInSource(oceanRoyale, 'Oyama Ramen', 'Ocean Royale')).toBe(true);
+  });
+
+  it('changes nothing when there is no post text to compare with', () => {
+    expect(mentionedInSource(undefined, 'Anything')).toBe(true);
+    expect(mentionedInSource({ metadata: { ...progress('').metadata, platform: 'website' } }, 'Anything')).toBe(true);
+    expect(mentionedInSource(progress(''), 'Anything')).toBe(true);
   });
 });
 

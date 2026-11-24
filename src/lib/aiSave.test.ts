@@ -4,8 +4,13 @@ import { ProviderUnavailableError } from './providerErrors';
 
 const mocks = vi.hoisted(() => ({
   extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), updateTags: vi.fn(), session: { id: 'test-user' },
+  /** Which names the post itself mentions (by default, all of them). */
+  mentioned: { names: null as string[] | null },
 }));
-vi.mock('./openai', () => ({ extractVenuesFromLink: mocks.extract, hasSourceAddress: () => false }));
+vi.mock('./openai', () => ({
+  extractVenuesFromLink: mocks.extract, hasSourceAddress: () => false,
+  mentionedInSource: (_progress: unknown, ...names: string[]) => !mocks.mentioned.names || names.some(name => mocks.mentioned.names!.includes(name)),
+}));
 vi.mock('./apiKeys', () => ({
   isGoogleMapsLink: mocks.maps,
   verifyVenuePlaceDetailed: async (...args: unknown[]) => ({ match: await mocks.match(...args), candidates: [] }),
@@ -78,6 +83,22 @@ describe('share venue persistence', () => {
     expect(mocks.extract).not.toHaveBeenCalled();
     expect(mocks.match).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('marks a Google-confirmed venue the post never names, and leaves a named one unmarked', async () => {
+    mocks.lookup.mockResolvedValue({ data: [], error: null });
+    mocks.extract.mockResolvedValue([{ ...venue, name: 'Oyama Ramen' }]);
+    mocks.match.mockResolvedValue({ ...venue, name: 'Oyama Ramen', address: '363 Anzac Parade, Kingsford NSW 2032', lat: 1, lon: 2 });
+    mocks.mentioned.names = ['Ocean Royale'];
+    try {
+      const guessed = await identifySharedVenue(link);
+      expect(guessed.venue).toMatchObject({ name: 'Oyama Ramen', lat: 1, mentioned: false });
+      mocks.mentioned.names = ['Oyama Ramen'];
+      const named = await identifySharedVenue(link + '?again');
+      expect(named.venue?.mentioned).toBeUndefined();
+    } finally {
+      mocks.mentioned.names = null;
+    }
   });
 
   it('returns the corroborated venue and waits for an explicit save', async () => {
@@ -193,6 +214,19 @@ describe('share venue persistence', () => {
       expect(result.rows?.[0].venue).toMatchObject({ address: '2 Real St', lat: 1, lon: 2, link, tags: ['pizza'] });
       expect(result.rows?.[1].venue).toMatchObject({ address: '1 Test St, Sydney NSW 2000', lat: null, lon: null });
       expect(mocks.match).toHaveBeenCalledTimes(3);
+    });
+
+    it('marks each row the post never names, confirmed by Google or not', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('Ame'), item('The Palace')]);
+      mocks.match.mockImplementation(async (details: { name: string }) => ({ name: details.name, address: '2 Real St', type: 'food', lat: 1, lon: 2 }));
+      mocks.mentioned.names = ['The Palace'];
+      try {
+        const result = await identifySharedVenue(link);
+        expect(result.rows?.map(row => [row.venue.name, row.verified, row.mentioned])).toEqual([['Ame', true, false], ['The Palace', true, undefined]]);
+      } finally {
+        mocks.mentioned.names = null;
+      }
     });
 
     it('takes at most five venues', async () => {

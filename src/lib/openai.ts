@@ -409,6 +409,54 @@ function readSocialCaption(meta: MetaResult | null | undefined): CaptionEvidence
   };
 }
 
+/** What AI Save says when a post's caption could not be read. */
+export const NO_CAPTION_MESSAGE = "We couldn't read this post's caption. TikTok and Instagram sometimes block us, so try again, or search for the venue below.";
+
+const SOCIAL_POST = /(?:tiktok\.com|instagram\.com)/i;
+
+/**
+ * A social post (not a profile) is only worth asking the AI about when its caption, or the place the creator tagged, came through.
+ * Websites, Google Maps links and profiles are left to the usual steps.
+ */
+function readablePost(meta: MetaResult | null, link: string): boolean {
+  const platform = meta?.platform ?? (SOCIAL_POST.test(link) ? (/tiktok/i.test(link) ? 'tiktok' : 'instagram') : 'other');
+  if (platform !== 'tiktok' && platform !== 'instagram') return true;
+  if (meta && meta.contentType === 'profile') return true;
+  if (!meta && /instagram\.com\/(?!p\/|reels?\/|tv\/)[^/?#]+\/?(?:[?#]|$)/i.test(link)) return true;
+  return !!captionPlainText(meta).trim() || !!meta?.location?.name;
+}
+
+/** Words that say what kind of place it is, not which one: they cannot show that a post names a venue. */
+const GENERIC_NAME_WORDS = new Set([
+  'the', 'and', 'cafe', 'caf', 'restaurant', 'bar', 'pub', 'kitchen', 'house', 'grill', 'bakery', 'coffee', 'eatery', 'bistro',
+  'dining', 'diner', 'club', 'co', 'shop', 'store', 'ramen', 'pizza', 'pizzeria', 'sushi', 'bbq', 'dumpling', 'dumplings', 'noodle',
+  'noodles', 'thai', 'korean', 'japanese', 'chinese', 'vietnamese', 'italian', 'indian', 'yum', 'cha', 'dim', 'sum', 'tea', 'dessert',
+  'desserts', 'gelato', 'burger', 'burgers', 'bakehouse', 'patisserie', 'sydney', 'melbourne', 'street', 'st', 'road', 'rd',
+]);
+
+/**
+ * Whether the post itself names this venue: one of the name's distinctive words is in the caption, the title, the tagged place or the
+ * creator's handle. A venue the AI found elsewhere (by guessing from the creator's name, or a web search) is not, even when Google
+ * confirms that it exists. Unknown (no post text, a website, a Maps link) counts as named, so nothing changes there.
+ */
+export function mentionedInSource(progress: VenueExtractionProgress | undefined, ...names: string[]): boolean {
+  const meta = progress?.metadata;
+  if (!meta || (meta.platform !== 'tiktok' && meta.platform !== 'instagram')) return true;
+  const text = captionKey([captionPlainText(meta), meta.ogTitle, meta.pageTitle, meta.location?.name, meta.handle, meta.oembedAuthor]
+    .filter(Boolean).join(' '));
+  if (!text) return true;
+  const words = ` ${text} `;
+  const compact = text.replace(/\s+/g, '');
+  return names.some(name => {
+    const tokens = captionKey(name).split(' ').filter(token => token.length >= 2);
+    const distinctive = tokens.filter(token => !GENERIC_NAME_WORDS.has(token));
+    const check = distinctive.length ? distinctive : tokens;
+    if (!check.length) return true;
+    // A whole word anywhere, or (for longer words) inside a joined-up handle such as "certifiedpizzastmarys".
+    return check.some(token => words.includes(` ${token} `) || (token.length >= 5 && compact.includes(token)));
+  });
+}
+
 /** Everything the creator wrote about the post, as plain text: the source for descriptive tags. */
 function captionPlainText(meta: MetaResult | null | undefined): string {
   return [...new Set([meta?.ogDescription, meta?.oembedTitle, meta?.metaDescription])]
@@ -507,6 +555,11 @@ export async function extractVenuesFromLink(
   // Step 1: Fetch real page metadata via edge function
   const meta = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately, attemptId);
   if (options?.progress && meta && (meta.fetched || meta.oembedTitle || meta.ogDescription || meta.metaDescription)) options.progress.metadata = meta;
+  // A TikTok or Instagram post whose caption could not be read (TikTok turns some requests away) gives the AI nothing
+  // but the link and the creator's name, and it then guesses venues the post never mentions. Stop and say so instead.
+  if (options?.verifySeparately && !readablePost(meta, link)) {
+    throw new UserFacingError(NO_CAPTION_MESSAGE);
+  }
   const caption = options?.verifySeparately ? readSocialCaption(meta) : undefined;
   if (caption?.name && caption.address && caption.type) {
     return [{ name: caption.name, address: caption.address, type: caption.type, order: 1, tags: tagsFromText(caption.name + ' ' + captionPlainText(meta)) }];

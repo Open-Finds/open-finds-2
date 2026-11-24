@@ -1,7 +1,7 @@
 import { isGoogleMapsLink, verifyVenuePlaceDetailed } from './apiKeys';
 import { edgeAuthHeaders } from './edgeAuth';
 import { categoryOf } from './taxonomy';
-import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
+import { extractVenuesFromLink, hasSourceAddress, mentionedInSource, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
 import { supabase, updateSavedVenue, type SavedVenue, type VenueType } from './supabase';
 import { shareOrCopy, shareTextOnly } from './invite';
 import { ProviderUnavailableError, type ProviderReason } from './providerErrors';
@@ -73,7 +73,11 @@ export async function saveSharedVenue(venue: SharedVenue, link: string, position
   return row;
 }
 
-export type SharedVenue = PublicVenue & { lat?: number | null; lon?: number | null; tags?: string[]; venueToken?: string };
+export type SharedVenue = PublicVenue & {
+  lat?: number | null; lon?: number | null; tags?: string[]; venueToken?: string;
+  /** false: Google found this place, but the post never names it (the AI found it elsewhere). Missing means named or unknown. */
+  mentioned?: boolean;
+};
 
 export type SharedVenueProgress = {
   checkedSaved?: boolean;
@@ -89,7 +93,7 @@ export type SharedVenueProgress = {
 };
 
 /** One venue from a post that names several: the details to save, and whether Google confirmed them. */
-export type VenueRow = { venue: SharedVenue; verified: boolean };
+export type VenueRow = { venue: SharedVenue; verified: boolean; /** false: the post never names this venue. */ mentioned?: boolean };
 
 /** The most venues taken from one post. */
 export const MAX_VENUES = 5;
@@ -108,9 +112,10 @@ async function verifyEach(items: ExtractedVenueItem[], link: string, attemptId: 
       addressFromSource: hasSourceAddress(identification, item.address),
     }, attemptId);
     const match = check.match;
+    const mentioned = mentionedInSource(identification, item.name, match?.name ?? item.name);
     return match
-      ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon, venueToken: match.venueToken }, verified: true }
-      : { venue: read(item), verified: false };
+      ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon, venueToken: match.venueToken, ...(mentioned ? {} : { mentioned: false }) }, verified: true, ...(mentioned ? {} : { mentioned: false }) }
+      : { venue: read(item), verified: false, ...(mentioned ? {} : { mentioned: false }) };
   }));
   const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (failures.length === settled.length) throw failures[0].reason;
@@ -247,10 +252,12 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
             issue: { stage, retryable: false, reason: check.reason ?? 'no_match', ...(check.weak ? { weak: true } : {}) },
           };
         }
+        // Google confirms the place exists; whether the post names it is a separate question.
+        const mentioned = mentionedInSource(progress.identification, candidate?.name ?? match.name, match.name);
         progress.verified = {
           name: match.name, address: match.address, link,
           type: match.type ?? candidate?.type ?? 'activity', lat: match.lat, lon: match.lon, tags: candidate?.tags ?? [],
-          venueToken: match.venueToken,
+          venueToken: match.venueToken, ...(mentioned ? {} : { mentioned: false }),
         };
         progress.candidates ??= [{ ...progress.verified, order: 1, tags: [] }];
         break;

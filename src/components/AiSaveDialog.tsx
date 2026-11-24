@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -34,6 +35,15 @@ function unverifiedNote(venue: { address: string }): string {
   return hasStreetNumber(venue.address)
     ? 'AI Save might not be accurate. Check the address before you go.'
     : 'AI Save found the area only. Tap Edit to add the street address.';
+}
+
+/** Shown on a venue Google found that the post itself never names: the AI found it somewhere else, so it may be the wrong place. */
+const notMentionedLine = "Not mentioned in the post. Check it's the right place before saving.";
+
+function NotMentionedNote() {
+  return <p className="flex items-start gap-1 text-xs text-warning">
+    <AlertTriangle size={14} className="mt-px shrink-0" aria-hidden="true" /><span>{notMentionedLine}</span>
+  </p>;
 }
 
 /** What the person sharing is told when Google has not confirmed the address. The friend sees it on the venue page, not in the chat. */
@@ -114,8 +124,8 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
       progressListener.current?.(progress.current);
       void writeProgress(link, progress.current);
       setRows(result.rows);
-      // Venues Google confirmed start ticked; the rest are the user's choice.
-      setTicked(new Set((result.rows ?? []).flatMap((row, index) => row.verified && row.venue.address.trim() ? [index] : [])));
+      // Venues Google confirmed, and that the post itself names, start ticked; the rest are the user's choice.
+      setTicked(new Set((result.rows ?? []).flatMap((row, index) => row.verified && row.mentioned !== false && row.venue.address.trim() ? [index] : [])));
       setVenue(result.venue);
       setCandidates(result.candidates);
       const candidate = result.venue ?? result.candidates[0];
@@ -425,9 +435,11 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
                 <span className="min-w-0 flex-1">
                   <span className="block break-words font-semibold">{row.venue.name}</span>
                   <span className="flex items-start gap-1 break-words text-sm">{hasAddress && !row.verified && <UnconfirmedAddressMark />}<span>{hasAddress ? row.venue.address : 'No address found'}</span></span>
-                  <span className="block text-xs text-muted-foreground">{done ? 'Saved to My Venues'
+                  {!done && row.mentioned === false ? <span className="flex items-start gap-1 text-xs text-warning">
+                    <AlertTriangle size={14} className="mt-px shrink-0" aria-hidden="true" /><span>{notMentionedLine}</span>
+                  </span> : <span className="block text-xs text-muted-foreground">{done ? 'Saved to My Venues'
                     : row.verified ? 'Confirmed on Google Maps'
-                    : hasAddress ? unverifiedNote(row.venue) : 'This venue cannot be saved without an address.'}</span>
+                    : hasAddress ? unverifiedNote(row.venue) : 'This venue cannot be saved without an address.'}</span>}
                 </span>
               </button>
               {done && <Button variant="outline" size="sm" onClick={() => startSharing(row.venue)}>Quick Share</Button>}
@@ -513,6 +525,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
             {candidates[0]?.address && candidates[0].address !== venue.address &&
               <p className="text-xs text-muted-foreground">Extracted address: {candidates[0].address}</p>}
             {!isVerified(venue) && <p className="text-xs text-muted-foreground">{unverifiedNote(venue)}</p>}
+            {venue.mentioned === false && <NotMentionedNote />}
           </div>
           <Button variant="ghost" size="sm" disabled={saving} onClick={() => { setEditing(true); setError(''); }}>Edit</Button>
         </div>

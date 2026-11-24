@@ -226,6 +226,14 @@ describe('Confirm the venue choices', () => {
     expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Kiddo Coffee (edited)', lat: null, lon: null });
   });
 
+  it('says the caption could not be read, and offers a retry, instead of guessing', async () => {
+    const message = "We couldn't read this post's caption. TikTok and Instagram sometimes block us, so try again, or search for the venue below.";
+    await start({ candidates: [], issue: { stage: 'identify', retryable: true, cause: new Error(message) } });
+    expect(screen.getByRole('alert')).toHaveTextContent("We couldn't read this post's caption");
+    expect(screen.getByRole('button', { name: 'Retry identification' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/search Google Places/)).toBeInTheDocument();
+  });
+
   it('never shows what the AI read as a Google choice when Google found nothing', async () => {
     await start({ candidates: [], issue: { stage: 'identify', retryable: true } });
     expect(screen.getByLabelText(/search Google Places/)).toBeInTheDocument();
@@ -264,6 +272,12 @@ describe('Saving and sharing a venue Google has not confirmed', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
     expect(screen.getByText('AI Save found the area only. Tap Edit to add the street address.')).toBeInTheDocument();
     expect(screen.queryByText(/might not be accurate/)).not.toBeInTheDocument();
+  });
+
+  it('warns when the venue Google confirmed is not named in the post', async () => {
+    await start({ venue: { ...venue, name: 'Oyama Ramen', mentioned: false }, candidates: [candidate] });
+    expect(screen.getByText("Not mentioned in the post. Check it's the right place before saving.")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save Venue' })).toBeEnabled();
   });
 
   it('shows no warning for a Google-verified venue', async () => {
@@ -381,6 +395,18 @@ describe('A post that names several venues', () => {
     expect(screen.getByText('This venue cannot be saved without an address.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save selected (1)' })).toBeEnabled();
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('does not pre-tick a Google-confirmed venue the post never names, and says why', async () => {
+    const guessed = { venue: { ...venue, name: 'Ame', lat: 1, lon: 2 }, verified: true, mentioned: false };
+    mocks.identifySharedVenue.mockResolvedValueOnce({ rows: [alpha, guessed], candidates: [] });
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} />));
+    expect(box('Alpha')).toHaveAttribute('aria-checked', 'true');
+    expect(box('Ame')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText("Not mentioned in the post. Check it's the right place before saving.")).toBeInTheDocument();
+    // Only the named venue says Confirmed on Google Maps.
+    expect(screen.getAllByText('Confirmed on Google Maps')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Save selected (1)' })).toBeEnabled();
   });
 
   it('ticks a venue when any part of its card is tapped, not only the box', async () => {
