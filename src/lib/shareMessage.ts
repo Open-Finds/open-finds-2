@@ -39,3 +39,19 @@ export function resolveMessage(template: string, venue?: { name?: string | null;
     .replace(/[ \t]+\n/g, '\n')
     .trim();
 }
+
+/** Whether the message already holds this chip. */
+export function hasToken(value: string, token: string): boolean {
+  return value.toLowerCase().includes(token.toLowerCase());
+}
+
+/** The message without the chip (every copy of it), with the spaces around it tidied. */
+export function removeToken(value: string, token: string): string {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value
+    .replace(new RegExp(escaped, 'gi'), '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/^[ \t]+/, '')
+    .trimEnd();
+}

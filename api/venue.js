@@ -14,6 +14,8 @@ export default async function handler(req, res) {
     const canonical = origin + '/venue/' + id;
     const name = escape(cleanVenueName(venue.name));
     const address = escape(venue.address);
+    // What a chat app prints on the card: "Urth Cafe | 4/165 Wattle St, Mount Lewis NSW 2190". Chat apps show the title, not the description.
+    const headline = address.trim() ? name + ' | ' + address : name;
     const maps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(venue.name + ', ' + venue.address);
     const reel = publicVenueLink(venue.link);
     const unverified = isUnverified(req);
@@ -28,10 +30,10 @@ export default async function handler(req, res) {
     return res.status(200).send(
       '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<title>' + name + '</title>' +
+      '<title>' + headline + '</title>' +
       '<meta property="og:type" content="website">' +
       '<meta property="og:site_name" content="The Unsaved">' +
-      '<meta property="og:title" content="' + name + '">' +
+      '<meta property="og:title" content="' + headline + '">' +
       '<meta property="og:description" content="' + address + (unverified ? ' (address not confirmed)' : '') + '">' +
       '<meta property="og:image" content="' + escape(photo) + '">' +
       (photo === card ? '<meta property="og:image:type" content="image/png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">' : '') +

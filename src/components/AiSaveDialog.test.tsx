@@ -301,6 +301,28 @@ describe('Saving and sharing a venue Google has not confirmed', () => {
     expect(mocks.sendRecommendationLink).toHaveBeenCalledWith('https://www.theunsaved.app/v/id', 'Test cafe');
   });
 
+  it('shows a plus on the venue name and address buttons, and a minus once added to take it out again', async () => {
+    await start();
+    fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
+    const box = screen.getByRole('textbox', { name: 'Write a message' });
+    const name = () => screen.getByRole('button', { name: 'Venue name' });
+    const address = () => screen.getByRole('button', { name: 'Address' });
+    expect(name()).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.change(box, { target: { value: 'Down?' } });
+    fireEvent.click(name());
+    fireEvent.click(address());
+    expect(box).toHaveValue('Down? [venue name] [address]');
+    expect(name()).toHaveAttribute('aria-pressed', 'true');
+    expect(address()).toHaveAttribute('aria-pressed', 'true');
+    // The second tap (now a minus) removes only that one.
+    fireEvent.click(name());
+    expect(box).toHaveValue('Down? [address]');
+    expect(name()).toHaveAttribute('aria-pressed', 'false');
+    expect(address()).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(address());
+    expect(box).toHaveValue('Down?');
+  });
+
   it('only offers the link step when there is no message', async () => {
     await start();
     fireEvent.click(screen.getByRole('button', { name: 'Quick Share' }));

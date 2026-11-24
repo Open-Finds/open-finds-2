@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import { Shuffle } from 'lucide-react';
+import { Minus, Plus, Shuffle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { ADDRESS_TOKEN, insertAtCursor, nextPreset, PRESET_MESSAGES, VENUE_TOKEN } from '../lib/shareMessage';
+import { ADDRESS_TOKEN, hasToken, insertAtCursor, nextPreset, PRESET_MESSAGES, removeToken, VENUE_TOKEN } from '../lib/shareMessage';
 
 /**
  * The optional message that goes with a Quick Share. It can be written while the venue is still being checked:
@@ -34,8 +34,14 @@ export function ShareMessageComposer({ value, onChange, disabled = false }: {
       className="min-h-0 resize-none border-transparent bg-muted text-base dark:bg-muted"
       value={value} onChange={event => onChange(event.target.value)} />
     <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" size="sm" variant="secondary" disabled={disabled} onClick={() => insert(VENUE_TOKEN)}>Venue name</Button>
-      <Button type="button" size="sm" variant="secondary" disabled={disabled} onClick={() => insert(ADDRESS_TOKEN)}>Address</Button>
+      {([['Venue name', VENUE_TOKEN], ['Address', ADDRESS_TOKEN]] as const).map(([label, token]) => {
+        const added = hasToken(value, token);
+        // A "+" adds it to the message; once added the same button shows a "−" that takes it out again.
+        return <Button key={token} type="button" size="sm" variant={added ? 'secondary' : 'outline'} disabled={disabled}
+          aria-pressed={added} onClick={() => added ? onChange(removeToken(value, token)) : insert(token)}>
+          {added ? <Minus aria-hidden="true" /> : <Plus aria-hidden="true" />}{label}
+        </Button>;
+      })}
     </div>
     <div className="flex items-center gap-2">
       <Button type="button" size="sm" variant="outline" disabled={disabled} className="h-auto min-h-9 min-w-0 whitespace-normal py-1.5 text-left"

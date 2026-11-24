@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ADDRESS_TOKEN, insertAtCursor, nextPreset, PRESET_MESSAGES, resolveMessage, VENUE_TOKEN } from './shareMessage';
+import { ADDRESS_TOKEN, hasToken, insertAtCursor, nextPreset, PRESET_MESSAGES, removeToken, resolveMessage, VENUE_TOKEN } from './shareMessage';
 import { cleanVenueName } from './publicRecommendation.js';
 
 describe('cleanVenueName', () => {
@@ -47,5 +47,23 @@ describe('nextPreset', () => {
   });
   it('starts from the first preset when the text is something else', () => {
     expect(nextPreset('my own words')).toBe(PRESET_MESSAGES[0]);
+  });
+});
+
+describe('hasToken and removeToken', () => {
+  it('sees a chip in the message, however it is capitalised', () => {
+    expect(hasToken('Down? [venue name]', VENUE_TOKEN)).toBe(true);
+    expect(hasToken('Down? [Venue Name]', VENUE_TOKEN)).toBe(true);
+    expect(hasToken('Down? [venue name]', ADDRESS_TOKEN)).toBe(false);
+  });
+  it('takes the chip out and tidies the spaces, leaving the rest of the message', () => {
+    expect(removeToken('Down? [venue name] [address]', VENUE_TOKEN)).toBe('Down? [address]');
+    expect(removeToken('[venue name] Down?', VENUE_TOKEN)).toBe('Down?');
+    expect(removeToken('Try [address] soon', ADDRESS_TOKEN)).toBe('Try soon');
+    expect(removeToken('[address]', ADDRESS_TOKEN)).toBe('');
+  });
+  it('removes every copy and does nothing when the chip is not there', () => {
+    expect(removeToken('[address] and [Address]', ADDRESS_TOKEN)).toBe('and');
+    expect(removeToken('Down?', ADDRESS_TOKEN)).toBe('Down?');
   });
 });

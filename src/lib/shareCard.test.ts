@@ -63,12 +63,21 @@ describe('public venue page', () => {
     await venuePage({ query: { id } }, res);
     const html = String(res.body);
     expect(res.code).toBe(200);
-    expect(html).toContain('<meta property="og:title" content="Yee3 • World Square">');
+    // The card title is the name and the address, like "Urth Cafe | 4/165 Wattle St, Mount Lewis NSW 2190".
+    expect(html).toContain('<meta property="og:title" content="Yee3 • World Square | Shop 6/385 Pitt St, Sydney NSW 2000">');
+    expect(html).toContain('<title>Yee3 • World Square | Shop 6/385 Pitt St, Sydney NSW 2000</title>');
     expect(html).toContain('<meta property="og:description" content="Shop 6/385 Pitt St, Sydney NSW 2000">');
     expect(html).toContain(`<meta property="og:image" content="${origin}/api/venue-image?id=${id}">`);
     expect(html).toContain('content="1200"');
     expect(html).not.toContain('| The Unsaved');
     expect(html).not.toContain('Address not confirmed');
+  });
+
+  it('uses just the name as the title when there is no address', async () => {
+    loaded.load.mockResolvedValue(found({ ...venue, address: '  ' }));
+    const res = reply();
+    await venuePage({ query: { id } }, res);
+    expect(String(res.body)).toContain('<meta property="og:title" content="Yee3 • World Square">');
   });
 
   it('says so, on the page and in the card link, when the address is not confirmed', async () => {
