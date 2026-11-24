@@ -316,6 +316,11 @@ type CaptionEvidence = {
 };
 
 const captionAddress = /^((?:\d+[a-z]?\/)?\d+[a-z]?(?:[-–]\d+[a-z]?)?\s+[\p{L}\p{N} .’'-]+?\s(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|place|pl|terrace|tce|way|parade|pde|crescent|cres|highway|hwy)\.?),?\s+([\p{L} .’'-]+,?\s+(?:ACT|NSW|NT|QLD|SA|TAS|VIC|WA)(?:\s+\d{4})?(?:,?\s+Australia)?)$/iu;
+/**
+ * A street and a suburb with no state ("5 Crana St, St Marys"): how many creators write an address under a 📍 name.
+ * Only a street number, a street word, a comma and a plain suburb, so it cannot swallow other text.
+ */
+const captionStreetSuburb = /^(?:\d+[a-z]?\/)?\d+[a-z]?(?:[-–]\d+[a-z]?)?\s+[\p{L}\p{N} .’'-]+?\s(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|place|pl|terrace|tce|way|parade|pde|crescent|cres|highway|hwy)\.?,\s*[\p{L}][\p{L} .’'-]{1,40}$/iu;
 const captionLocality = /^[\p{L}][\p{L} .’'-]*,?\s+(?:ACT|NSW|NT|QLD|SA|TAS|VIC|WA)(?:\s+\d{4})?$/iu;
 
 function captionKey(value: string): string {
@@ -360,7 +365,7 @@ function readSocialCaption(meta: MetaResult | null | undefined): CaptionEvidence
       if (/^(?:\d+[.)]\s|top\s+\d+\s+(?:spots|places|venues|caf[eé]s|restaurants)\b|(?:venues|locations|addresses):)/i.test(line)) ambiguous = true;
       const pin = line.match(/^📍\s*([^,]+),\s*(\d.+)$/u);
       const splitPin = line.match(/^\u{1F4CD}\s*([^\d,][^,]*)$/u);
-      const nextAddress = splitPin && lines[index + 1]?.match(captionAddress);
+      const nextAddress = splitPin && (lines[index + 1]?.match(captionAddress) ?? lines[index + 1]?.match(captionStreetSuburb));
       const label = line.match(/^(venue|address|location|type|category):\s*(.+)$/i)
         ?? line.match(/^\u{1F4CD}\s*(venue|address|location):\s*(.+)$/iu);
       const pinnedAddress = line.match(/^\u{1F4CD}\s*(\d.+)$/u);
@@ -413,8 +418,14 @@ function captionPlainText(meta: MetaResult | null | undefined): string {
 function reconcileCaption(caption: CaptionEvidence, name: string, items: ExtractedVenueItem[], text = ''): ExtractedVenueItem[] {
   const address = caption.address ?? caption.locality ?? '';
   const match = items.find(item => captionKey(item.name) === captionKey(name));
+  // The AI may add the state or postcode to a street the caption wrote without them ("5 Crana St, St Marys" and "... NSW 2760").
+  const extendsCaption = (found: string, written: string) => {
+    const a = addressKey(found);
+    const b = addressKey(written);
+    return a === b || a.startsWith(b + ' ');
+  };
   const matchesLocation = !address || !match?.address || (caption.address
-    ? addressKey(match.address) === addressKey(address)
+    ? extendsCaption(match.address, address)
     : (' ' + addressKey(match.address) + ' ').includes(' ' + addressKey(address) + ' '));
   if (items.length === 1 && match && matchesLocation) {
     return [{ ...match, name, address: caption.address ?? (match.address || address), type: caption.type ?? match.type,

@@ -267,6 +267,47 @@ it('does not choose one pin from a flattened multi-venue caption', async () => {
   ]);
 });
 
+describe('a caption address that leaves the state off', () => {
+  const link = socialLinks.instagram;
+  const caption = 'This is a tiny family owned pizza spot.\n\n\u{1F4CD} Certified Pizza\n5 Crana St, St Marys\n\nInvite #westernsydney #pizza';
+  const meta = (ogDescription: string) => Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription });
+  const evidence = () => String(JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body)).messages[1].content);
+
+  it('reads the name and street under a pin, gives them to the AI as evidence, and counts them as written by the creator', async () => {
+    const progress = {};
+    vi.mocked(fetch).mockResolvedValueOnce(meta(caption))
+      .mockResolvedValueOnce(aiVenues({ name: 'Certified Pizza', address: '5 Crana St, St Marys NSW 2760', type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress })).resolves.toMatchObject([
+      { name: 'Certified Pizza', address: '5 Crana St, St Marys', type: 'food' },
+    ]);
+    expect(evidence()).toContain('Caption evidence (unverified source data): {"name":"Certified Pizza","address":"5 Crana St, St Marys"');
+    expect(hasSourceAddress(progress, '5 Crana St, St Marys')).toBe(true);
+    expect(hasSourceAddress(progress, '15 Crana St, St Marys')).toBe(false);
+  });
+
+  it('keeps the venue the caption names when the AI names a different one, and asks for a check', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(meta(caption))
+      .mockResolvedValueOnce(aiVenues({ name: 'Dandelion Garden', address: '123 Pickford St, Burwood East VIC 3151', type: 'activity' }));
+    const [venue] = await extractVenuesFromLink(link, { verifySeparately: true });
+    expect(venue).toMatchObject({ name: 'Certified Pizza', address: '5 Crana St, St Marys', requiresManualCorrection: true });
+  });
+
+  it('still ignores a second line that is only a suburb, so nothing is invented', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(meta('\u{1F4CD} Certified Pizza\nSt Marys\n#pizza'))
+      .mockResolvedValueOnce(aiVenues());
+    await extractVenuesFromLink(link, { verifySeparately: true });
+    expect(evidence()).not.toContain('Caption evidence');
+  });
+
+  it('does not pick one venue when the caption pins two', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(meta('\u{1F4CD} Test Cafe\n1 Test St, Newtown\n\u{1F4CD} Other Bar\n2 Other Rd, Enmore'))
+      .mockResolvedValueOnce(aiVenues({ name: 'Test Cafe', address: fullAddress, type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true })).resolves.toMatchObject([
+      { requiresManualCorrection: true },
+    ]);
+  });
+});
+
 it('keeps the source evidence in a fallback request below the staging byte limit', async () => {
   const link = socialLinks.tiktok;
   vi.mocked(fetch).mockResolvedValueOnce(Response.json({
