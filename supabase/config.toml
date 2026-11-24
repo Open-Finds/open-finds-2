@@ -30,6 +30,9 @@ verify_jwt = true
 [functions.resolve-place]
 verify_jwt = true
 
+[functions.save-verified-venue]
+verify_jwt = true
+
 [functions.extract-venue-meta]
 verify_jwt = true
 

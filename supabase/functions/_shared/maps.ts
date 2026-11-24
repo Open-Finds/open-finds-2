@@ -6,10 +6,18 @@
  * with an error status, and used to look exactly like "nothing found".
  */
 import { serviceClient } from "./auth.ts";
+import { isStagingControlled, isStagingProviderTarget, providerFetch } from "./stagingProviders.ts";
 
 export type Coord = { lat: number; lng: number };
 
 export async function getGoogleMapsApiKey(): Promise<string> {
+  // Staging functions read the key from their own environment, never from the
+  // shared database table. Other functions, and every other project, are unchanged.
+  if (isStagingControlled()) {
+    const runtimeKey = Deno.env.get("GOOGLE_MAPS_API_KEY")?.trim();
+    if (runtimeKey) return runtimeKey;
+    if (isStagingProviderTarget()) throw new Error("Staging Google Maps secret not configured");
+  }
   const { data, error } = await serviceClient()
     .from("app_secrets")
     .select("value")
@@ -53,7 +61,7 @@ export async function geocodeAU(address: string, apiKey: string): Promise<Geocod
     : `address=${encodeURIComponent(text)}&region=au`;
   const lang = '&language=en';
   try {
-    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${query}${lang}&key=${apiKey}`);
+    const res = await providerFetch(`https://maps.googleapis.com/maps/api/geocode/json?${query}${lang}&key=${apiKey}`);
     if (!res.ok) return { coord: null, status: "FETCH_FAILED", formattedAddress: null };
     const data = await res.json();
     if (data.status !== "OK" && data.status !== "ZERO_RESULTS") logGoogleError("geocode", data);

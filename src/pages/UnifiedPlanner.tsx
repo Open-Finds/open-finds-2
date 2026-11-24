@@ -2,7 +2,7 @@ import { PlannerDisclosure } from '../components/PlannerDisclosure';
 import { lazy, Suspense, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { X, Plus, RotateCw, Shuffle, LocateFixed, Sparkles, Search, Check } from 'lucide-react';
 import { fetchSavedVenues, fetchCollections, fetchCollectionVenueIds, fetchSponsoredVenues, fetchPlan, fetchStops, sortStops,
-  insertSavedVenue, fetchPlannerSixStopSupport, fetchPlannerTimingSupport, hasPremium, recordSponsoredEvents, type SponsoredVenue, type SavedVenue, type Collection } from '../lib/supabase';
+  insertSavedVenue, fetchPlannerSixStopSupport, fetchPlannerTimingSupport, hasPremium, recordSponsoredEvents, type SponsoredVenue, type Collection } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { CATEGORIES, CATEGORY_LABELS, MODES, emptyDraft, plannerReducer, savedCandidate, partnerCandidate,
   readPlannerDraft, persistPlannerDraft, randomSaved, venueKey, draftFromStops, distanceKm, type PlannerMode, type PlannerVenue } from '../lib/planner';
@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 const VenueReviewsDialog = lazy(() => import('../components/SponsoredVenues').then(m => ({ default: m.VenueReviewsDialog })));
 
 export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId, onDone, onCancel, onDirty }: {
-  mode?: PlannerMode; seed?: SavedVenue[]; collectionId?: string; editPlanId?: string;
+  mode?: PlannerMode; seed?: PlannerVenue[]; collectionId?: string; editPlanId?: string;
   onDone: (id: string) => void; onCancel: () => void; onDirty: (dirty: boolean) => void;
 }) {
   const { session, displayName, subscriptionTier, premiumUnlocked, dietaryPreferences } = useAuth();
@@ -35,9 +35,12 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
     let d = editPlanId ? { ...emptyDraft(), editPlanId } : readPlannerDraft(owner);
     if (mode) d = { ...d, mode };
     if (collectionId) d = { ...d, collectionId, mode: 'saved' };
-    for (const v of seed) d = plannerReducer(d, { type: 'add', venue: savedCandidate(v) });
+    for (const venue of seed) d = plannerReducer(d, { type: 'add', venue });
     return d;
   });
+  const [unplacedSeed, setUnplacedSeed] = useState(() =>
+    seed.find(venue => !draft.stops.some(stop => venueKey(stop) === venueKey(venue)))
+  );
   const [saved, setSaved] = useState<PlannerVenue[]>([]);
   const [partnerRecords, setPartnerRecords] = useState<SponsoredVenue[]>([]);
   const partners = useMemo(() => partnerRecords.map(partnerCandidate), [partnerRecords]);
@@ -243,6 +246,13 @@ export function UnifiedPlanner({ mode, seed = [], collectionId = '', editPlanId,
     <header className="mb-6 flex items-center justify-between pr-14"><div><p className="text-caption text-info">Find your vibe. Make it real.</p><h1 className="mt-1 text-title">{editPlanId ? 'Edit event' : 'Plan an adventure'}</h1></div><button className="ux-icon" onClick={() => setLeaving(true)} aria-label="Close planner"><X size={18} /></button></header>
     {error && !chat && <p role="alert" className="mb-4 rounded-md bg-destructive-soft p-3 text-small text-destructive-text">{error}</p>}
     {notice && <p role="status" className="mb-4 rounded-lg bg-info-soft p-4 text-small text-info">{notice}</p>}
+    {unplacedSeed && <div className="mb-4 rounded-lg bg-info-soft p-4 text-small text-info">
+      <p>{draft.stops.length >= 6 ? `Remove a stop to make room for ${unplacedSeed.name}.` : `Add ${unplacedSeed.name} to this itinerary.`}</p>
+      <button className="btn-outline mt-2" disabled={draft.stops.length >= 6} onClick={() => {
+        dispatch({ type: 'add', venue: unplacedSeed });
+        setUnplacedSeed(undefined);
+      }}>Add shared venue</button>
+    </div>}
     <section ref={discoveryRef} tabIndex={-1} className="plan-section" aria-labelledby="discover-heading"><p className="text-caption text-info">01 — Discover</p><h2 id="discover-heading" className="mb-5 mt-1 text-title">Discover venues &amp; vibes</h2>
 
       <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">{MODES.map((m) => <button key={m.id} onClick={() => { dispatch({ type: 'patch', patch: { mode: m.id } }); setNotice(''); setError(''); }} aria-pressed={draft.mode === m.id}

@@ -1,3 +1,71 @@
+# The Unsaved — repository guide
+
+Mission: "Don't just save it. Live it."
+
+## Communication preferences
+- The founder is non-technical. Explain things in simple English.
+- Keep responses concise.
+- Avoid unnecessary technical jargon.
+- Do not narrate every file read, code edit or routine action.
+- When completing a task, tell the founder:
+  1. What changed.
+  2. Whether it works.
+  3. What needs their attention next.
+- Explain risks and blockers clearly.
+- Ask one question at a time.
+- Give detailed technical explanations only when requested.
+- Never omit important security warnings or failed tests.
+
+## MVP priorities
+1. **Save Venues**: extract, verify, review and save venues.
+2. **Quick Share**: share venues and itineraries.
+3. **AI Find**: fast venue lookup.
+4. **Core Planning**: itinerary creation, editing and collaboration.
+5. **AI Discover**: AI-assisted itinerary planning chat.
+
+AI Find and AI Discover are separate features. Do not merge their code paths, prompts or UI without approval.
+
+The product roadmap (master.md) lives in the user's Claude Project, not in this repository. Do not search the filesystem for it. Ask the user to paste the relevant section when needed.
+
+## Stack and precedence
+Verified repository dependencies take precedence over installation instructions in the design guide below. For example, the repository runs React 18.3.1 and Tailwind CSS 3, not React 19 and Tailwind v4. Do not upgrade React or Tailwind as part of a feature or visual change.
+
+- React 18 with TypeScript (strict), Vite 5, Tailwind CSS 3, Vitest with Testing Library.
+- Supabase: Postgres with RLS, Auth, edge functions in `supabase/functions/`, migrations in `supabase/migrations/`.
+- OpenRouter: called only from the `ai-proxy` edge function, never from the client.
+- Google Places and Maps: called only from edge functions (`resolve-place`, `travel-times`, `venue-photo`).
+- Stripe: `stripe-*` edge functions and webhooks.
+- Function and workflow reference: `DOCUMENTATION.md`. Do not duplicate it here.
+
+## Environments and approvals
+- Staging first. Production Supabase project: `wfrlkifdlgmlbffumglt`. Local development must never point at production.
+- The current `.env.local` points at production. This is a safety concern. Do not change it without approval.
+- Ask before: deployments, migrations, production access, Supabase configuration changes, and any paid API call (OpenRouter, Google, Stripe).
+- Do not use `supabase/deploy.sh` as a release shortcut. See `docs/SUPABASE-REFERENCE-AUDIT.md`.
+
+## Security and data access
+- Default to user-scoped access: client queries run under the user's session, and every table has RLS enabled and tested before merge.
+- The service role bypasses RLS, so use it only when user-scoped access cannot do the job, and with the minimum privileges needed. Permitted cases:
+  - **User-initiated operations** in an edge function: verify the caller's JWT, then check ownership or membership in code before any read or write. Scope every query to the verified user ID.
+  - **Authenticated webhooks** (Stripe): verify the provider signature before any action. Use the service role only to record the verified result.
+  - **Trusted scheduled jobs** (for example review reminders): a named function with no caller input, and logged runs.
+- In every case, note the justification in a code comment. Never expose the service-role key or any secret in client code, `VITE_*` variables, logs or commits.
+
+## Idempotency and rate limiting
+- Prefer existing database safeguards first: primary keys, unique constraints, `ON CONFLICT` upserts and conditional updates. Add new idempotency infrastructure only when a duplicate causes real harm and no constraint can prevent it, such as payments, billing, or external side effects that cannot be undone.
+- Webhooks dedupe by provider event ID.
+- Rate limits for paid or abusable endpoints: `ai-proxy`, AI Find, AI Discover, venue extraction, geocoding and Places lookups, and share endpoints. Use `supabase/functions/_shared/ratelimit.ts`.
+- Read-only, low-cost lookups need neither unless abuse appears.
+
+## Working method
+- Start with read-only inspection and a written plan. Get approval before significant implementation.
+- Before intentionally creating or renaming any branch, ask the user for a descriptive branch name and wait for approval.
+- If Claude Desktop creates an automatic worktree branch, that may happen before the assistant can ask. Do not rename it without approval.
+- Do not commit, push, merge, reset, delete branches, or discard changes without approval.
+- Add a regression test for every bug fix. Run `npm run check` before reporting work as done. Run `npm run test:security` for edge-function changes and `npm run test:db` for database changes.
+
+---
+
 # The Unsaved — AI implementation guide
 
 > Active feature direction (28 October 2026): the Urban Adventure brief supersedes the historical colour/typography overrides below. Current brand tokens live in `src/theme.css`; shared artwork paths live in `src/lib/brand.ts`. Read `docs/URBAN-ADVENTURE-PLAN.md` and `public/brand/README.md`. Preserve the existing logo artwork, functional sans-serif UI, V5 planner and backend integrations.

@@ -1,4 +1,7 @@
 import type { Plan } from './supabase';
+import { Capacitor } from '@capacitor/core';
+import { nativeShare } from './nativeShare';
+import { recommendationOrigin, stagingSupabase } from './publicRecommendation.js';
 
 /**
  * Human-readable invite text, without the link.
@@ -15,7 +18,8 @@ export function buildInviteMessage(plan: Plan, opts: { includeUrl?: boolean } = 
     month: 'long',
   });
   const body = `${plan.host_name} invited you to ${plan.title} — ${formattedDate}. Tap to see the plan and RSVP.`;
-  return opts.includeUrl ? `${body}\n${getShareUrl(plan.id)}` : body;
+  const url = opts.includeUrl ? getShareUrl(plan.id) : '';
+  return url ? [body, url].join('\n') : body;
 }
 
 /** The app's real address, which links people are sent should always use. */
@@ -27,12 +31,17 @@ export const APP_URL = 'https://www.theunsaved.app';
  * running (so local testing still links to itself).
  */
 export function appBase(): string {
+  if (import.meta.env.VITE_SUPABASE_URL === stagingSupabase) {
+    const origin = recommendationOrigin(true, import.meta.env.VITE_RECOMMENDATION_ORIGIN, import.meta.env.VITE_STAGING_RECOMMENDATION_ORIGIN);
+    return origin ? origin + '/' : '';
+  }
   const { hostname, origin, pathname } = window.location;
   return hostname.endsWith('.vercel.app') ? `${APP_URL}/` : `${origin}${pathname}`;
 }
 
 export function getShareUrl(planId: string): string {
-  return `${appBase()}#/plan/${planId}/rsvp`;
+  const base = appBase();
+  return base ? base + '#/plan/' + planId + '/rsvp' : '';
 }
 
 export async function copyToClipboard(text: string): Promise<boolean> {
@@ -44,15 +53,50 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export async function shareOrCopy(title: string, text: string, url: string): Promise<void> {
-  if (navigator.share) {
+export async function shareOrCopy(title: string, text: string, url: string): Promise<'shared' | 'copied' | 'cancelled'> {
+  if (!url) throw new Error('Public sharing is unavailable.');
+  const full = text.includes(url) ? text : [text.trim(), url].filter(Boolean).join('\n');
+  if (Capacitor.getPlatform() === 'android') {
     try {
-      await navigator.share({ title, text, url });
-      return;
+      await nativeShare.send({ text: full });
+      return 'shared';
     } catch {
-      // cancelled — fall through to clipboard
+      // The WebView clipboard is still useful if the native chooser cannot open.
+    }
+  } else if (navigator.share) {
+    try {
+      await navigator.share({ title, ...(text.trim() ? { text } : {}), url });
+      return 'shared';
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') return 'cancelled';
     }
   }
-  // Clipboard has no separate URL field, so append it here.
-  await copyToClipboard(text.includes(url) ? text : `${text}\n${url}`);
+  if (!await copyToClipboard(full)) throw new Error('Could not open sharing or copy the link.');
+  return 'copied';
+}
+
+/**
+ * Shares words on their own, with no link. Used when a message is sent as its own bubble ahead of a link,
+ * the way a shared reel and a typed message arrive separately.
+ */
+export async function shareTextOnly(title: string, text: string): Promise<'shared' | 'copied' | 'cancelled'> {
+  const words = text.trim();
+  if (!words) throw new Error('There is no message to send.');
+  if (Capacitor.getPlatform() === 'android') {
+    try {
+      await nativeShare.send({ text: words });
+      return 'shared';
+    } catch {
+      // Fall back to the clipboard below.
+    }
+  } else if (navigator.share) {
+    try {
+      await navigator.share({ title, text: words });
+      return 'shared';
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') return 'cancelled';
+    }
+  }
+  if (!await copyToClipboard(words)) throw new Error('Could not open sharing or copy the message.');
+  return 'copied';
 }

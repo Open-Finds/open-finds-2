@@ -1,5 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/venue/:id", "destination": "/api/venue?id=:id" },
+    { "source": "/v/:id", "destination": "/api/venue?id=:id" }
+  ],
+  "functions": {
+    "api/venue-image.js": { "includeFiles": "api/_fonts/*" }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",

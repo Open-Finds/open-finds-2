@@ -21,7 +21,7 @@ import {
   type VenueType,
   type Collection,
 } from '../lib/supabase';
-import { UserFacingError, extractVenuesFromLink, type ExtractedVenueItem } from '../lib/openai';
+import { sourceUrl } from '../lib/aiSave';
 import { geocodeAddress } from '../lib/apiKeys';
 import { navigate } from '../lib/router';
 import { SavedVenueCard } from '../components/SavedVenueCard';
@@ -39,8 +39,8 @@ import { VenueDetails } from '../components/VenueDetails';
 import { CATEGORIES, CATEGORY_LABELS } from '../lib/planner';
 import { categoriesOf } from '../lib/taxonomy';
 
-export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanCollection }: {
-  initialAdd?: boolean; sharedLink?: string | null; onPlan?: (venue: SavedVenue) => void; onPlanCollection?: (id: string) => void;
+export function VenuesPage({ initialAdd = false, sharedLink, onSaveLink, saveVersion, onPlan, onPlanCollection }: {
+  initialAdd?: boolean; sharedLink?: string | null; onSaveLink: (link: string) => void; saveVersion: number; onPlan?: (venue: SavedVenue) => void; onPlanCollection?: (id: string) => void;
 }) {
   // Remembered between visits; the fresh copy loads behind it.
   const [venues, setVenues] = useCachedState<SavedVenue[]>('venues', []);
@@ -117,12 +117,8 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
   const [tagInput, setTagInput] = useState('');
   const [collection, setCollection] = useState('');
   const [saving, setSaving] = useState(false);
-  const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [extractedItems, setExtractedItems] = useState<ExtractedVenueItem[]>([]);
-  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
-  const [savingMulti, setSavingMulti] = useState(false);
 
   const loadAll = useCallback(async () => {
     if (!hasCached('venues')) setLoading(true);
@@ -145,7 +141,7 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
 
   useEffect(() => {
     loadAll();
-  }, [loadAll]);
+  }, [loadAll, saveVersion]);
 
   const collectionMap = useMemo(() => {
     const map: Record<string, Collection> = {};
@@ -195,8 +191,6 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
     setTagInput('');
     setCollection('');
     setLinkInput('');
-    setExtractedItems([]);
-    setSelectedItems(new Set());
     setError(null);
   };
 
@@ -278,108 +272,21 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
     }
   };
 
-  const handleExtract = useCallback(async (incoming?: string) => {
-    const link = (incoming ?? linkInput).trim();
-    if (!link) {
-      setError('Paste a link first.');
-      return;
-    }
-    setExtracting(true);
-    setError(null);
-    setExtractedItems([]);
-    setSelectedItems(new Set());
+  const handleExtract = useCallback((incoming?: string) => {
     try {
-      const items = await extractVenuesFromLink(link);
-      if (items.length === 0) {
-        setError(
-          "Couldn't extract venue details from this link. Try pasting the venue's official page instead, or enter the details manually below."
-        );
-      } else if (items.length === 1) {
-        const v = items[0];
-        setName(v.name);
-        setAddress(v.address);
-        setType(v.type);
-      } else {
-        setExtractedItems(items);
-        setSelectedItems(new Set(items.map((_, i) => i)));
-      }
-    } catch (e) {
-      setError(e instanceof UserFacingError ? e.message : "Couldn't extract venue. Please enter details manually below.");
-    } finally {
-      setExtracting(false);
+      const link = sourceUrl((incoming ?? linkInput).trim());
+      setError(null);
+      onSaveLink(link);
+    } catch {
+      setError('Paste a valid HTTPS link first.');
     }
-  }, [linkInput]);
+  }, [linkInput, onSaveLink]);
   useEffect(() => {
     if (!sharedLink || sharedHandled.current) return;
-    sharedHandled.current = true; setShowAddForm(true); void handleExtract(sharedLink);
+    sharedHandled.current = true;
+    setShowAddForm(true);
+    handleExtract(sharedLink);
   }, [sharedLink, handleExtract]);
-
-  const toggleItem = (idx: number) => {
-    setSelectedItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
-  };
-
-  const handleSaveMulti = async () => {
-    const picked = extractedItems.filter((_, i) => selectedItems.has(i));
-    if (picked.length === 0) {
-      setError('Select at least one venue to save.');
-      return;
-    }
-    const link = linkInput.trim() || null;
-    const flagged: PendingDuplicate[] = [];
-    const clean: typeof picked = [];
-    for (const item of picked) {
-      const matches = findSimilarVenues({ name: item.name, address: item.address, link, lat: item.lat, lon: item.lon }, venues);
-      if (matches.length > 0) flagged.push({ candidate: { name: item.name, address: item.address, link }, matches });
-      else clean.push(item);
-    }
-    if (flagged.length > 0) {
-      setDupPending(flagged);
-      setDupProceed({
-        all: () => { closeDup(); void performSaveMulti(picked); },
-        newOnly: clean.length > 0 ? () => { closeDup(); void performSaveMulti(clean); } : undefined,
-      });
-      return;
-    }
-    await performSaveMulti(picked);
-  };
-
-  const performSaveMulti = async (picked: ExtractedVenueItem[]) => {
-    setSavingMulti(true);
-    setError(null);
-    try {
-      for (const item of picked) {
-        const savedVenue = await insertSavedVenue({
-          name: item.name,
-          address: item.address,
-          type: item.type,
-          link: linkInput.trim() || null,
-          lat: item.lat ?? null,
-          lon: item.lon ?? null,
-          tags: [],
-          collection: collection.trim() || null,
-        });
-        if (item.lat == null || item.lon == null) {
-          const coords = await geocodeAddress(item.address);
-          if (coords) await updateSavedVenueCoords(savedVenue.id, coords.lat, coords.lon);
-        }
-      }
-      setSaved(true);
-      setExtractedItems([]);
-      setSelectedItems(new Set());
-      setLinkInput('');
-      setTimeout(() => setSaved(false), 2500);
-      loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save venues');
-    } finally {
-      setSavingMulti(false);
-    }
-  };
 
   const handleSave = async () => {
     if (!name.trim() || !address.trim()) {
@@ -615,68 +522,15 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
                     />
                   </div>
                   <button
-                    onClick={() => void handleExtract()}
-                    disabled={extracting}
+                    onClick={() => handleExtract()}
                     className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background py-2.5 text-sm font-medium text-foreground transition-all active:scale-[0.98] disabled:opacity-50"
                   >
-                    {extracting ? (
-                      <><Loader2 size={18} className="animate-spin" /> Extracting...</>
-                    ) : (
-                      <><Sparkles size={18} />Save Venues</>
-                    )}
+                    <Sparkles size={18} />Save Venues
                   </button>
                 </div>
 
-                {/* Multi-venue extraction results */}
-                {extractedItems.length > 1 && (
-                  <div className="mb-4 rounded-lg border border-border bg-background p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="text-sm font-semibold text-foreground">
-                        {extractedItems.length} venues found
-                      </p>
-                      <span className="text-xs text-muted-foreground">Tap to select</span>
-                    </div>
-                    <div className="space-y-2">
-                      {extractedItems.map((item, idx) => {
-                        const isSelected = selectedItems.has(idx);
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => toggleItem(idx)}
-                            className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all active:scale-[0.98] ${
-                              isSelected ? 'border-primary bg-primary-soft' : 'border-border bg-background opacity-60'
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
-                              <p className="truncate text-xs text-muted-foreground">{item.address}</p>
-                            </div>
-                            <div className={`flex h-5 w-5 items-center justify-center rounded border transition-all ${
-                              isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-transparent'
-                            }`}>
-                              {isSelected && <Check size={14} strokeWidth={3} />}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <button
-                      onClick={handleSaveMulti}
-                      disabled={savingMulti || selectedItems.size === 0}
-                      className="btn-primary mt-4 w-full"
-                    >
-                      {savingMulti ? (
-                        <><Loader2 size={18} className="animate-spin" /> Saving...</>
-                      ) : (
-                        <>Save {selectedItems.size > 0 ? selectedItems.size : ''} Venue{selectedItems.size === 1 ? '' : 's'}</>
-                      )}
-                    </button>
-                  </div>
-                )}
-
-                {/* Manual entry — only show when not showing multi-venue results */}
-                {extractedItems.length <= 1 && (
-                  <div className="border-t border-border pt-4">
+                <div className="border-t border-border pt-4">
+                    <p className="mb-3 text-sm text-muted-foreground">Or enter the venue manually</p>
                     <div className="mb-3">
                       <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Venue name</label>
                       <input
@@ -753,10 +607,9 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
                       disabled={saving}
                       className="btn-primary btn-lg w-full"
                     >
-                      {saving ? 'Saving...' : 'Save Venue'}
+                      {saving ? 'Saving...' : 'Save manually'}
                     </button>
-                  </div>
-                )}
+                </div>
               </div>
             )}
 
