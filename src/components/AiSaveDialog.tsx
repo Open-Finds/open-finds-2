@@ -335,6 +335,22 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     }
   };
 
+  /**
+   * "None of these match": start the details form clean. The closest Google results were just rejected, so none of them
+   * (and nothing guessed from the creator's handle) is left in the boxes. The only suggestions are the ones from the user's own search.
+   */
+  const noneMatch = () => {
+    setManual(true);
+    setError('');
+    setName('');
+    setAddress('');
+    setPosition(undefined);
+    setPlaceQuery('');
+    setCandidates([]);
+    setChoices([]);
+    setChoice(undefined);
+  };
+
   /** Google found places that might be the venue: let the user pick instead of showing an error. */
   const choosing = !busy && !sharing && !manual && !venue && !saved && choices.length > 0 &&
     (issue?.reason === 'ambiguous' || issue?.reason === 'no_match');
@@ -397,20 +413,23 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
             const done = savedRows[index];
             const on = ticked.has(index) || !!done;
             const hasAddress = !!row.venue.address.trim();
+            // The whole card is the tap target (not just the tick box). Quick Share sits beside it, outside the button.
             return <div key={index} className={cn('flex items-start gap-3 rounded-lg border p-3', on ? 'border-primary bg-primary-soft' : 'border-border bg-card')}>
               <button type="button" role="checkbox" aria-checked={on} aria-label={`Save ${row.venue.name}`} disabled={!hasAddress || !!done || saving}
                 onClick={() => toggleRow(index)}
-                className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                className="-m-3 flex min-w-0 flex-1 items-start gap-3 rounded-lg p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default">
+                <span aria-hidden="true" className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border-2 text-sm',
                   on ? 'border-primary bg-primary text-primary-foreground' : 'border-border')}>
-                {on && <span aria-hidden="true">✓</span>}
+                  {on && '✓'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words font-semibold">{row.venue.name}</span>
+                  <span className="flex items-start gap-1 break-words text-sm">{hasAddress && !row.verified && <UnconfirmedAddressMark />}<span>{hasAddress ? row.venue.address : 'No address found'}</span></span>
+                  <span className="block text-xs text-muted-foreground">{done ? 'Saved to My Venues'
+                    : row.verified ? 'Confirmed on Google Maps'
+                    : hasAddress ? unverifiedNote(row.venue) : 'This venue cannot be saved without an address.'}</span>
+                </span>
               </button>
-              <div className="min-w-0 flex-1">
-                <p className="break-words font-semibold">{row.venue.name}</p>
-                <p className="flex items-start gap-1 break-words text-sm">{hasAddress && !row.verified && <UnconfirmedAddressMark />}<span>{hasAddress ? row.venue.address : 'No address found'}</span></p>
-                <p className="text-xs text-muted-foreground">{done ? 'Saved to My Venues'
-                  : row.verified ? 'Confirmed on Google Maps'
-                  : hasAddress ? unverifiedNote(row.venue) : 'This venue cannot be saved without an address.'}</p>
-              </div>
               {done && <Button variant="outline" size="sm" onClick={() => startSharing(row.venue)}>Quick Share</Button>}
             </div>;
           })}
@@ -438,7 +457,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         </div>
         <div className="grid gap-2">
           <Button disabled={choice === undefined || saving} onClick={() => void confirmChoice()}>{saving ? 'Saving…' : 'Confirm & Save'}</Button>
-          <Button variant="outline" disabled={saving} onClick={() => { setManual(true); setError(''); }}>None of these match</Button>
+          <Button variant="outline" disabled={saving} onClick={() => noneMatch()}>None of these match</Button>
         </div>
       </> : editing ? <form className="grid gap-3" onSubmit={event => {
         event.preventDefault();
@@ -466,7 +485,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         <div className="grid gap-2 rounded-lg border p-3">
           <label className="grid gap-1 text-sm" htmlFor="ai-save-place-search">Change location: search Google Places</label>
           <div className="flex gap-2">
-            <Input id="ai-save-place-search" autoFocus={candidates.length === 0} maxLength={200} value={placeQuery} placeholder="e.g. Sculpture by the Sea, Bondi"
+            <Input id="ai-save-place-search" autoFocus={candidates.length === 0} maxLength={200} value={placeQuery} placeholder="Enter venue name…"
               onChange={event => setPlaceQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void searchPlaces(); } }} />
             <Button type="button" variant="outline" disabled={searching || !placeQuery.trim() || saving} onClick={() => void searchPlaces()}>
               {searching ? 'Searching…' : 'Search'}

@@ -152,6 +152,14 @@ describe('Confirm the venue choices', () => {
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
   });
 
+  it('selects a choice when any part of its card is tapped, not only the circle', async () => {
+    await start({ candidates: choices, choices, issue: noMatch });
+    fireEvent.click(screen.getByText('1 Lawson St, Redfern NSW 2016'));
+    expect(screen.getByRole('radio', { name: /Kiddo Coffee Redfern/ })).toBeChecked();
+    fireEvent.click(screen.getByText('84-86 Mary St, Surry Hills NSW 2010'));
+    expect(screen.getByRole('radio', { name: /Kiddo Coffee\s*84-86 Mary St/ })).toBeChecked();
+  });
+
   it('saves only the chosen place, with its coordinates, after an explicit Confirm & Save', async () => {
     mocks.saveSharedVenue.mockResolvedValue(saved);
     await start({ candidates: choices, choices, issue: noMatch });
@@ -168,19 +176,50 @@ describe('Confirm the venue choices', () => {
     expect(screen.getByRole('button', { name: 'Confirm & Save' })).toBeDisabled();
   });
 
-  it('None of these match opens the details form with the search box, and unverified saving still works without coordinates', async () => {
+  it('None of these match opens an empty details form, with only a search box that says what to type', async () => {
     mocks.saveSharedVenue.mockResolvedValue(saved);
     await start({ candidates: choices, choices, issue: noMatch });
     fireEvent.click(screen.getByRole('button', { name: 'None of these match' }));
-    expect(screen.getByLabelText(/search Google Places/)).toBeInTheDocument();
+    // Nothing from the rejected results (or the creator's handle) is left in the boxes.
+    expect(screen.getByLabelText('Venue name')).toHaveValue('');
+    expect(screen.getByLabelText('Address')).toHaveValue('');
+    const search = screen.getByLabelText(/search Google Places/);
+    expect(search).toHaveValue('');
+    expect(search).toHaveAttribute('placeholder', 'Enter venue name…');
+    expect(screen.queryByRole('group', { name: 'Places found' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save without verification' })).toBeDisabled();
+    // Typing the details by hand still saves, without coordinates.
+    fireEvent.change(screen.getByLabelText('Venue name'), { target: { value: 'My place' } });
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: '1 Made Up St, Sydney NSW 2000' } });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
-    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ lat: null, lon: null });
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'My place', lat: null, lon: null });
+  });
+
+  it('after None of these match, the only suggestion is what the user searches for', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    places.search.mockResolvedValue([{ name: 'Certified Pizza St Marys', address: '5 Crana St, St Marys NSW 2760', type: 'food', lat: -33.77, lon: 150.77 }]);
+    await start({ candidates: choices, choices, issue: noMatch });
+    fireEvent.click(screen.getByRole('button', { name: 'None of these match' }));
+    fireEvent.change(screen.getByLabelText(/search Google Places/), { target: { value: 'Certified pizza st marys' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Search' })));
+    expect(places.search.mock.calls[0][0]).toBe('Certified pizza st marys');
+    const found = screen.getByRole('group', { name: 'Places found' });
+    expect(found).toHaveTextContent('Certified Pizza St Marys');
+    expect(found).not.toHaveTextContent('Kiddo Coffee');
+    // Boxes stay empty until the user picks one.
+    expect(screen.getByLabelText('Venue name')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: /Certified Pizza St Marys/ }));
+    expect(screen.getByLabelText('Venue name')).toHaveValue('Certified Pizza St Marys');
+    expect(screen.getByLabelText('Address')).toHaveValue('5 Crana St, St Marys NSW 2760');
   });
 
   it('never keeps coordinates after the venue text is changed by hand', async () => {
     mocks.saveSharedVenue.mockResolvedValue(saved);
+    places.search.mockResolvedValue([{ name: 'Kiddo Coffee Redfern', address: '1 Lawson St, Redfern NSW 2016', type: 'food', lat: -33.89, lon: 151.2 }]);
     await start({ candidates: choices, choices, issue: noMatch });
     fireEvent.click(screen.getByRole('button', { name: 'None of these match' }));
+    fireEvent.change(screen.getByLabelText(/search Google Places/), { target: { value: 'Kiddo Coffee Redfern' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Search' })));
     fireEvent.click(screen.getByRole('button', { name: /Kiddo Coffee Redfern/ }));
     fireEvent.change(screen.getByLabelText('Venue name'), { target: { value: 'Kiddo Coffee (edited)' } });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
@@ -320,6 +359,18 @@ describe('A post that names several venues', () => {
     expect(screen.getByText('This venue cannot be saved without an address.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save selected (1)' })).toBeEnabled();
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('ticks a venue when any part of its card is tapped, not only the box', async () => {
+    await startRows();
+    expect(box('Beta')).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByText('2 Test St, Sydney NSW'));
+    expect(box('Beta')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByText('Beta'));
+    expect(box('Beta')).toHaveAttribute('aria-checked', 'false');
+    // A venue with no address cannot be ticked from its card either.
+    fireEvent.click(screen.getByText('This venue cannot be saved without an address.'));
+    expect(box('Gamma')).toHaveAttribute('aria-checked', 'false');
   });
 
   it('saves only the ticked venues, then offers Quick Share for each saved one and comes back to the list', async () => {
