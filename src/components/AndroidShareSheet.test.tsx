@@ -30,11 +30,11 @@ vi.mock('../lib/aiSave', async original => ({
 const link = 'https://www.instagram.com/reel/example/';
 const sharedVenue = { name: 'Test Cafe', address: '1 Test St', type: 'food', link } as const;
 vi.mock('./AiSaveDialog', () => ({
-  AiSaveDialog: ({ link, initialProgress, onProgress, onPlan, onClose }: {
-    link: string; initialProgress?: SharedVenueProgress; onProgress: (progress: SharedVenueProgress) => void;
+  AiSaveDialog: ({ link, sharedText, initialProgress, onProgress, onPlan, onClose }: {
+    link: string; sharedText?: string; initialProgress?: SharedVenueProgress; onProgress: (progress: SharedVenueProgress) => void;
     onPlan: (venue: SharedVenue) => void; onClose: () => void;
   }) => <>
-    <p>{link}</p><p>{initialProgress?.verified?.name}</p>
+    <p>{link}</p><p>{initialProgress?.verified?.name}</p><p data-testid="shared-text">{'shared: ' + (sharedText ?? '')}</p>
     <button onClick={() => onProgress({ verified: sharedVenue })}>Finish verification</button>
     <button onClick={() => onProgress({ candidates: [{ ...sharedVenue, order: 1, tags: [] }], identification: { structuredAddress: true } })}>Pause verification</button>
     <button onClick={() => onPlan(sharedVenue)}>Create Plan</button>
@@ -59,6 +59,8 @@ it('keeps the shared link through sign-in and dismisses through the Android acti
   mocks.owner = 'owner';
   await act(async () => view.rerender(<AndroidShareSheet initialShare={initialShare} />));
   expect(screen.getByText(link)).toBeInTheDocument();
+  // The whole shared text (TikTok puts the caption beside the link) goes to AI Save, not only the link.
+  expect(screen.getByTestId('shared-text')).toHaveTextContent('shared: Shared from Instagram ' + link);
   fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
   expect(mocks.dismiss).toHaveBeenCalledOnce();
   expect(mocks.dismiss).toHaveBeenCalledWith({ id: 'first' });

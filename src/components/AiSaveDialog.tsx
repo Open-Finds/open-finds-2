@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
 import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendationLink, sendRecommendationMessage, shareRecommendationOrigin, type ExtractedVenueItem, type SharedVenue, type SharedVenueProgress, type SharedVenueResult, type VenueRow } from '../lib/aiSave';
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
@@ -49,8 +50,13 @@ function NotMentionedNote() {
 /** What the person sharing is told when Google has not confirmed the address. The friend sees it on the venue page, not in the chat. */
 const unverifiedShareLine = 'Address not verified. Your friend will be told to check it before they go.';
 
-export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
+/** A TikTok or Instagram post: the links whose caption the user can copy and paste. */
+const isSocialPost = (link: string) => /(?:^|\.)(?:tiktok\.com|instagram\.com)\//i.test(link.replace(/^https?:\/\//i, ''));
+
+export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
   link: string;
+  /** The text that came with the link when it was shared (TikTok puts the caption beside the link). */
+  sharedText?: string;
   onClose: () => void;
   onPlan: (venue: SharedVenue) => void;
   compact?: boolean;
@@ -91,6 +97,8 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
   /** A post that names several venues: each one, to tick and save. */
   const [rows, setRows] = useState<VenueRow[]>();
   const [ticked, setTicked] = useState<Set<number>>(new Set());
+  /** A caption the user copied from the post and pasted, when AI Save could not read it. */
+  const [pasted, setPasted] = useState('');
   const [savedRows, setSavedRows] = useState<Record<number, SavedVenue>>({});
   const progress = useRef<SharedVenueProgress>(initialProgress ?? {});
   /** Progress handed in by the caller wins over progress kept on the phone. Read once, when the dialog opens. */
@@ -113,6 +121,10 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
           if (attempt === 0 && !hadInitialProgress.current) {
             const earlier = await readProgress(link);
             if (earlier) progress.current = earlier;
+          }
+          // The caption TikTok sent with the link, read from the phone: used when the server cannot read the post.
+          if (sharedText?.trim() && !progress.current.candidates && !progress.current.identification?.sharedText) {
+            progress.current.identification = { ...progress.current.identification, sharedText };
           }
           return identifySharedVenue(link, progress.current);
         })(),
@@ -172,7 +184,7 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
         ? cause.message : 'Could not identify a venue from this link. Try again or enter the details.');
     }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [attempt, link]);
+  }, [attempt, link, sharedText]);
 
   const retryLookup = () => {
     setBusy(true);
@@ -196,6 +208,16 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
     };
     setShareUrl('');
     setIssue({ stage: 'verify', retryable: true });
+    retryLookup();
+  };
+
+  /** Read the venue again from a caption the user pasted (with anything that came with the share). */
+  const readPasted = () => {
+    const text = [sharedText, pasted.trim()].filter(Boolean).join('\n');
+    if (!pasted.trim()) return;
+    progress.current = { checkedSaved: true, identification: { sharedText: text } };
+    autoSearched.current = false;
+    setShareUrl('');
     retryLookup();
   };
 
@@ -494,6 +516,13 @@ export function AiSaveDialog({ link, onClose, onPlan, compact = false, initialPr
             </Button>;
           })}
         </fieldset>}
+        {!venue && !saved && isSocialPost(link) && <div className="grid gap-2 rounded-lg border p-3">
+          <label className="text-sm" htmlFor="ai-save-caption">Paste the caption</label>
+          <p id="ai-save-caption-help" className="text-xs text-muted-foreground">Copy the caption from TikTok or Instagram, paste it here, and AI Save reads it again.</p>
+          <Textarea id="ai-save-caption" aria-describedby="ai-save-caption-help" rows={3} maxLength={2200} className="min-h-0"
+            value={pasted} onChange={event => setPasted(event.target.value)} />
+          <Button type="button" variant="outline" disabled={busy || saving || !pasted.trim()} onClick={readPasted}>Read caption</Button>
+        </div>}
         <div className="grid gap-2 rounded-lg border p-3">
           <label className="grid gap-1 text-sm" htmlFor="ai-save-place-search">Change location: search Google Places</label>
           <div className="flex gap-2">

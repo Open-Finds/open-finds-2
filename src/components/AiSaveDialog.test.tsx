@@ -234,6 +234,32 @@ describe('Confirm the venue choices', () => {
     expect(screen.getByLabelText(/search Google Places/)).toBeInTheDocument();
   });
 
+  it('passes the caption that came with the share on to AI Save', async () => {
+    const shared = 'Ocean Royale at Club Auburn https://vt.tiktok.com/ZSsFTaXA9/';
+    mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
+    await act(async () => render(<AiSaveDialog link={link} sharedText={shared} onClose={vi.fn()} onPlan={vi.fn()} />));
+    expect(mocks.identifySharedVenue.mock.calls[0][1]).toMatchObject({ identification: { sharedText: shared } });
+  });
+
+  it('reads the venue again from a caption the user pastes', async () => {
+    await start({ candidates: [], issue: { stage: 'identify', retryable: true, cause: new Error('no caption') } });
+    const box = screen.getByLabelText('Paste the caption');
+    expect(screen.getByRole('button', { name: 'Read caption' })).toBeDisabled();
+    fireEvent.change(box, { target: { value: '\u{1F4CD} Ocean Royale at Club Auburn\n12-14 Northumberland Road, Auburn NSW 2144' } });
+    mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Read caption' })));
+    expect(mocks.identifySharedVenue).toHaveBeenCalledTimes(2);
+    expect(mocks.identifySharedVenue.mock.calls[1][1].identification.sharedText).toContain('Ocean Royale at Club Auburn');
+    // Once a venue is found the box goes away.
+    expect(screen.queryByLabelText('Paste the caption')).not.toBeInTheDocument();
+  });
+
+  it('offers the paste box only for TikTok and Instagram posts', async () => {
+    mocks.identifySharedVenue.mockResolvedValueOnce({ candidates: [], issue: { stage: 'identify', retryable: true } });
+    await act(async () => render(<AiSaveDialog link="https://test.example/cafes" onClose={vi.fn()} onPlan={vi.fn()} />));
+    expect(screen.queryByLabelText('Paste the caption')).not.toBeInTheDocument();
+  });
+
   it('never shows what the AI read as a Google choice when Google found nothing', async () => {
     await start({ candidates: [], issue: { stage: 'identify', retryable: true } });
     expect(screen.getByLabelText(/search Google Places/)).toBeInTheDocument();

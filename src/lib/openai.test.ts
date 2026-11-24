@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAddresses, extractVenuesFromLink, hasSourceAddress, mentionedInSource, NO_CAPTION_MESSAGE, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
+import { captionFromShare, checkAddresses, extractVenuesFromLink, hasSourceAddress, mentionedInSource, NO_CAPTION_MESSAGE, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
 
 // Google lookups for checkAddresses: answers by venue name, so each test says
 // what Google "knows". Unknown names find nothing.
@@ -118,6 +118,65 @@ describe('a social post with no readable caption', () => {
     await extractVenuesFromLink('https://www.tiktok.com/@cafe', { verifySeparately: true, search: false });
     await extractVenuesFromLink('https://www.tiktok.com/@a/video/1');
     expect(fetch).toHaveBeenCalledTimes(4);
+  });
+});
+
+/**
+ * When you share a TikTok to The Unsaved, TikTok puts the caption beside the link. That text comes from the phone, so it is
+ * there even when TikTok turns our server away.
+ */
+describe('the caption TikTok sends with a share', () => {
+  const link = 'https://vt.tiktok.com/ZSsFTaXA9/';
+  const shared = 'Best yum cha in Sydney\n\u{1F4CD} Ocean Royale at Club Auburn\n12-14 Northumberland Road, Auburn NSW 2144 ' + link;
+  const blocked = () => Response.json({ platform: 'tiktok', contentType: 'video', url: link, fetched: false });
+  const prompt = () => String(JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body)).messages[1].content);
+
+  it('takes the caption out of the shared text, without the link', () => {
+    expect(captionFromShare('Korean fusion burgers \u{1F354} https://vt.tiktok.com/ZSbaLC6gH/')).toBe('Korean fusion burgers \u{1F354}');
+    expect(captionFromShare('https://vt.tiktok.com/ZSbaLC6gH/')).toBe('');
+    expect(captionFromShare(undefined)).toBe('');
+  });
+
+  it('reads the venue from the shared caption when TikTok turned the server away', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(blocked())
+      .mockResolvedValueOnce(aiVenues({ name: 'Ocean Royale', address: '12-14 Northumberland Road, Auburn NSW 2144', type: 'food' }));
+    const progress = { sharedText: shared };
+    // The name exactly as the creator wrote it; the Google check then matches it to the listing.
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress })).resolves.toMatchObject([
+      { name: 'Ocean Royale at Club Auburn', address: '12-14 Northumberland Road, Auburn NSW 2144' },
+    ]);
+    expect(prompt()).toContain('Ocean Royale at Club Auburn');
+    expect(prompt()).not.toContain('vt.tiktok.com/ZSsFTaXA9/ ');
+    // The shared caption counts as the creator's own words: the address is source-backed for the Google check.
+    expect(hasSourceAddress(progress, '12-14 Northumberland Road, Auburn NSW 2144')).toBe(true);
+    expect(mentionedInSource(progress, 'Ocean Royale')).toBe(true);
+    expect(mentionedInSource(progress, 'Oyama Ramen')).toBe(false);
+  });
+
+  it('carries on with the shared caption when the metadata service itself fails', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: 'refused' }, { status: 503 }))
+      .mockResolvedValueOnce(aiVenues({ name: 'Ocean Royale', address: '12-14 Northumberland Road, Auburn NSW 2144', type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress: { sharedText: shared } })).resolves.toHaveLength(1);
+    expect(prompt()).toContain('Ocean Royale');
+  });
+
+  it('prefers the full caption the server read over the shared text', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'video', url: link, fetched: true,
+      oembedTitle: 'The whole caption: \u{1F4CD} Golden Sands, Hurstville' }))
+      .mockResolvedValueOnce(aiVenues());
+    await extractVenuesFromLink(link, { verifySeparately: true, progress: { sharedText: 'A shorter shared text ' + link } });
+    expect(prompt()).toContain('Golden Sands');
+    expect(prompt()).not.toContain('A shorter shared text');
+  });
+
+  it('still stops when only the link was shared and the server got nothing', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(blocked());
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress: { sharedText: link } })).rejects.toThrow(NO_CAPTION_MESSAGE);
+    expect(fetch).toHaveBeenCalledOnce();
   });
 });
 

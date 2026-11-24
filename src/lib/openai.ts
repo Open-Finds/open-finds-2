@@ -503,7 +503,36 @@ export type VenueExtractionProgress = {
   structuredAddress?: boolean;
   /** Addresses read from a venue's own profile bio: written by the venue, so source-backed. */
   sourceAddresses?: string[];
+  /**
+   * Text that came with the link from the phone: what TikTok puts beside the link when you tap Share ("Korean fusion burgers 🍔
+   * https://vt.tiktok.com/…"), or a caption the user pasted. It comes from the phone, so TikTok cannot turn it away.
+   */
+  sharedText?: string;
 };
+
+/** The caption part of shared text: the text without its links. Empty when only a link was shared. */
+export function captionFromShare(text: string | undefined): string {
+  return (text ?? '').replace(/https?:\/\/[^\s<>"']+/gi, ' ').replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+}
+
+/**
+ * Fills a missing caption from the shared text, for a TikTok or Instagram post. A caption the server did read always wins
+ * (it is the whole caption); the shared text is used only when the server got none, which is what happens when TikTok
+ * turns the server away. Other links are left as they are.
+ */
+function withSharedCaption(meta: MetaResult | null, sharedText: string | undefined, link: string): MetaResult | null {
+  const shared = captionFromShare(sharedText);
+  if (shared.length < 3) return meta;
+  const platform = meta?.platform ?? (/tiktok\.com/i.test(link) ? 'tiktok' : /instagram\.com/i.test(link) ? 'instagram' : 'other');
+  if (platform !== 'tiktok' && platform !== 'instagram') return meta;
+  if (meta && captionPlainText(meta).trim()) return meta;
+  const base: MetaResult = meta ?? {
+    platform, contentType: platform === 'tiktok' ? 'video' : 'reel', url: link, ogTitle: null, ogDescription: null, ogSiteName: null,
+    pageTitle: null, metaDescription: null, jsonLd: null, handle: null, rawText: null, oembedTitle: null, oembedAuthor: null,
+    oembedHtml: null, fetched: false,
+  };
+  return platform === 'tiktok' ? { ...base, oembedTitle: shared } : { ...base, ogDescription: shared };
+}
 
 export function hasSourceAddress(progress: VenueExtractionProgress | undefined, address: string): boolean {
   if (progress?.structuredAddress) return true;
@@ -553,7 +582,16 @@ export async function extractVenuesFromLink(
   }
 
   // Step 1: Fetch real page metadata via edge function
-  const meta = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately, attemptId);
+  const sharedText = options?.progress?.sharedText;
+  let fetched: MetaResult | null;
+  try {
+    fetched = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately, attemptId);
+  } catch (error) {
+    // The server could not read the post, but the phone already has its caption: carry on with that.
+    if (captionFromShare(sharedText).length < 3) throw error;
+    fetched = null;
+  }
+  const meta = withSharedCaption(fetched, sharedText, link);
   if (options?.progress && meta && (meta.fetched || meta.oembedTitle || meta.ogDescription || meta.metaDescription)) options.progress.metadata = meta;
   // A TikTok or Instagram post whose caption could not be read (TikTok turns some requests away) gives the AI nothing
   // but the link and the creator's name, and it then guesses venues the post never mentions. Stop and say so instead.

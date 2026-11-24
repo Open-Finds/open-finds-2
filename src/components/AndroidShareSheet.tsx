@@ -52,7 +52,7 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
 
   if (link && owner && !loading) return <>
     {error && <p role="alert" className="fixed inset-x-4 top-8 z-[60] rounded-lg bg-card p-3">{error}</p>}
-    <AiSaveDialog key={share.id + ':' + owner} compact link={link} onClose={dismiss}
+    <AiSaveDialog key={share.id + ':' + owner} compact link={link} sharedText={share.text} onClose={dismiss}
       initialProgress={initialProgress}
       onProgress={({ candidates, verified, identification }) => {
         if (!candidates && !verified && !identification?.metadata) return;
