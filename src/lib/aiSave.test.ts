@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { guestSave, identifySharedVenue, publishVenue, readGuestSave, saveSharedVenue, sendRecommendation, sendRecommendationLink, sendRecommendationMessage, sourceUrl } from './aiSave';
+import { guestSave, identifySharedVenue, searchableName, publishVenue, readGuestSave, saveSharedVenue, sendRecommendation, sendRecommendationLink, sendRecommendationMessage, sourceUrl } from './aiSave';
 import { ProviderUnavailableError } from './providerErrors';
 
 const mocks = vi.hoisted(() => ({
-  extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), updateTags: vi.fn(), session: { id: 'test-user' },
+  extract: vi.fn(), match: vi.fn(), choices: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), updateTags: vi.fn(), session: { id: 'test-user' },
   /** Which names the post itself mentions (by default, all of them). */
   mentioned: { names: null as string[] | null },
 }));
@@ -13,7 +13,7 @@ vi.mock('./openai', () => ({
 }));
 vi.mock('./apiKeys', () => ({
   isGoogleMapsLink: mocks.maps,
-  verifyVenuePlaceDetailed: async (...args: unknown[]) => ({ match: await mocks.match(...args), candidates: [] }),
+  verifyVenuePlaceDetailed: async (...args: unknown[]) => ({ match: await mocks.match(...args), candidates: mocks.choices(...args) ?? [] }),
 }));
 vi.mock('./edgeAuth', () => ({ edgeAuthHeaders: async () => ({ Authorization: 'Bearer session' }) }));
 vi.mock('./supabase', () => ({
@@ -227,6 +227,35 @@ describe('share venue persistence', () => {
       } finally {
         mocks.mentioned.names = null;
       }
+    });
+
+    // Update 14 (I2, 25 Nov): @handles reached Google as one word, and Google's closest place was thrown away.
+    it('sends an @handle to Google as words and keeps the original name on screen', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('connection_n_co.rosebery', 'Rosebery, Sydney'), item('B-side cafe', 'Darling Point, Sydney')]);
+      mocks.match.mockResolvedValue(null);
+      const result = await identifySharedVenue(link);
+      expect(mocks.match.mock.calls.map(([details]) => (details as { name: string }).name)).toEqual(['connection n co rosebery', 'B-side cafe']);
+      expect(result.rows?.[0].venue.name).toBe('connection_n_co.rosebery');
+    });
+
+    it("keeps Google's closest place as a suggestion when it did not confirm the venue", async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('brothersbencafe', 'Petersham, Sydney'), item('A')]);
+      const place = { name: 'Brothers Ben Cafe', address: '1 Crystal St, Petersham NSW 2049', lat: -33.89, lon: 151.15 };
+      mocks.match.mockImplementation(async (details: { name: string }) => details.name === 'A' ? { name: 'A', address: '1 Test St', type: 'food', lat: 1, lon: 2 } : null);
+      mocks.choices.mockImplementation((details: { name: string }) => details.name === 'A' ? [] : [place]);
+      const result = await identifySharedVenue(link);
+      expect(result.rows?.[0]).toMatchObject({ verified: false, suggestion: place, venue: { name: 'brothersbencafe', lat: null } });
+      expect(result.rows?.[1].suggestion).toBeUndefined();
+    });
+
+    it('reads only real handles as handles', () => {
+      expect(searchableName('@b_side_cafe')).toBe('b side cafe');
+      expect(searchableName('sanjava2.0')).toBe('sanjava2 0');
+      expect(searchableName('Feng You')).toBe('Feng You');
+      expect(searchableName('St. Ali Cafe')).toBe('St. Ali Cafe');
+      expect(searchableName('brothersbencafe')).toBe('brothersbencafe');
     });
 
     it('takes at most five venues', async () => {

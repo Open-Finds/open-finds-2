@@ -470,6 +470,24 @@ describe('A post that names several venues', () => {
     expect(screen.getByRole('button', { name: 'Save selected (1)' })).toBeEnabled();
   });
 
+  // Update 14: Google's closest place for a venue it did not confirm was found and then thrown away (I2, 25 Nov).
+  it('offers Google\'s closest place as "Is this it?", unticked, and uses it only when the user says yes', async () => {
+    const place = { name: 'Brothers Ben Cafe', address: '1 Crystal St, Petersham NSW 2049', lat: -33.89, lon: 151.15, type: 'food' as const };
+    const handle = { venue: { ...venue, name: 'brothersbencafe', address: 'Petersham, Sydney', lat: null, lon: null }, verified: false, suggestion: place };
+    mocks.identifySharedVenue.mockResolvedValueOnce({ rows: [alpha, handle], candidates: [] });
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} />));
+    expect(screen.getByText("Is this it? Google's closest match:")).toBeInTheDocument();
+    expect(screen.getByText('1 Crystal St, Petersham NSW 2049')).toBeInTheDocument();
+    expect(box('brothersbencafe')).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, use this: Brothers Ben Cafe' }));
+    expect(box('Brothers Ben Cafe')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByText("Is this it? Google's closest match:")).not.toBeInTheDocument();
+    expect(screen.getAllByText('Confirmed on Google Maps')).toHaveLength(2);
+    mocks.saveSharedVenue.mockImplementation(async (details: { name: string }) => ({ ...saved, name: details.name }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save selected (2)' })));
+    expect(mocks.saveSharedVenue).toHaveBeenCalledWith(expect.objectContaining({ name: 'Brothers Ben Cafe', address: '1 Crystal St, Petersham NSW 2049', lat: -33.89, lon: 151.15 }), link);
+  });
+
   it('ticks a venue when any part of its card is tapped, not only the box', async () => {
     await startRows();
     expect(box('Beta')).toHaveAttribute('aria-checked', 'false');

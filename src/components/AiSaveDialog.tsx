@@ -354,6 +354,20 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
     return next;
   });
 
+  /** "Is this it?": the user accepts Google's closest place for a venue Google did not confirm. It becomes that place, ticked. */
+  const acceptSuggestion = (index: number) => {
+    const row = rows?.[index];
+    const place = row?.suggestion;
+    if (!rows || !row || !place) return;
+    const next = [...rows];
+    next[index] = {
+      ...row, verified: true, suggestion: undefined,
+      venue: { ...row.venue, name: place.name, address: place.address, type: place.type ?? row.venue.type, lat: place.lat, lon: place.lon, venueToken: place.venueToken },
+    };
+    setRows(next);
+    setTicked(current => new Set(current).add(index));
+  };
+
   /** Save every ticked venue that is not saved yet, one after another. A failure leaves that venue ticked to try again. */
   const saveSelected = async () => {
     if (!rows || saving) return;
@@ -503,7 +517,9 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
             const on = ticked.has(index) || !!done;
             const hasAddress = !!row.venue.address.trim();
             // The whole card is the tap target (not just the tick box). Quick Share sits beside it, outside the button.
-            return <div key={index} className={cn('flex items-start gap-3 rounded-lg border p-3', on ? 'border-primary bg-primary-soft' : 'border-border bg-card')}>
+            const suggestion = !done && !row.verified ? row.suggestion : undefined;
+            return <div key={index} className={cn('rounded-lg border p-3', on ? 'border-primary bg-primary-soft' : 'border-border bg-card')}>
+              <div className="flex items-start gap-3">
               <button type="button" role="checkbox" aria-checked={on} aria-label={`Save ${row.venue.name}`} disabled={!hasAddress || !!done || saving}
                 onClick={() => toggleRow(index)}
                 className="-m-3 flex min-w-0 flex-1 items-start gap-3 rounded-lg p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default">
@@ -522,6 +538,14 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
                 </span>
               </button>
               {done && <Button variant="outline" size="sm" onClick={() => startSharing(row.venue)}>Quick Share</Button>}
+              </div>
+              {suggestion && <div className="relative mt-3 grid gap-1 rounded-md border border-border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Is this it? Google's closest match:</p>
+                <p className="break-words text-sm font-semibold">{suggestion.name}</p>
+                <p className="break-words text-sm">{suggestion.address}</p>
+                <Button variant="outline" size="sm" className="mt-1 w-fit" disabled={saving} onClick={() => acceptSuggestion(index)}
+                  aria-label={`Yes, use this: ${suggestion.name}`}>Yes, use this</Button>
+              </div>}
             </div>;
           })}
         </div>

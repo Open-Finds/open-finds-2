@@ -1,4 +1,4 @@
-import { isGoogleMapsLink, verifyVenuePlaceDetailed } from './apiKeys';
+import { isGoogleMapsLink, verifyVenuePlaceDetailed, type GooglePlaceChoice } from './apiKeys';
 import { edgeAuthHeaders } from './edgeAuth';
 import { categoryOf } from './taxonomy';
 import { extractVenuesFromLink, hasSourceAddress, mentionedInSource, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
@@ -93,7 +93,22 @@ export type SharedVenueProgress = {
 };
 
 /** One venue from a post that names several: the details to save, and whether Google confirmed them. */
-export type VenueRow = { venue: SharedVenue; verified: boolean; /** false: the post never names this venue. */ mentioned?: boolean };
+export type VenueRow = {
+  venue: SharedVenue; verified: boolean; /** false: the post never names this venue. */ mentioned?: boolean;
+  /** Google's closest place when it did not confirm this venue. Offered as "Is this it?", never ticked for the user. */
+  suggestion?: GooglePlaceChoice;
+};
+
+/**
+ * A venue name the AI copied from an @handle ("connection_n_co.rosebery", "@b_side_cafe") reads to Google as words
+ * ("connection n co rosebery"). Any other name is sent as it is.
+ */
+export function searchableName(name: string): string {
+  const trimmed = name.trim();
+  const handle = trimmed.startsWith('@') || (!/\s/.test(trimmed) && /[_.]/.test(trimmed));
+  if (!handle) return trimmed;
+  return trimmed.replace(/^@+/, '').replace(/[_.]+/g, ' ').replace(/\s+/g, ' ').trim() || trimmed;
+}
 
 /** The most venues taken from one post. */
 export const MAX_VENUES = 5;
@@ -108,14 +123,14 @@ async function verifyEach(items: ExtractedVenueItem[], link: string, attemptId: 
   const settled = await Promise.allSettled(items.map(async (item): Promise<VenueRow> => {
     if (!item.address.trim()) return { venue: read(item), verified: false };
     const check = await verifyVenuePlaceDetailed({
-      name: item.name, address: item.address, outdoor: item.type === 'activity',
+      name: searchableName(item.name), address: item.address, outdoor: item.type === 'activity',
       addressFromSource: hasSourceAddress(identification, item.address),
     }, attemptId);
     const match = check.match;
     const mentioned = mentionedInSource(identification, item.name, match?.name ?? item.name);
     return match
       ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon, venueToken: match.venueToken, ...(mentioned ? {} : { mentioned: false }) }, verified: true, ...(mentioned ? {} : { mentioned: false }) }
-      : { venue: read(item), verified: false, ...(mentioned ? {} : { mentioned: false }) };
+      : { venue: read(item), verified: false, ...(mentioned ? {} : { mentioned: false }), ...(check.candidates[0] ? { suggestion: check.candidates[0] } : {}) };
   }));
   const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (failures.length === settled.length) throw failures[0].reason;
