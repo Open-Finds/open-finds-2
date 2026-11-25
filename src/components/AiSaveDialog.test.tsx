@@ -13,7 +13,9 @@ vi.mock('../lib/progressStore', () => store);
 const places = vi.hoisted(() => ({ search: vi.fn() }));
 vi.mock('../lib/apiKeys', async importOriginal => ({ ...(await importOriginal<typeof import('../lib/apiKeys')>()), searchGooglePlaces: places.search }));
 vi.mock('../lib/supabase', () => ({ updateSavedVenue: vi.fn() }));
-vi.mock('../lib/openai', () => ({ UserFacingError: Error }));
+vi.mock('../lib/openai', () => ({ UserFacingError: Error, captionFromShare: (text?: string) => (text ?? '').replace(/https?:\/\/\S+/g, '').trim() }));
+const results = vi.hoisted(() => ({ record: vi.fn<(input: import('../lib/aiSaveResults').AiSaveResultInput) => Promise<boolean>>(async () => true) }));
+vi.mock('../lib/aiSaveResults', async original => ({ ...(await original<typeof import('../lib/aiSaveResults')>()), recordAiSaveResult: results.record }));
 const phone = vi.hoisted(() => ({ probe: vi.fn() }));
 vi.mock('../lib/phoneProbe', async original => ({ ...(await original<typeof import('../lib/phoneProbe')>()), probePost: phone.probe }));
 
@@ -662,5 +664,126 @@ describe('Linking saves to the shared venue', () => {
     fireEvent.change(screen.getByLabelText('Address'), { target: { value: '10 Real St, Sydney NSW 2000' } });
     await act(async () => fireEvent.submit(screen.getByLabelText('Address').closest('form')!));
     expect(mocks.saveSharedVenue.mock.calls[0][0].venueToken).toBeUndefined();
+  });
+});
+
+/**
+ * The success rate: every save writes one row for its attempt (what AI Save did, how, and the signals that need no tap),
+ * and a thumbs up or down updates that same row. None of it may get in the way of saving.
+ */
+describe('tracking the success rate', () => {
+  const found = { name: 'Ocean Royale', address: '12-14 Northumberland Road, Auburn NSW 2144', type: 'food' as const, link, lat: 1, lon: 2 };
+  const record = () => results.record;
+  const last = () => results.record.mock.calls[results.record.mock.calls.length - 1][0];
+  beforeEach(() => { vi.resetAllMocks(); results.record.mockResolvedValue(true); });
+
+  it('records a venue AI Save confirmed, with the saved venue, the kind of post and how long it took', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-1', name: 'Ocean Royale' });
+    await start({ venue: found, candidates: [{ ...found, order: 1, tags: [] }] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    expect(last()).toMatchObject({
+      platform: 'instagram', postKind: 'video', link, outcome: 'confirmed', venueName: 'Ocean Royale', savedVenueId: 'saved-1',
+      edited: false, usedNoneOfThese: false, usedPastedCaption: false,
+    });
+    expect(last().attemptId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(typeof last().durationMs).toBe('number');
+    expect(last().rating).toBeUndefined();
+  });
+
+  it('records a venue Google did not confirm as unconfirmed', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-2' });
+    await start({ venue: { ...found, lat: null, lon: null }, candidates: [{ ...found, order: 1, tags: [] }] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    expect(last()).toMatchObject({ outcome: 'unconfirmed' });
+  });
+
+  it('adds a thumbs up to the same attempt after saving, and keeps what was recorded', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-1', name: 'Ocean Royale' });
+    await start({ venue: found, candidates: [{ ...found, order: 1, tags: [] }] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    const attempt = last().attemptId;
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Yes' })));
+    expect(last()).toMatchObject({ attemptId: attempt, outcome: 'confirmed', venueName: 'Ocean Royale', rating: 'like' });
+  });
+
+  it('records a thumbs down at once, then updates the same record with the reason', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-1' });
+    await start({ venue: found, candidates: [{ ...found, order: 1, tags: [] }] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'No' })));
+    expect(last().rating).toBe('dislike');
+    expect(last().reason).toBeUndefined();
+    const attempt = last().attemptId;
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Wrong venue' })));
+    expect(last()).toMatchObject({ attemptId: attempt, rating: 'dislike', reason: 'wrong_venue', outcome: 'confirmed' });
+  });
+
+  it('records a rating given before saving as not saved', async () => {
+    await start({ venue: found, candidates: [{ ...found, order: 1, tags: [] }] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Yes' })));
+    expect(last()).toMatchObject({ outcome: 'not_saved', rating: 'like' });
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('records that the result was edited, and that it was then typed by hand', async () => {
+    mocks.saveSharedVenue.mockImplementation(async (details: { name: string }) => ({ ...saved, id: 'saved-3', name: details.name }));
+    await start({ venue: found, candidates: [{ ...found, order: 1, tags: [] }] });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Venue name'), { target: { value: 'Ocean Royale Chinese Restaurant' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save without verification' })));
+    expect(last()).toMatchObject({ outcome: 'manual', foundBy: 'manual', edited: true, venueName: 'Ocean Royale Chinese Restaurant' });
+  });
+
+  it('records "None of these match", and a Google place picked by searching', async () => {
+    mocks.saveSharedVenue.mockImplementation(async (details: { name: string }) => ({ ...saved, id: 'saved-4', name: details.name }));
+    places.search.mockResolvedValue([{ name: 'Certified Pizza St Marys', address: '5 Crana St, St Marys NSW 2760', type: 'food', lat: -33.77, lon: 150.77 }]);
+    const choices = [{ ...found, name: 'Wrong Place', order: 1, tags: [] }];
+    await start({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
+    fireEvent.click(screen.getByRole('button', { name: 'None of these match' }));
+    fireEvent.change(screen.getByLabelText(/search Google Places/), { target: { value: 'Certified pizza st marys' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Search' })));
+    fireEvent.click(screen.getByRole('button', { name: /Certified Pizza St Marys/ }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save this place' })));
+    expect(last()).toMatchObject({ outcome: 'searched', usedNoneOfThese: true, venueName: 'Certified Pizza St Marys' });
+  });
+
+  it('records a place chosen from the Confirm the venue list', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-5', name: 'Ocean Royale' });
+    const choices = [{ ...found, order: 1, tags: [] }];
+    await start({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'ambiguous' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm & Save' })));
+    expect(last()).toMatchObject({ outcome: 'chosen', savedVenueId: 'saved-5', usedNoneOfThese: false });
+  });
+
+  it('records a pasted caption as how the venue was found', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-6' });
+    await start({ candidates: [], issue: { stage: 'identify', retryable: true } });
+    fireEvent.change(screen.getByLabelText('Paste the caption'), { target: { value: '\u{1F4CD} Ocean Royale\n12-14 Northumberland Road, Auburn NSW 2144' } });
+    mocks.identifySharedVenue.mockResolvedValueOnce({ venue: found, candidates: [{ ...found, order: 1, tags: [] }] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Read caption' })));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    expect(last()).toMatchObject({ outcome: 'confirmed', foundBy: 'pasted_caption', usedPastedCaption: true });
+  });
+
+  it('records a list of venues as one result with how many were saved', async () => {
+    mocks.saveSharedVenue.mockImplementation(async (details: { name: string }) => ({ ...saved, id: 'id-' + details.name, name: details.name }));
+    const alpha = { venue: { ...found, name: 'Alpha' }, verified: true };
+    const gamma = { venue: { ...found, name: 'Gamma' }, verified: true };
+    await start({ rows: [alpha, gamma], candidates: [] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save selected (2)' })));
+    expect(last()).toMatchObject({ outcome: 'multiple', venueCount: 2, venueName: 'Alpha' });
+  });
+
+  it('never lets a failed or broken write stop a save', async () => {
+    mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-7', name: found.name, address: found.address });
+    results.record.mockRejectedValueOnce(new Error('offline'));
+    await start({ venue: found, candidates: [{ ...found, order: 1, tags: [] }] });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    expect(screen.getByRole('button', { name: 'Saved to My Venues' })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    results.record.mockImplementationOnce(() => { throw new Error('broken'); });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Yes' })));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(record()).toHaveBeenCalledTimes(2);
   });
 });

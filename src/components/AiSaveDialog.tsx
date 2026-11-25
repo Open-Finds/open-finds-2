@@ -14,6 +14,9 @@ import { cleanVenueName, fallbackImage } from '../lib/publicRecommendation.js';
 import { resolveMessage } from '../lib/shareMessage';
 import { ShareMessageComposer } from './ShareMessageComposer';
 import { PhoneCheck } from './PhoneCheck';
+import { AiSaveFeedback, type FeedbackValue } from './AiSaveFeedback';
+import { captionFromShare } from '../lib/openai';
+import { describeLink, foundByFrom, recordAiSaveResult, type Outcome } from '../lib/aiSaveResults';
 import { typeWithIcon } from '../lib/partners';
 import { UnconfirmedAddressMark } from './UnconfirmedAddressMark';
 import { cn } from '../lib/utils';
@@ -100,6 +103,15 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
   const [ticked, setTicked] = useState<Set<number>>(new Set());
   /** A caption the user copied from the post and pasted, when AI Save could not read it. */
   const [pasted, setPasted] = useState('');
+  /** The person's thumbs up or down on this result (kept in a ref too, so a later write never loses it). */
+  const [feedback, setFeedback] = useState<FeedbackValue>();
+  const feedbackRef = useRef<FeedbackValue>();
+  /** Signals that need no tap, for the success rate: the result was edited, "None of these match" was used, a caption was pasted. */
+  const signals = useRef({ edited: false, none: false, pasted: false });
+  const lastOutcome = useRef<{ outcome: Outcome; savedId?: string; name?: string; count: number }>();
+  const dialogId = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : '00000000-0000-4000-8000-000000000000');
+  const openedAt = useRef(Date.now());
+  const shownMs = useRef<number>();
   const [savedRows, setSavedRows] = useState<Record<number, SavedVenue>>({});
   const progress = useRef<SharedVenueProgress>(initialProgress ?? {});
   /** Progress handed in by the caller wins over progress kept on the phone. Read once, when the dialog opens. */
@@ -183,7 +195,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
         : 'Could not verify one exact venue. Check the name and location before saving.');
       else setError(cause instanceof UserFacingError
         ? cause.message : 'Could not identify a venue from this link. Try again or enter the details.');
-    }).finally(() => { if (active) setBusy(false); });
+    }).finally(() => { shownMs.current ??= Date.now() - openedAt.current; if (active) setBusy(false); });
     return () => { active = false; };
   }, [attempt, link, sharedText]);
 
@@ -212,10 +224,45 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
     retryLookup();
   };
 
+  /** Writes (or updates) this attempt's row for the success rate. Never blocks or fails the save. */
+  const sendResult = () => {
+    try {
+      const last = lastOutcome.current;
+      const identification = progress.current.identification;
+      const { platform, postKind } = describeLink(identification?.metadata?.url || link);
+      const outcome = last?.outcome ?? 'not_saved';
+      const found = foundByFrom(identification?.metadata, captionFromShare(identification?.sharedText ?? sharedText), signals.current.pasted);
+      void Promise.resolve(recordAiSaveResult({
+        attemptId: progress.current.attemptId ?? dialogId.current,
+        platform, postKind, link,
+        outcome,
+        foundBy: outcome === 'manual' ? 'manual' : found,
+        venueName: last?.name, venueCount: last?.count ?? 1, savedVenueId: last?.savedId,
+        edited: signals.current.edited, usedNoneOfThese: signals.current.none, usedPastedCaption: signals.current.pasted,
+        durationMs: shownMs.current,
+        ...(feedbackRef.current ?? {}),
+      })).catch(() => undefined);
+    } catch {
+      // Tracking is never allowed to get in the way of saving a venue.
+    }
+  };
+
+  const logResult = (outcome: Outcome, extra: { savedId?: string; name?: string; count?: number } = {}) => {
+    lastOutcome.current = { outcome, savedId: extra.savedId, name: extra.name, count: extra.count ?? 1 };
+    sendResult();
+  };
+
+  const rate = (value: FeedbackValue) => {
+    feedbackRef.current = value;
+    setFeedback(value);
+    sendResult();
+  };
+
   /** Read the venue again from a caption the user pasted (with anything that came with the share). */
   const readPasted = () => {
     const text = [sharedText, pasted.trim()].filter(Boolean).join('\n');
     if (!pasted.trim()) return;
+    signals.current.pasted = true;
     progress.current = { checkedSaved: true, identification: { sharedText: text } };
     autoSearched.current = false;
     setShareUrl('');
@@ -259,8 +306,10 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
         name: picked.name, address: picked.address, type: picked.type, link, lat: picked.lat, lon: picked.lon, tags: readTags(picked.name, true),
         venueToken: picked.venueToken,
       };
-      setSaved(await saveSharedVenue(details, link));
+      const row = await saveSharedVenue(details, link);
+      setSaved(row);
       onSaved?.();
+      logResult('chosen', { savedId: row.id, name: row.name });
       setVenue(details);
       setEditing(false);
       setIssue(undefined);
@@ -285,6 +334,8 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
         : await saveSharedVenue(details, details.link ?? link);
       setSaved(row);
       onSaved?.();
+      // From the details form: a Google place picked by searching, or typed by hand. Otherwise what AI Save found.
+      logResult(editing ? (position ? 'searched' : 'manual') : (isVerified(details) ? 'confirmed' : 'unconfirmed'), { savedId: row.id, name: row.name });
       // Every save, verified or not, shows the saved venue with Save, Quick Share and Create Plan.
       setVenue(details);
       setEditing(false);
@@ -319,7 +370,11 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
       }
     }
     setSavedRows(done);
-    if (Object.keys(done).length > Object.keys(savedRows).length) onSaved?.();
+    if (Object.keys(done).length > Object.keys(savedRows).length) {
+      onSaved?.();
+      const first = Object.values(done)[0];
+      logResult('multiple', { name: first?.name, count: Object.keys(done).length, savedId: first?.id });
+    }
     if (failed) setError(failed === 1 ? 'One venue could not be saved. Try again.' : `${failed} venues could not be saved. Try again.`);
     setSaving(false);
   };
@@ -373,6 +428,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
    * (and nothing guessed from the creator's handle) is left in the boxes. The only suggestions are the ones from the user's own search.
    */
   const noneMatch = () => {
+    signals.current.none = true;
     setManual(true);
     setError('');
     setName('');
@@ -472,6 +528,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
         <Button disabled={saving || [...ticked].filter(index => !savedRows[index]).length === 0} onClick={() => void saveSelected()}>
           {saving ? 'Saving…' : `Save selected (${[...ticked].filter(index => !savedRows[index]).length})`}
         </Button>
+        <AiSaveFeedback value={feedback} onRate={rate} />
       </> : choosing ? <>
         <div role="radiogroup" aria-label="Possible matches" className="grid gap-2">
           {choices.map((candidate, index) => {
@@ -557,7 +614,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
             {!isVerified(venue) && <p className="text-xs text-muted-foreground">{unverifiedNote(venue)}</p>}
             {venue.mentioned === false && <NotMentionedNote />}
           </div>
-          <Button variant="ghost" size="sm" disabled={saving} onClick={() => { setEditing(true); setError(''); }}>Edit</Button>
+          <Button variant="ghost" size="sm" disabled={saving} onClick={() => { signals.current.edited = true; setEditing(true); setError(''); }}>Edit</Button>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button disabled={saving || detailsMatchSaved} onClick={() => void save(venue)}>
@@ -566,6 +623,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
           <Button variant="outline" onClick={() => startSharing()}>Quick Share</Button>
           <Button variant="outline" onClick={() => onPlan(venue)}>Create Plan</Button>
         </div>
+        <AiSaveFeedback value={feedback} onRate={rate} />
       </>}
       {!sharing && <PhoneCheck link={link} />}
     </DialogContent>

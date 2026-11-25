@@ -15,17 +15,19 @@ import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { AppSelect } from '../components/ui/select';
 import { PartnerForm } from '../components/PartnerForm';
+import { AiSaveResultsPanel } from '../components/AiSaveResultsPanel';
 import { MyVenuesPage } from './MyVenues';
 import { Badge, Figure, RatingLine, Stat, StatusBadge } from '../components/PartnerBits';
 import { money, typeWithIcon } from '../lib/partners';
 import { cn } from '../lib/utils';
 
-type Tab = 'overview' | 'approvals' | 'venues' | 'team';
+type Tab = 'overview' | 'approvals' | 'venues' | 'team' | 'results';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'approvals', label: 'Approvals' },
   { key: 'venues', label: 'Venues' },
   { key: 'team', label: 'Team' },
+  { key: 'results', label: 'AI Save results' },
 ];
 const goTab = (t: Tab) => navigate(t === 'overview' ? '/admin' : `/admin/${t}`);
 
@@ -53,7 +55,9 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
   const { role, profileLoaded } = useAuth();
   const isAdmin = role === 'admin';
   const canManage = isManagerRole(role);
-  const tab: Tab = TABS.some((t) => t.key === tabParam) ? (tabParam as Tab) : 'overview';
+  // The AI Save results are for admins only (the database enforces it too).
+  const tabs = TABS.filter((t) => t.key !== 'results' || isAdmin);
+  const tab: Tab = tabs.some((t) => t.key === tabParam) ? (tabParam as Tab) : 'overview';
 
   const [partners, setPartners] = useState<AdminPartner[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -139,7 +143,7 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
             {/* Sections. Sticky so they're always one tap away. */}
             <nav aria-label="Admin sections" className="sticky top-0 z-30 -mx-4 mb-6 overflow-x-auto bg-background px-4 py-3 sm:-mx-6 sm:px-6">
               <div className="flex gap-2">
-                {TABS.map((t) => (
+                {tabs.map((t) => (
                   <button
                     key={t.key}
                     onClick={() => goTab(t.key)}
@@ -186,6 +190,8 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
                 onTogglePause={(p) => act(p.id, () => adminUpdatePartner(p.id, { active: !p.active }))}
                 onDelete={(p) => act(p.id, () => adminDeletePartner(p.id))}
               />
+            ) : tab === 'results' ? (
+              <AiSaveResultsPanel />
             ) : (
               <TeamTab team={team} payouts={payouts} isAdmin={isAdmin} onChanged={load} />
             )}
