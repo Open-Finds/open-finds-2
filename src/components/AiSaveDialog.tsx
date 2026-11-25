@@ -13,6 +13,7 @@ import { readProgress, writeProgress } from '../lib/progressStore';
 import { cleanVenueName, fallbackImage } from '../lib/publicRecommendation.js';
 import { resolveMessage } from '../lib/shareMessage';
 import { ShareMessageComposer } from './ShareMessageComposer';
+import { PhoneCheck } from './PhoneCheck';
 import { typeWithIcon } from '../lib/partners';
 import { UnconfirmedAddressMark } from './UnconfirmedAddressMark';
 import { cn } from '../lib/utils';
@@ -151,9 +152,9 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
       setChoices(result.choices ?? []);
       const choosable = (result.choices?.length ?? 0) > 0 && (result.issue?.reason === 'ambiguous' || result.issue?.reason === 'no_match');
       setChoice(choosable && !result.issue?.weak ? 0 : undefined);
-      // A search box that starts with what we know: the name we read, else the creator's handle as words.
-      const handle = progress.current.identification?.metadata?.handle ?? '';
-      setPlaceQuery(progress.current.candidates?.[0]?.name || handle.replace(/[._]+/g, ' ').trim());
+      // A search box that starts with the name we read, and is empty when we read none. The creator's handle is
+      // who posted it, not what it is about, so it is never used to fill the box.
+      setPlaceQuery(progress.current.candidates?.[0]?.name ?? '');
       // Nothing confirmed and no Google places to pick from, but the post named a venue: ask Google once, by that name and
       // whatever place the post gave, and show the results to tap. Never from the creator's handle (that finds unrelated places),
       // and never when the service itself is the problem.
@@ -566,6 +567,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
           <Button variant="outline" onClick={() => onPlan(venue)}>Create Plan</Button>
         </div>
       </>}
+      {!sharing && <PhoneCheck link={link} />}
     </DialogContent>
   </Dialog>;
 }

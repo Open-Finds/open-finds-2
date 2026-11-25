@@ -14,6 +14,8 @@ const places = vi.hoisted(() => ({ search: vi.fn() }));
 vi.mock('../lib/apiKeys', async importOriginal => ({ ...(await importOriginal<typeof import('../lib/apiKeys')>()), searchGooglePlaces: places.search }));
 vi.mock('../lib/supabase', () => ({ updateSavedVenue: vi.fn() }));
 vi.mock('../lib/openai', () => ({ UserFacingError: Error }));
+const phone = vi.hoisted(() => ({ probe: vi.fn() }));
+vi.mock('../lib/phoneProbe', async original => ({ ...(await original<typeof import('../lib/phoneProbe')>()), probePost: phone.probe }));
 
 const link = 'https://www.instagram.com/reel/test/';
 const venue = { name: 'Test cafe', address: '1 Test St', type: 'food' as const, link, lat: 1, lon: 2 };
@@ -258,6 +260,37 @@ describe('Confirm the venue choices', () => {
     mocks.identifySharedVenue.mockResolvedValueOnce({ candidates: [], issue: { stage: 'identify', retryable: true } });
     await act(async () => render(<AiSaveDialog link="https://test.example/cafes" onClose={vi.fn()} onPlan={vi.fn()} />));
     expect(screen.queryByLabelText('Paste the caption')).not.toBeInTheDocument();
+  });
+
+  it('leaves the name, address and search boxes empty when nothing credible was found, whatever the creator is called', async () => {
+    mocks.identifySharedVenue.mockImplementationOnce(async (_link: string, progress: { identification?: unknown }) => {
+      // The metadata says who posted it (a creator handle), but nothing about which place it is.
+      progress.identification = { metadata: { platform: 'tiktok', handle: 'dandelion.garden' } };
+      return { candidates: [], issue: { stage: 'identify', retryable: true } };
+    });
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} />));
+    expect(screen.getByLabelText('Venue name')).toHaveValue('');
+    expect(screen.getByLabelText('Address')).toHaveValue('');
+    expect(screen.getByLabelText(/search Google Places/)).toHaveValue('');
+  });
+
+  it('shows the phone check, and runs it once, for a TikTok link in the staging test build', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://crpkzysdtnoomzimibhe.supabase.co');
+    try {
+      phone.probe.mockResolvedValue({ platform: 'tiktok', via: 'phone', reached: false, error: 'The page answered 429.' });
+      mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
+      await act(async () => render(<AiSaveDialog link="https://vt.tiktok.com/ZSsFTaXA9/" onClose={vi.fn()} onPlan={vi.fn()} />));
+      expect(screen.getByText('Phone check (test build): done')).toBeInTheDocument();
+      expect(phone.probe).toHaveBeenCalledTimes(1);
+      expect(phone.probe).toHaveBeenCalledWith('https://vt.tiktok.com/ZSsFTaXA9/');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not show the phone check in a normal build', async () => {
+    await start({ candidates: [], issue: { stage: 'identify', retryable: true } });
+    expect(screen.queryByText(/Phone check/)).not.toBeInTheDocument();
   });
 
   it('never shows what the AI read as a Google choice when Google found nothing', async () => {

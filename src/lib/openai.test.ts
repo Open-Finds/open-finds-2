@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { captionFromShare, checkAddresses, extractVenuesFromLink, hasSourceAddress, mentionedInSource, NO_CAPTION_MESSAGE, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
+import { captionFromShare, checkAddresses, extractVenuesFromLink, hasSourceAddress, looksLikeSentence, mentionedInSource, NO_CAPTION_MESSAGE, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
 
 // Google lookups for checkAddresses: answers by venue name, so each test says
 // what Google "knows". Unknown names find nothing.
@@ -177,6 +177,45 @@ describe('the caption TikTok sends with a share', () => {
     vi.mocked(fetch).mockResolvedValueOnce(blocked());
     await expect(extractVenuesFromLink(link, { verifySeparately: true, progress: { sharedText: link } })).rejects.toThrow(NO_CAPTION_MESSAGE);
     expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+/**
+ * A reel with no tag and no venue in the caption: the AI returned the video's headline as a "venue". It filled the form and
+ * the Google search with a sentence.
+ */
+describe('a headline is not a venue name', () => {
+  it.each([
+    "ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!",
+    "Best pizza in Sydney!!! You have to try this place",
+    'my new favourite sando spot in Sydney and trust me I have tried a lot',
+    'We tried every dumpling place in the Sydney CBD so you do not have to',
+  ])('rejects %s', name => expect(looksLikeSentence(name)).toBe(true));
+
+  it.each([
+    'Johnny Gio\u2019s Pizza Waterloo', 'Which Wich?', 'Yum Cha Palace!', 'Oyama Ramen', 'The Palace Chinese Restaurant',
+    'Ocean Royale at Club Auburn', 'SALTED. Cafe & Bakery', 'Daruma Dumplings Beer House', 'Sculpture by the Sea, Bondi',
+    '\u8336\u4ead \u7fbd\u7576 (Chatei Hatou)',
+  ])('keeps the real name %s', name => expect(looksLikeSentence(name)).toBe(false));
+
+  it('drops a headline the AI returned as a venue, and keeps the venue next to it', async () => {
+    const link = 'https://www.instagram.com/reel/test/';
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Spicy Roni ($31) is a must' }))
+      .mockResolvedValueOnce(aiVenues(
+        { name: "ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!", address: 'Sydney NSW', type: 'food' },
+        { name: 'Real Pizza Co', address: '1 Test St, Sydney NSW 2000', type: 'food' },
+      ));
+    const items = await extractVenuesFromLink(link, { verifySeparately: true, search: false });
+    expect(items.map(item => item.name)).toEqual(['Real Pizza Co']);
+  });
+
+  it('returns nothing when the only "venue" is a headline, so the form starts empty', async () => {
+    const link = 'https://www.instagram.com/reel/test/';
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Spicy Roni ($31) is a must' }))
+      .mockResolvedValueOnce(aiVenues({ name: "ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!", address: 'Sydney NSW', type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, search: false })).resolves.toEqual([]);
   });
 });
 

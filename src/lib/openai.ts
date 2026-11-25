@@ -492,6 +492,20 @@ function reconcileCaption(caption: CaptionEvidence, name: string, items: Extract
  * address: it would be searched on Google as one. It counts as no address, so the next step (a search or the web AI) runs.
  */
 const NOT_AN_ADDRESS = /\b(?:not (?:explicitly |specifically )?(?:provided|specified|available|stated|given|mentioned|known)|externally known|no address|if known)\b/i;
+/**
+ * Text that reads like a sentence or a headline, not a venue's name ("ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!"). A post's
+ * title is not the place it is about; keeping it as the name fills the form with something that has to be deleted, and sends
+ * Google off to find unrelated places. Real names with a "!" or "?" ("Which Wich?") are short, so a long phrase is needed.
+ */
+export function looksLikeSentence(name: string): boolean {
+  const text = name.trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length >= 9 || text.length > 80) return true;
+  if (words.length >= 4 && /[?!]/.test(text)) return true;
+  // "I've had", "my favourite", "we tried": a person talking, not a place.
+  return words.length >= 4 && /\b(?:i|i'm|i've|i'd|my|me|we|we've|you|your|our)\b/i.test(text.replace(/[’]/g, "'"));
+}
+
 /** A bare placeholder: the whole value says "no address". A street that merely contains such a word is a real address. */
 const PLACEHOLDER = /^\s*(?:unknown|n\/?a|unspecified|none|null|undefined|-+)\s*\.?\s*$/i;
 export function usableAddress(address: string): string {
@@ -633,6 +647,7 @@ export async function extractVenuesFromLink(
     const name = typeof obj.name === 'string' ? obj.name.trim() : '';
     const address = usableAddress(typeof obj.address === 'string' ? obj.address.trim() : '');
     if (!name || (!address && !options?.verifySeparately)) continue;
+    if (looksLikeSentence(name)) continue;
     const type = normalizeType(obj.type);
     if (!type) continue;
     const order = typeof obj.order === 'number' ? obj.order : items.length + 1;
