@@ -523,12 +523,8 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
               <button type="button" role="checkbox" aria-checked={on} aria-label={`Save ${row.venue.name}`} disabled={!hasAddress || !!done || saving}
                 onClick={() => toggleRow(index)}
                 className="-m-3 flex min-w-0 flex-1 items-start gap-3 rounded-lg p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default">
-                <span aria-hidden="true" className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border-2 text-sm',
-                  on ? 'border-primary bg-primary text-primary-foreground' : 'border-border')}>
-                  {on && '✓'}
-                </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block break-words font-semibold">{row.venue.name}</span>
+                  <span className={cn('block break-words font-semibold', on && 'underline decoration-primary decoration-[3px] underline-offset-[6px]')}>{row.venue.name}</span>
                   <span className="flex items-start gap-1 break-words text-sm">{hasAddress && !row.verified && <UnconfirmedAddressMark />}<span>{hasAddress ? row.venue.address : 'No address found'}</span></span>
                   {!done && row.mentioned === false ? <span className="flex items-start gap-1 text-xs text-warning">
                     <AlertTriangle size={14} className="mt-px shrink-0" aria-hidden="true" /><span>{notMentionedLine}</span>
