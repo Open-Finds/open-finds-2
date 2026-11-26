@@ -35,11 +35,14 @@ async function start(result: SharedVenueResult = { venue, candidates: [candidate
 describe('Shared venue actions', () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it('lets the user close after verification without writing', async () => {
+  it('hides instead of closing, and comes back when tapped, without writing', async () => {
     const flow = await start();
     expect(screen.getByRole('button', { name: 'Save Venue' })).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(flow.onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Swipe up or tap to return to AI Save' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(flow.onPlan).not.toHaveBeenCalled();
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
     expect(mocks.publishVenue).not.toHaveBeenCalled();
@@ -245,23 +248,20 @@ describe('Confirm the venue choices', () => {
     expect(mocks.identifySharedVenue.mock.calls[0][1]).toMatchObject({ identification: { sharedText: shared } });
   });
 
-  it('reads the venue again from a caption the user pastes', async () => {
+  it('lets the user add a screenshot for a TikTok post, without reading it yet', async () => {
     await start({ candidates: [], issue: { stage: 'identify', retryable: true, cause: new Error('no caption') } });
-    const box = screen.getByLabelText('Paste the caption');
-    expect(screen.getByRole('button', { name: 'Read caption' })).toBeDisabled();
-    fireEvent.change(box, { target: { value: '\u{1F4CD} Ocean Royale at Club Auburn\n12-14 Northumberland Road, Auburn NSW 2144' } });
-    mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Read caption' })));
-    expect(mocks.identifySharedVenue).toHaveBeenCalledTimes(2);
-    expect(mocks.identifySharedVenue.mock.calls[1][1].identification.sharedText).toContain('Ocean Royale at Club Auburn');
-    // Once a venue is found the box goes away.
-    expect(screen.queryByLabelText('Paste the caption')).not.toBeInTheDocument();
+    const input = screen.getByLabelText('Add photo');
+    expect(input).toHaveAttribute('type', 'file');
+    const shot = new File(['x'], 'venue-screenshot.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [shot] } });
+    expect(screen.getByText('Added: venue-screenshot.png')).toBeInTheDocument();
+    expect(mocks.identifySharedVenue).toHaveBeenCalledTimes(1);
   });
 
-  it('offers the paste box only for TikTok and Instagram posts', async () => {
+  it('offers the photo box only for TikTok and Instagram posts', async () => {
     mocks.identifySharedVenue.mockResolvedValueOnce({ candidates: [], issue: { stage: 'identify', retryable: true } });
     await act(async () => render(<AiSaveDialog link="https://test.example/cafes" onClose={vi.fn()} onPlan={vi.fn()} />));
-    expect(screen.queryByLabelText('Paste the caption')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
   });
 
   it('leaves the name, address and search boxes empty when nothing credible was found, whatever the creator is called', async () => {
@@ -771,16 +771,6 @@ describe('tracking the success rate', () => {
     await start({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'ambiguous' } });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm & Save' })));
     expect(last()).toMatchObject({ outcome: 'chosen', savedVenueId: 'saved-5', usedNoneOfThese: false });
-  });
-
-  it('records a pasted caption as how the venue was found', async () => {
-    mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-6' });
-    await start({ candidates: [], issue: { stage: 'identify', retryable: true } });
-    fireEvent.change(screen.getByLabelText('Paste the caption'), { target: { value: '\u{1F4CD} Ocean Royale\n12-14 Northumberland Road, Auburn NSW 2144' } });
-    mocks.identifySharedVenue.mockResolvedValueOnce({ venue: found, candidates: [{ ...found, order: 1, tags: [] }] });
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Read caption' })));
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
-    expect(last()).toMatchObject({ outcome: 'confirmed', foundBy: 'pasted_caption', usedPastedCaption: true });
   });
 
   it('records a list of venues as one result with how many were saved', async () => {

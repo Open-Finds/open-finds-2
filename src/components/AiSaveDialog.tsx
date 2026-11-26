@@ -3,7 +3,6 @@ import { AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Textarea } from './ui/textarea';
 import { identifySharedVenue, publishVenue, saveSharedVenue, sendRecommendationLink, sendRecommendationMessage, shareRecommendationOrigin, type ExtractedVenueItem, type SharedVenue, type SharedVenueProgress, type SharedVenueResult, type VenueRow } from '../lib/aiSave';
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
@@ -57,7 +56,7 @@ const unverifiedShareLine = 'Address not verified. Your friend will be told to c
 /** A TikTok or Instagram post: the links whose caption the user can copy and paste. */
 const isSocialPost = (link: string) => /(?:^|\.)(?:tiktok\.com|instagram\.com)\//i.test(link.replace(/^https?:\/\//i, ''));
 
-export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
+export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
   link: string;
   /** The text that came with the link when it was shared (TikTok puts the caption beside the link). */
   sharedText?: string;
@@ -101,8 +100,10 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
   /** A post that names several venues: each one, to tick and save. */
   const [rows, setRows] = useState<VenueRow[]>();
   const [ticked, setTicked] = useState<Set<number>>(new Set());
-  /** A caption the user copied from the post and pasted, when AI Save could not read it. */
-  const [pasted, setPasted] = useState('');
+  /** A screenshot of the post the user added, when the venue name was only in the video. */
+  const [photo, setPhoto] = useState<File | null>(null);
+  /** Swiped down out of the way so the user can take a screenshot. The dialog is hidden, not closed. */
+  const [minimized, setMinimized] = useState(false);
   /** The person's thumbs up or down on this result (kept in a ref too, so a later write never loses it). */
   const [feedback, setFeedback] = useState<FeedbackValue>();
   const feedbackRef = useRef<FeedbackValue>();
@@ -256,17 +257,6 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
     feedbackRef.current = value;
     setFeedback(value);
     sendResult();
-  };
-
-  /** Read the venue again from a caption the user pasted (with anything that came with the share). */
-  const readPasted = () => {
-    const text = [sharedText, pasted.trim()].filter(Boolean).join('\n');
-    if (!pasted.trim()) return;
-    signals.current.pasted = true;
-    progress.current = { checkedSaved: true, identification: { sharedText: text } };
-    autoSearched.current = false;
-    setShareUrl('');
-    retryLookup();
   };
 
   /** Change location: Google places for what the user typed. Choosing one is still a separate Save. */
@@ -463,8 +453,21 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
   const detailsMatchSaved = !!saved && saved.name === venue?.name && saved.address === venue?.address;
   const correctionSaved = !!saved && saved.name === name.trim() && saved.address === address.trim();
 
-  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-    <DialogContent className="isolate">
+  if (minimized) return <div role="button" tabIndex={0} aria-label="Swipe up or tap to return to AI Save"
+    className="fixed inset-x-0 bottom-0 z-50 flex touch-none items-center justify-center gap-2 rounded-t-lg border border-border bg-popover p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] text-sm shadow-3"
+    onClick={() => setMinimized(false)}
+    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') setMinimized(false); }}
+    onPointerDown={event => { swipe.current = event.clientY; }}
+    onPointerUp={event => {
+      if (swipe.current !== undefined && swipe.current - event.clientY > 60) setMinimized(false);
+      swipe.current = undefined;
+    }}
+    onPointerCancel={() => { swipe.current = undefined; }}>
+    <span aria-hidden="true">▲</span><span>Swipe up to return to AI Save</span>
+  </div>;
+
+  return <Dialog open onOpenChange={open => { if (!open) setMinimized(true); }}>
+    <DialogContent className="isolate" showClose={false}>
       {compact && <img className="size-8 rounded-lg" src={fallbackImage} alt="The Unsaved" />}
       {busy && <svg aria-hidden="true" className="pointer-events-none absolute inset-0 size-full text-amber-500">
         <rect className="ai-save-trace" x="2" y="2" width="calc(100% - 4px)" height="calc(100% - 4px)" rx="15"
@@ -474,7 +477,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
         swipe.current = event.clientY;
         event.currentTarget.setPointerCapture(event.pointerId);
       }} onPointerUp={event => {
-        if (swipe.current !== undefined && event.clientY - swipe.current > 60) onClose();
+        if (swipe.current !== undefined && event.clientY - swipe.current > 60) setMinimized(true);
         swipe.current = undefined;
       }} onPointerCancel={() => { swipe.current = undefined; }}>
         <DialogTitle>{sharing ? 'Quick Share' : rows ? 'Venues from this link' : choosing ? 'Confirm the venue' : compact ? 'AI Save or Create Plan' : 'Venue from link'}</DialogTitle>
@@ -595,11 +598,11 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
           })}
         </fieldset>}
         {!venue && !saved && isSocialPost(link) && <div className="grid gap-2 rounded-lg border p-3">
-          <label className="text-sm" htmlFor="ai-save-caption">Paste the caption</label>
-          <p id="ai-save-caption-help" className="text-xs text-muted-foreground">Copy the caption from TikTok or Instagram, paste it here, and AI Save reads it again.</p>
-          <Textarea id="ai-save-caption" aria-describedby="ai-save-caption-help" rows={3} maxLength={2200} className="min-h-0"
-            value={pasted} onChange={event => setPasted(event.target.value)} />
-          <Button type="button" variant="outline" disabled={busy || saving || !pasted.trim()} onClick={readPasted}>Read caption</Button>
+          <label className="text-sm" htmlFor="ai-save-photo">Add photo</label>
+          <p id="ai-save-photo-help" className="text-xs text-muted-foreground">Only if the venue name is in the video, not the caption. Take a screenshot, swipe this screen down, then swipe back up here and add it.</p>
+          <input id="ai-save-photo" type="file" accept="image/*" aria-describedby="ai-save-photo-help" className="text-sm"
+            onChange={event => setPhoto(event.target.files?.[0] ?? null)} />
+          {photo && <p className="text-xs text-muted-foreground">Added: {photo.name}</p>}
         </div>}
         <div className="grid gap-2 rounded-lg border p-3">
           <label className="grid gap-1 text-sm" htmlFor="ai-save-place-search">Change location: search Google Places</label>

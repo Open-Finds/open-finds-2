@@ -343,13 +343,13 @@ function canonicalTikTokUrl(url: string): string {
  * TikTok turns away some requests from cloud servers (about one in three in
  * testing, for any video), sometimes for a few seconds at a time, so a failed
  * lookup is retried over ~6s. The AI step after this takes far longer.
- * On staging every attempt is a counted provider call, so it tries once.
+ * Staging retries too: without them about one in three TikTok lookups failed in testing.
  */
 async function fetchTikTokOEmbed(
   videoUrl: string
 ): Promise<{ title: string | null; author: string | null; handle: string | null } | null> {
   const url = canonicalTikTokUrl(videoUrl);
-  for (let attempt = 0; attempt < (isStagingProviderTarget() ? 1 : 4); attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1000 * attempt));
     const result = await fetchTikTokOEmbedOnce(url);
     if (result?.title || result?.author) return result;

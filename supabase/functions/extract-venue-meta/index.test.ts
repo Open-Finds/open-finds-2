@@ -112,12 +112,12 @@ describe('extract-venue-meta on staging', () => {
     expect(fetched().filter((url) => url.includes('/reel/CODE123/'))).toHaveLength(1);
   });
 
-  it('asks TikTok once instead of four times', async () => {
-    answer({});
+  it('retries TikTok up to four times on staging when TikTok turns the request away', async () => {
+    answer({ 'tiktok.com/oembed': () => new Response('Forbidden', { status: 403 }) });
     const response = await staged('https://www.tiktok.com/@user/video/123');
     expect(response.status).toBe(200);
-    expect(fetched().filter((url) => url.includes('tiktok.com/oembed'))).toHaveLength(1);
-  });
+    expect(fetched().filter((url) => url.includes('tiktok.com/oembed'))).toHaveLength(4);
+  }, 15000);
 
   it('is refused for anyone who is not a listed test account', async () => {
     mocks.auth.mockResolvedValue({ ok: true, user: { id: '22222222-2222-4222-8222-222222222222' } });
