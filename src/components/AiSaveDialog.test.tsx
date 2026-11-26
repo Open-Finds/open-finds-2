@@ -93,19 +93,12 @@ describe('Shared venue actions', () => {
     expect(flow.onClose).toHaveBeenCalledOnce();
   });
 
-  it('goes straight back to the other app on a new share, once, and keeps the result for confirming', async () => {
-    let resolve!: (result: SharedVenueResult) => void;
-    mocks.identifySharedVenue.mockReturnValueOnce(new Promise<SharedVenueResult>(done => { resolve = done; }));
+  it('stays open on a new share until the user closes it', async () => {
     const onBackground = vi.fn(async () => true);
-    const onClose = vi.fn();
-    const onReady = vi.fn();
-    await act(async () => { render(<AiSaveDialog instant link={link} onPlan={vi.fn()} onClose={onClose} onReady={onReady} onBackground={onBackground} />); });
-    expect(onBackground).toHaveBeenCalledOnce();
-    await act(async () => { resolve({ venue, candidates: [candidate] }); });
-    expect(onReady.mock.calls).toEqual([[true]]);
-    expect(onBackground).toHaveBeenCalledOnce();
-    expect(onClose).not.toHaveBeenCalled();
-    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+    await searching(onBackground);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(onBackground).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Swipe down to close/ })).not.toHaveFocus();
   });
 
   it('does not notify when the search finished with the screen open', async () => {
@@ -230,13 +223,13 @@ describe('Confirm the venue choices', () => {
   const choices = [place(), place({ name: 'Kiddo Coffee Redfern', address: '1 Lawson St, Redfern NSW 2016', lat: -33.89, lon: 151.2, order: 2 })];
   const noMatch = { stage: 'verify' as const, retryable: false, reason: 'no_match' as const };
 
-  it('shows the venue choices instead of an error, with nothing selected for the user', async () => {
+  it('shows the venue choices instead of an error, with the best match selected', async () => {
     await start({ candidates: choices, choices, issue: noMatch });
     expect(screen.getByText('Confirm the venue')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Kiddo Coffee\s*84-86 Mary St/ })).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: /Kiddo Coffee\s*84-86 Mary St/ })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Kiddo Coffee Redfern\s*1 Lawson St/ })).not.toBeChecked();
-    expect(screen.getByRole('button', { name: 'Confirm & Save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Confirm & Save' })).toBeEnabled();
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
   });
 

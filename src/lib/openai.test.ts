@@ -99,28 +99,6 @@ describe('a social post with no readable caption', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it("does not treat TikTok's own page description as a caption", async () => {
-    const link = 'https://www.tiktok.com/@antman/video/1';
-    vi.mocked(fetch).mockClear();
-    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'video', url: link, handle: 'antman', fetched: true,
-      ogDescription: null, oembedTitle: null, metaDescription: 'TikTok - trends start here. Watch videos from creators.' }));
-    await expect(extractVenuesFromLink(link, { verifySeparately: true })).rejects.toThrow(NO_CAPTION_MESSAGE);
-    expect(fetch).toHaveBeenCalledOnce();
-  });
-
-  it('drops a venue the post never names, rather than guessing', async () => {
-    const link = 'https://www.tiktok.com/@antman/video/2';
-    vi.mocked(fetch).mockClear();
-    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'video', url: link, handle: 'antman', fetched: true,
-      oembedTitle: 'Is this one of the best burgers? URGERBAE is smashing them out in Carss Park' }))
-      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: JSON.stringify({ venues: [
-        { name: "Henry Lee's", address: 'Hart St, Redfern NSW 2016', type: 'food' },
-        { name: 'UrgerBae', address: 'Carss Park NSW', type: 'food' },
-      ] }) } }] }));
-    const found = await extractVenuesFromLink(link, { verifySeparately: true, search: false });
-    expect(found.map(item => item.name)).toEqual(['UrgerBae']);
-  });
-
   it('still asks the AI when only the place the creator tagged came through', async () => {
     const link = 'https://www.tiktok.com/@someone/video/789';
     vi.mocked(fetch).mockClear();
@@ -223,7 +201,7 @@ describe('a headline is not a venue name', () => {
   it('drops a headline the AI returned as a venue, and keeps the venue next to it', async () => {
     const link = 'https://www.instagram.com/reel/test/';
     vi.mocked(fetch).mockClear();
-    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Spicy Roni ($31) at Real Pizza Co is a must' }))
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Spicy Roni ($31) is a must' }))
       .mockResolvedValueOnce(aiVenues(
         { name: "ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!", address: 'Sydney NSW', type: 'food' },
         { name: 'Real Pizza Co', address: '1 Test St, Sydney NSW 2000', type: 'food' },
@@ -346,7 +324,7 @@ describe('an address the AI did not really give', () => {
 
   it('gives a venue with filler text no address, so the next step (a search or the web AI) runs', async () => {
     vi.mocked(fetch).mockClear();
-    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Dumplings at Daruma' }))
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Dumplings' }))
       .mockResolvedValueOnce(aiVenues({ name: 'Daruma Dumpling Beer House', address: 'Shop location not explicitly provided in caption; externally known address: Strathfield, NSW. Use full street address if known from source: not provided.', type: 'food' }));
     await expect(extractVenuesFromLink(link, { verifySeparately: true, search: false }))
       .resolves.toMatchObject([{ name: 'Daruma Dumpling Beer House', address: '' }]);

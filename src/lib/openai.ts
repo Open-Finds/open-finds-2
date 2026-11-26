@@ -4,7 +4,6 @@ import { areaOf, findVenueAddress, hasStreetNumber, isAustralianAddress, isGoogl
 import { findSimilarVenues, type KnownVenue } from './venueMatch';
 import { edgeAuthHeaders } from './edgeAuth';
 import { asProviderError, providerFailure } from './providerErrors';
-import { platformOf, readTikTokOnPhone } from './phoneProbe';
 import { areaFromLocationTag, fillAddressEvidence, isWrittenAddress, profileBio, type TagLocation } from './venueEvidence';
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
@@ -531,35 +530,6 @@ export function captionFromShare(text: string | undefined): string {
 }
 
 /**
- * A TikTok page that carries no caption still carries TikTok's own site description. That is not the creator's words, so it
- * never counts as a caption: with nothing else, AI Save says it found nothing instead of guessing.
- */
-function withoutPageBlurb(meta: MetaResult | null): MetaResult | null {
-  if (!meta || meta.platform !== 'tiktok' || meta.ogDescription?.trim() || meta.oembedTitle?.trim()) return meta;
-  return { ...meta, metaDescription: null };
-}
-
-/**
- * A TikTok post whose caption our server could not get is read by the phone itself: the full caption and the location tag.
- * A caption the server did read always wins, and then the phone is not asked.
- */
-async function withPhoneCaption(meta: MetaResult | null, link: string): Promise<MetaResult | null> {
-  if (platformOf(link) !== 'tiktok' || meta?.ogDescription?.trim() || meta?.oembedTitle?.trim()) return meta;
-  const post = await readTikTokOnPhone(link);
-  if (!post) return meta;
-  const base: MetaResult = meta ?? emptyMeta('tiktok', link);
-  return { ...base, oembedTitle: post.caption || null, location: base.location ?? post.location, fetched: true };
-}
-
-function emptyMeta(platform: string, link: string): MetaResult {
-  return {
-    platform, contentType: platform === 'tiktok' ? 'video' : 'reel', url: link, ogTitle: null, ogDescription: null, ogSiteName: null,
-    pageTitle: null, metaDescription: null, jsonLd: null, handle: null, rawText: null, oembedTitle: null, oembedAuthor: null,
-    oembedHtml: null, fetched: false,
-  };
-}
-
-/**
  * Fills a missing caption from the shared text, for a TikTok or Instagram post. A caption the server did read always wins
  * (it is the whole caption); the shared text is used only when the server got none, which is what happens when TikTok
  * turns the server away. Other links are left as they are.
@@ -570,7 +540,11 @@ function withSharedCaption(meta: MetaResult | null, sharedText: string | undefin
   const platform = meta?.platform ?? (/tiktok\.com/i.test(link) ? 'tiktok' : /instagram\.com/i.test(link) ? 'instagram' : 'other');
   if (platform !== 'tiktok' && platform !== 'instagram') return meta;
   if (meta && captionPlainText(meta).trim()) return meta;
-  const base: MetaResult = meta ?? emptyMeta(platform, link);
+  const base: MetaResult = meta ?? {
+    platform, contentType: platform === 'tiktok' ? 'video' : 'reel', url: link, ogTitle: null, ogDescription: null, ogSiteName: null,
+    pageTitle: null, metaDescription: null, jsonLd: null, handle: null, rawText: null, oembedTitle: null, oembedAuthor: null,
+    oembedHtml: null, fetched: false,
+  };
   return platform === 'tiktok' ? { ...base, oembedTitle: shared } : { ...base, ogDescription: shared };
 }
 
@@ -624,18 +598,14 @@ export async function extractVenuesFromLink(
   // Step 1: Fetch real page metadata via edge function
   const sharedText = options?.progress?.sharedText;
   let fetched: MetaResult | null;
-  let refused: { error: unknown } | undefined;
   try {
     fetched = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately, attemptId);
   } catch (error) {
-    refused = { error };
+    // The server could not read the post, but the phone already has its caption: carry on with that.
+    if (captionFromShare(sharedText).length < 3) throw error;
     fetched = null;
   }
-  const own = withoutPageBlurb(fetched);
-  const read = options?.verifySeparately ? await withPhoneCaption(own, link) : own;
-  // The server could not read the post: carry on only if the phone has its caption (read just now, or sent with the share).
-  if (refused && !read && captionFromShare(sharedText).length < 3) throw refused.error;
-  const meta = withSharedCaption(read, sharedText, link);
+  const meta = withSharedCaption(fetched, sharedText, link);
   if (options?.progress && meta && (meta.fetched || meta.oembedTitle || meta.ogDescription || meta.metaDescription)) options.progress.metadata = meta;
   // A TikTok or Instagram post whose caption could not be read (TikTok turns some requests away) gives the AI nothing
   // but the link and the creator's name, and it then guesses venues the post never mentions. Stop and say so instead.
@@ -678,8 +648,6 @@ export async function extractVenuesFromLink(
     const address = usableAddress(typeof obj.address === 'string' ? obj.address.trim() : '');
     if (!name || (!address && !options?.verifySeparately)) continue;
     if (looksLikeSentence(name)) continue;
-    // No guessing: a TikTok or Instagram venue the post never names (its caption, location tag or account name) is dropped.
-    if (options?.verifySeparately && !mentionedInSource({ metadata: meta ?? undefined }, name)) continue;
     const type = normalizeType(obj.type);
     if (!type) continue;
     const order = typeof obj.order === 'number' ? obj.order : items.length + 1;

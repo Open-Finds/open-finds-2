@@ -56,7 +56,7 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
 
   if (link && owner && !loading) return <>
     {error && <p role="alert" className="fixed inset-x-4 top-8 z-[60] rounded-lg bg-card p-3">{error}</p>}
-    <AiSaveDialog key={share.id + ':' + owner} compact link={link} sharedText={share.text} onClose={dismiss} closeRequest={closeRequest} instant={!initialProgress}
+    <AiSaveDialog key={share.id + ':' + owner} compact link={link} sharedText={share.text} onClose={dismiss} closeRequest={closeRequest}
       onWorking={working => { void nativeShare.working({ id: share.id, working }).catch(() => {}); }}
       onBackground={async () => (await nativeShare.background({ id: share.id })).moved}
       onReady={found => { void nativeShare.ready({ id: share.id, found }).catch(() => {}); }}

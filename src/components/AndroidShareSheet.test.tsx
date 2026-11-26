@@ -33,12 +33,11 @@ vi.mock('../lib/aiSave', async original => ({
 const link = 'https://www.instagram.com/reel/example/';
 const sharedVenue = { name: 'Test Cafe', address: '1 Test St', type: 'food', link } as const;
 vi.mock('./AiSaveDialog', () => ({
-  AiSaveDialog: ({ link, sharedText, initialProgress, onProgress, onPlan, onClose, onBackground, onReady, closeRequest, instant }: {
+  AiSaveDialog: ({ link, sharedText, initialProgress, onProgress, onPlan, onClose, onBackground, onReady, closeRequest }: {
     link: string; sharedText?: string; initialProgress?: SharedVenueProgress; onProgress: (progress: SharedVenueProgress) => void;
     onPlan: (venue: SharedVenue) => void; onClose: () => void;
-    onBackground: () => Promise<boolean>; onReady: (found: boolean) => void; closeRequest: number; instant: boolean;
+    onBackground: () => Promise<boolean>; onReady: (found: boolean) => void; closeRequest: number;
   }) => <>
-    <p data-testid="instant">{String(instant)}</p>
     <p data-testid="close-requests">{closeRequest}</p>
     <button onClick={() => { void onBackground(); }}>Go behind</button>
     <button onClick={() => onReady(true)}>Ready</button>
@@ -133,16 +132,6 @@ it('passes background search, readiness and the back button between Android and 
   expect(mocks.ready).toHaveBeenCalledWith({ id: 'first', found: true });
   await act(async () => mocks.listeners.get('close')?.());
   expect(screen.getByTestId('close-requests')).toHaveTextContent('1');
-});
-
-it('returns to the video for a new share, but not for a screen that already has progress', async () => {
-  mocks.owner = 'owner';
-  const fresh = render(<AndroidShareSheet initialShare={{ id: 'first', text: link }} />);
-  expect(screen.getByTestId('instant')).toHaveTextContent('true');
-  fresh.unmount();
-  await act(async () => { render(<AndroidShareSheet initialShare={{ id: 'second', text: link,
-    checkpoint: JSON.stringify({ owner: 'owner', progress: { verified: sharedVenue } }) }} />); });
-  expect(screen.getByTestId('instant')).toHaveTextContent('false');
 });
 
 it('gives each share its own screen, so a search in the background is not replaced', () => {

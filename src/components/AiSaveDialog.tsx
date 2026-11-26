@@ -55,7 +55,7 @@ function NotMentionedNote() {
 /** What the person sharing is told when Google has not confirmed the address. The friend sees it on the venue page, not in the chat. */
 const unverifiedShareLine = 'Address not verified. Your friend will be told to check it before they go.';
 
-export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved, onBackground, onReady, onWorking, closeRequest = 0, stored, instant = false }: {
+export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved, onBackground, onReady, onWorking, closeRequest = 0, stored }: {
   link: string;
   /** The text that came with the link when it was shared (TikTok puts the caption beside the link). */
   sharedText?: string;
@@ -74,8 +74,6 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
   closeRequest?: number;
   /** A result opened again from Notifications: shown as it was found, without searching again. */
   stored?: AiSaveItem;
-  /** Android: go straight back to the other app as the search starts. */
-  instant?: boolean;
 }) {
   const [attempt, retry] = useState(0);
   const [busy, setBusy] = useState(true);
@@ -189,9 +187,10 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
       setEditing(!result.venue);
       setIssue(result.issue);
       setManual(false);
-      // Best match first, but nothing is selected for the user: picking a place is always their tap.
+      // Best match first. Preselect it unless the choices are only Google's closest results.
       setChoices(result.choices ?? []);
-      setChoice(undefined);
+      const choosable = (result.choices?.length ?? 0) > 0 && (result.issue?.reason === 'ambiguous' || result.issue?.reason === 'no_match');
+      setChoice(choosable && !result.issue?.weak ? 0 : undefined);
       // A search box that starts with the name we read, and is empty when we read none. The creator's handle is
       // who posted it, not what it is about, so it is never used to fill the box.
       setPlaceQuery(progress.current.candidates?.[0]?.name ?? '');
@@ -271,11 +270,6 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
   useEffect(() => {
     if (closeRequest) void closer.current();
   }, [closeRequest]);
-  /** Decided when the screen opens, so coming back to the result never sends it away again. */
-  const leaveAtOnce = useRef(instant);
-  useEffect(() => {
-    if (leaveAtOnce.current && working.current) void closer.current();
-  }, []);
 
   const retryLookup = () => {
     setBusy(true);
@@ -539,7 +533,8 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
 
   return <Dialog open onOpenChange={open => { if (!open) void close(); }}>
     {/* Phones close with the swipe line; the X is only for wide screens, where there is nothing to swipe. */}
-    <DialogContent className="isolate" closeClassName="hidden sm:flex">
+    <DialogContent className="isolate focus-visible:outline-none focus-visible:ring-0" closeClassName="hidden sm:flex"
+      onOpenAutoFocus={event => { event.preventDefault(); (event.target as HTMLElement).focus(); }}>
       {busy && <svg aria-hidden="true" className="pointer-events-none absolute inset-0 size-full text-amber-500">
         <rect className="ai-save-trace" x="2" y="2" width="calc(100% - 4px)" height="calc(100% - 4px)" rx="15"
           pathLength="100" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="18 82" />
