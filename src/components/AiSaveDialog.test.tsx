@@ -35,17 +35,98 @@ async function start(result: SharedVenueResult = { venue, candidates: [candidate
 describe('Shared venue actions', () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it('hides instead of closing, and comes back when tapped, without writing', async () => {
+  it.each([
+    ['the swipe line, tapped', () => { fireEvent.click(screen.getByRole('button', { name: 'Swipe down to close' })); }],
+    ['the X on wide screens', () => { fireEvent.click(screen.getByRole('button', { name: 'Close' })); }],
+    ['Escape', () => { fireEvent.keyDown(document.body, { key: 'Escape' }); }],
+    ['a swipe down on the handle', () => {
+      const handle = screen.getByText('Swipe down to close');
+      (handle.closest('.touch-none') as HTMLElement).setPointerCapture = () => {};
+      fireEvent(handle, new MouseEvent('pointerdown', { bubbles: true, clientY: 10 }));
+      fireEvent(handle, new MouseEvent('pointerup', { bubbles: true, clientY: 120 }));
+    }],
+  ])('closes with %s once the search is done, without writing', async (_way, closeIt) => {
     const flow = await start();
-    expect(screen.getByRole('button', { name: 'Save Venue' })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
-    fireEvent.keyDown(document.body, { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Swipe up or tap to return to AI Save' }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(flow.onPlan).not.toHaveBeenCalled();
+    await act(async () => closeIt());
+    expect(flow.onClose).toHaveBeenCalledOnce();
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
     expect(mocks.publishVenue).not.toHaveBeenCalled();
+  });
+
+  async function searching(onBackground?: () => Promise<boolean>) {
+    let resolve!: (result: SharedVenueResult) => void;
+    mocks.identifySharedVenue.mockReturnValueOnce(new Promise<SharedVenueResult>(done => { resolve = done; }));
+    const onClose = vi.fn();
+    const onReady = vi.fn();
+    await act(async () => { render(<AiSaveDialog link={link} onPlan={vi.fn()} onClose={onClose} onReady={onReady} onBackground={onBackground} />); });
+    const finish = (result: SharedVenueResult = { venue, candidates: [candidate] }) => act(async () => { resolve(result); });
+    return { onClose, onReady, finish };
+  }
+  const pressClose = () => act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close' })); });
+
+  it('keeps searching behind the other app when closed, then says it is ready, without saving', async () => {
+    const onBackground = vi.fn(async () => true);
+    const flow = await searching(onBackground);
+    await pressClose();
+    expect(onBackground).toHaveBeenCalledOnce();
+    expect(flow.onClose).not.toHaveBeenCalled();
+    expect(flow.onReady).not.toHaveBeenCalled();
+    await flow.finish();
+    expect(flow.onReady.mock.calls).toEqual([[true]]);
+    expect(screen.getByRole('button', { name: 'Save Venue' })).toBeEnabled();
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('says no venue was found when a background search finds nothing', async () => {
+    const flow = await searching(async () => true);
+    await pressClose();
+    await flow.finish({ candidates: [], issue: { stage: 'identify', retryable: true } });
+    expect(flow.onReady.mock.calls).toEqual([[false]]);
+  });
+
+  it('stays open when it cannot move to the background, and cancels on a second close', async () => {
+    const flow = await searching(async () => false);
+    await pressClose();
+    expect(screen.getByText(/could not move to the background/)).toBeInTheDocument();
+    expect(flow.onClose).not.toHaveBeenCalled();
+    await pressClose();
+    expect(flow.onClose).toHaveBeenCalledOnce();
+  });
+
+  it('goes straight back to the other app on a new share, once, and keeps the result for confirming', async () => {
+    let resolve!: (result: SharedVenueResult) => void;
+    mocks.identifySharedVenue.mockReturnValueOnce(new Promise<SharedVenueResult>(done => { resolve = done; }));
+    const onBackground = vi.fn(async () => true);
+    const onClose = vi.fn();
+    const onReady = vi.fn();
+    await act(async () => { render(<AiSaveDialog instant link={link} onPlan={vi.fn()} onClose={onClose} onReady={onReady} onBackground={onBackground} />); });
+    expect(onBackground).toHaveBeenCalledOnce();
+    await act(async () => { resolve({ venue, candidates: [candidate] }); });
+    expect(onReady.mock.calls).toEqual([[true]]);
+    expect(onBackground).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+  });
+
+  it('does not notify when the search finished with the screen open', async () => {
+    const flow = await searching(async () => true);
+    await flow.finish();
+    expect(flow.onReady).not.toHaveBeenCalled();
+  });
+
+  it('in a browser, steps out of the way while searching and comes back with the result', async () => {
+    const flow = await searching();
+    await pressClose();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('still searching');
+    await flow.finish();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(flow.onClose).not.toHaveBeenCalled();
+  });
+
+  it('shows no X on phones', async () => {
+    await start();
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveClass('hidden', 'sm:flex');
   });
 
   it('saves explicitly and retries a failed write with the same verified venue', async () => {
@@ -149,13 +230,13 @@ describe('Confirm the venue choices', () => {
   const choices = [place(), place({ name: 'Kiddo Coffee Redfern', address: '1 Lawson St, Redfern NSW 2016', lat: -33.89, lon: 151.2, order: 2 })];
   const noMatch = { stage: 'verify' as const, retryable: false, reason: 'no_match' as const };
 
-  it('shows the venue choices instead of an error, with the best match selected', async () => {
+  it('shows the venue choices instead of an error, with nothing selected for the user', async () => {
     await start({ candidates: choices, choices, issue: noMatch });
     expect(screen.getByText('Confirm the venue')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Kiddo Coffee\s*84-86 Mary St/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Kiddo Coffee\s*84-86 Mary St/ })).not.toBeChecked();
     expect(screen.getByRole('radio', { name: /Kiddo Coffee Redfern\s*1 Lawson St/ })).not.toBeChecked();
-    expect(screen.getByRole('button', { name: 'Confirm & Save' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Confirm & Save' })).toBeDisabled();
     expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
   });
 
@@ -246,22 +327,6 @@ describe('Confirm the venue choices', () => {
     mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
     await act(async () => render(<AiSaveDialog link={link} sharedText={shared} onClose={vi.fn()} onPlan={vi.fn()} />));
     expect(mocks.identifySharedVenue.mock.calls[0][1]).toMatchObject({ identification: { sharedText: shared } });
-  });
-
-  it('lets the user add a screenshot for a TikTok post, without reading it yet', async () => {
-    await start({ candidates: [], issue: { stage: 'identify', retryable: true, cause: new Error('no caption') } });
-    const input = screen.getByLabelText('Add photo');
-    expect(input).toHaveAttribute('type', 'file');
-    const shot = new File(['x'], 'venue-screenshot.png', { type: 'image/png' });
-    fireEvent.change(input, { target: { files: [shot] } });
-    expect(screen.getByText('Added: venue-screenshot.png')).toBeInTheDocument();
-    expect(mocks.identifySharedVenue).toHaveBeenCalledTimes(1);
-  });
-
-  it('offers the photo box only for TikTok and Instagram posts', async () => {
-    mocks.identifySharedVenue.mockResolvedValueOnce({ candidates: [], issue: { stage: 'identify', retryable: true } });
-    await act(async () => render(<AiSaveDialog link="https://test.example/cafes" onClose={vi.fn()} onPlan={vi.fn()} />));
-    expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
   });
 
   it('leaves the name, address and search boxes empty when nothing credible was found, whatever the creator is called', async () => {
@@ -560,6 +625,7 @@ describe('Picking up where it stopped, and keeping tags', () => {
     mocks.identifySharedVenue.mockResolvedValueOnce({ candidates: places, choices: places, issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
     const given = { candidates: [{ ...candidate, tags: ['pizza', 'vegan'] }] };
     await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} initialProgress={given} />));
+    fireEvent.click(screen.getByRole('radio'));
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm & Save' })));
     expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Real Cafe', tags: ['pizza', 'vegan'] });
   });
@@ -663,6 +729,7 @@ describe('Linking saves to the shared venue', () => {
     mocks.saveSharedVenue.mockResolvedValue(saved);
     const choices = [{ ...google, order: 1 }];
     await start({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'no_match' } });
+    fireEvent.click(screen.getByRole('radio'));
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm & Save' })));
     expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Real Cafe', venueToken: 'stamp-real' });
   });
@@ -769,6 +836,7 @@ describe('tracking the success rate', () => {
     mocks.saveSharedVenue.mockResolvedValue({ ...saved, id: 'saved-5', name: 'Ocean Royale' });
     const choices = [{ ...found, order: 1, tags: [] }];
     await start({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'ambiguous' } });
+    fireEvent.click(screen.getByRole('radio'));
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm & Save' })));
     expect(last()).toMatchObject({ outcome: 'chosen', savedVenueId: 'saved-5', usedNoneOfThese: false });
   });

@@ -11,6 +11,8 @@ import { hasStreetNumber, searchGooglePlaces } from '../lib/apiKeys';
 import { readProgress, writeProgress } from '../lib/progressStore';
 import { cleanVenueName, fallbackImage } from '../lib/publicRecommendation.js';
 import { resolveMessage } from '../lib/shareMessage';
+import { putInInbox, removeFromInbox, storedResult, type AiSaveItem } from '../lib/aiSaveInbox';
+import { attemptIdFor } from '../lib/attemptId';
 import { ShareMessageComposer } from './ShareMessageComposer';
 import { PhoneCheck } from './PhoneCheck';
 import { AiSaveFeedback, type FeedbackValue } from './AiSaveFeedback';
@@ -53,10 +55,7 @@ function NotMentionedNote() {
 /** What the person sharing is told when Google has not confirmed the address. The friend sees it on the venue page, not in the chat. */
 const unverifiedShareLine = 'Address not verified. Your friend will be told to check it before they go.';
 
-/** A TikTok or Instagram post: the links whose caption the user can copy and paste. */
-const isSocialPost = (link: string) => /(?:^|\.)(?:tiktok\.com|instagram\.com)\//i.test(link.replace(/^https?:\/\//i, ''));
-
-export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initialProgress, onProgress, onSaved }: {
+export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = false, initialProgress, onProgress, onSaved, onBackground, onReady, onWorking, closeRequest = 0, stored, instant = false }: {
   link: string;
   /** The text that came with the link when it was shared (TikTok puts the caption beside the link). */
   sharedText?: string;
@@ -66,6 +65,17 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
   initialProgress?: SharedVenueProgress;
   onSaved?: () => void;
   onProgress?: (progress: SharedVenueProgress) => void;
+  /** Android: put the share screen behind the other app while the search carries on. False when it cannot notify. */
+  onBackground?: () => Promise<boolean>;
+  /** Android: a search that was sent to the background has finished. */
+  onReady?: (found: boolean) => void;
+  onWorking?: (working: boolean) => void;
+  /** Rises each time the phone's back button asks to close while a search is running. */
+  closeRequest?: number;
+  /** A result opened again from Notifications: shown as it was found, without searching again. */
+  stored?: AiSaveItem;
+  /** Android: go straight back to the other app as the search starts. */
+  instant?: boolean;
 }) {
   const [attempt, retry] = useState(0);
   const [busy, setBusy] = useState(true);
@@ -100,10 +110,13 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
   /** A post that names several venues: each one, to tick and save. */
   const [rows, setRows] = useState<VenueRow[]>();
   const [ticked, setTicked] = useState<Set<number>>(new Set());
-  /** A screenshot of the post the user added, when the venue name was only in the video. */
-  const [photo, setPhoto] = useState<File | null>(null);
-  /** Swiped down out of the way so the user can take a screenshot. The dialog is hidden, not closed. */
-  const [minimized, setMinimized] = useState(false);
+  /** In a browser, closed while still searching: out of the way until the result is ready. */
+  const [hidden, setHidden] = useState(false);
+  /** A line shown when closing could not carry on in the background. */
+  const [notice, setNotice] = useState('');
+  const background = useRef<'asking' | 'waiting' | 'refused'>();
+  const working = useRef(true);
+  const found = useRef(false);
   /** The person's thumbs up or down on this result (kept in a ref too, so a later write never loses it). */
   const [feedback, setFeedback] = useState<FeedbackValue>();
   const feedbackRef = useRef<FeedbackValue>();
@@ -114,9 +127,10 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
   const openedAt = useRef(Date.now());
   const shownMs = useRef<number>();
   const [savedRows, setSavedRows] = useState<Record<number, SavedVenue>>({});
-  const progress = useRef<SharedVenueProgress>(initialProgress ?? {});
+  const progress = useRef<SharedVenueProgress>(initialProgress ?? stored?.progress ?? {});
+  const startedAt = useRef(stored?.at ?? Date.now());
   /** Progress handed in by the caller wins over progress kept on the phone. Read once, when the dialog opens. */
-  const hadInitialProgress = useRef(initialProgress !== undefined);
+  const hadInitialProgress = useRef(initialProgress !== undefined || stored?.progress !== undefined);
   const progressListener = useRef(onProgress);
   progressListener.current = onProgress;
   const job = useRef<{ attempt: number; promise: ReturnType<typeof identifySharedVenue> }>();
@@ -131,6 +145,13 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
       job.current = {
         attempt,
         promise: (async () => {
+          const kept = attempt === 0 && stored?.finished ? storedResult(stored) : undefined;
+          if (kept) {
+            progress.current.attemptId ??= await attemptIdFor(link).catch(() => undefined);
+            return kept;
+          }
+          // Listed under Notifications from the start, so a search that is cut off is not lost.
+          void putInInbox({ link, sharedText, at: startedAt.current = Date.now(), finished: false });
           // Sharing the same link again, soon after, picks up where it stopped (the overlay closes when you switch apps).
           if (attempt === 0 && !hadInitialProgress.current) {
             const earlier = await readProgress(link);
@@ -146,7 +167,14 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
     }
     void job.current.promise.then(result => {
       if (!active) return;
-      if (result.saved) setSaved(result.saved);
+      if (result.saved) {
+        setSaved(result.saved);
+        void removeFromInbox(link);
+      } else {
+        // It waits under Notifications until it is saved or removed.
+        void putInInbox({ link, sharedText, at: startedAt.current, finished: true, result, progress: progress.current });
+      }
+      found.current = !!(result.saved || result.venue || result.rows?.length || result.choices?.length);
       progressListener.current?.(progress.current);
       void writeProgress(link, progress.current);
       setRows(result.rows);
@@ -161,10 +189,9 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
       setEditing(!result.venue);
       setIssue(result.issue);
       setManual(false);
-      // Best match first. Preselect it unless the choices are only Google's closest results.
+      // Best match first, but nothing is selected for the user: picking a place is always their tap.
       setChoices(result.choices ?? []);
-      const choosable = (result.choices?.length ?? 0) > 0 && (result.issue?.reason === 'ambiguous' || result.issue?.reason === 'no_match');
-      setChoice(choosable && !result.issue?.weak ? 0 : undefined);
+      setChoice(undefined);
       // A search box that starts with the name we read, and is empty when we read none. The creator's handle is
       // who posted it, not what it is about, so it is never used to fill the box.
       setPlaceQuery(progress.current.candidates?.[0]?.name ?? '');
@@ -198,7 +225,57 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
         ? cause.message : 'Could not identify a venue from this link. Try again or enter the details.');
     }).finally(() => { shownMs.current ??= Date.now() - openedAt.current; if (active) setBusy(false); });
     return () => { active = false; };
-  }, [attempt, link, sharedText]);
+  }, [attempt, link, sharedText, stored]);
+
+  /** The latest callbacks, for effects that must run only when the search state changes. */
+  const phone = useRef({ onReady, onWorking });
+  phone.current = { onReady, onWorking };
+  const announce = () => {
+    background.current = undefined;
+    phone.current.onReady?.(found.current);
+  };
+
+  useEffect(() => {
+    working.current = busy;
+    phone.current.onWorking?.(busy);
+    if (busy) return;
+    setHidden(false);
+    setNotice('');
+    if (background.current === 'waiting') announce();
+    else if (background.current === 'refused') background.current = undefined;
+  }, [busy]);
+
+  /** The X, the swipe down, a tap outside and the back button all close. While searching, the search carries on. */
+  const close = async () => {
+    if (!working.current) return onClose();
+    if (!onBackground) return setHidden(true);
+    if (background.current === 'asking') return;
+    if (background.current === 'refused') {
+      // The user chose to cancel this search.
+      void removeFromInbox(link);
+      return onClose();
+    }
+    background.current = 'asking';
+    const moved = await onBackground().catch(() => false);
+    if (!moved) {
+      background.current = 'refused';
+      setNotice('AI Save could not move to the background. Close again to cancel this search.');
+      return;
+    }
+    background.current = 'waiting';
+    // The search can finish while the phone is still asking about notifications.
+    if (!working.current) announce();
+  };
+  const closer = useRef(close);
+  closer.current = close;
+  useEffect(() => {
+    if (closeRequest) void closer.current();
+  }, [closeRequest]);
+  /** Decided when the screen opens, so coming back to the result never sends it away again. */
+  const leaveAtOnce = useRef(instant);
+  useEffect(() => {
+    if (leaveAtOnce.current && working.current) void closer.current();
+  }, []);
 
   const retryLookup = () => {
     setBusy(true);
@@ -297,6 +374,7 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
         venueToken: picked.venueToken,
       };
       const row = await saveSharedVenue(details, link);
+      void removeFromInbox(link);
       setSaved(row);
       onSaved?.();
       logResult('chosen', { savedId: row.id, name: row.name });
@@ -322,6 +400,7 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
           lat: details.lat ?? null, lon: details.lon ?? null,
         })
         : await saveSharedVenue(details, details.link ?? link);
+      void removeFromInbox(link);
       setSaved(row);
       onSaved?.();
       // From the details form: a Google place picked by searching, or typed by hand. Otherwise what AI Save found.
@@ -374,6 +453,7 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
       }
     }
     setSavedRows(done);
+    if (!failed && Object.keys(done).length) void removeFromInbox(link);
     if (Object.keys(done).length > Object.keys(savedRows).length) {
       onSaved?.();
       const first = Object.values(done)[0];
@@ -453,33 +533,31 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
   const detailsMatchSaved = !!saved && saved.name === venue?.name && saved.address === venue?.address;
   const correctionSaved = !!saved && saved.name === name.trim() && saved.address === address.trim();
 
-  if (minimized) return <div role="button" tabIndex={0} aria-label="Swipe up or tap to return to AI Save"
-    className="fixed inset-x-0 bottom-0 z-50 flex touch-none items-center justify-center gap-2 rounded-t-lg border border-border bg-popover p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] text-sm shadow-3"
-    onClick={() => setMinimized(false)}
-    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') setMinimized(false); }}
-    onPointerDown={event => { swipe.current = event.clientY; }}
-    onPointerUp={event => {
-      if (swipe.current !== undefined && swipe.current - event.clientY > 60) setMinimized(false);
-      swipe.current = undefined;
-    }}
-    onPointerCancel={() => { swipe.current = undefined; }}>
-    <span aria-hidden="true">▲</span><span>Swipe up to return to AI Save</span>
-  </div>;
+  if (hidden) return <p role="status" className="pointer-events-none fixed inset-x-4 bottom-4 z-50 rounded-lg border border-border bg-popover p-3 text-center text-sm shadow-2">
+    AI Save is still searching. It will open here when it's ready.
+  </p>;
 
-  return <Dialog open onOpenChange={open => { if (!open) setMinimized(true); }}>
-    <DialogContent className="isolate" showClose={false}>
-      {compact && <img className="size-8 rounded-lg" src={fallbackImage} alt="The Unsaved" />}
+  return <Dialog open onOpenChange={open => { if (!open) void close(); }}>
+    {/* Phones close with the swipe line; the X is only for wide screens, where there is nothing to swipe. */}
+    <DialogContent className="isolate" closeClassName="hidden sm:flex">
       {busy && <svg aria-hidden="true" className="pointer-events-none absolute inset-0 size-full text-amber-500">
         <rect className="ai-save-trace" x="2" y="2" width="calc(100% - 4px)" height="calc(100% - 4px)" rx="15"
           pathLength="100" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="18 82" />
       </svg>}
-      <div className="touch-none pr-10" onPointerDown={event => {
+      <div className="touch-none" onPointerDown={event => {
         swipe.current = event.clientY;
         event.currentTarget.setPointerCapture(event.pointerId);
       }} onPointerUp={event => {
-        if (swipe.current !== undefined && event.clientY - swipe.current > 60) setMinimized(true);
+        if (swipe.current !== undefined && event.clientY - swipe.current > 60) void close();
         swipe.current = undefined;
       }} onPointerCancel={() => { swipe.current = undefined; }}>
+        <button type="button" onClick={() => void close()}
+          className="-mt-2 mb-2 grid w-full justify-items-center gap-1.5 rounded-md py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden">
+          <span aria-hidden="true" className="h-1 w-10 rounded-full bg-muted-foreground/70" />
+          <span className="text-xs text-muted-foreground">{busy ? "Swipe down to close. We'll keep searching." : 'Swipe down to close'}</span>
+        </button>
+        {compact && <img className="mb-4 size-8 rounded-lg" src={fallbackImage} alt="The Unsaved" />}
+        <div className="sm:pr-10">
         <DialogTitle>{sharing ? 'Quick Share' : rows ? 'Venues from this link' : choosing ? 'Confirm the venue' : compact ? 'AI Save or Create Plan' : 'Venue from link'}</DialogTitle>
         <DialogDescription aria-live="polite">{busy ? (issue?.stage === 'verify' ? 'Verifying venue…' : 'Finding the venue…')
           : sharing ? 'Recommend this venue to a friend.'
@@ -487,7 +565,9 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
           : choosing ? (issue?.weak ? "We couldn't find an exact match. These are the closest Google results."
             : 'We found a few possible matches on Google Maps. Choose the correct one to save.')
           : editing ? 'Check the venue details.' : 'Choose what to do with this venue.'}</DialogDescription>
+        </div>
       </div>
+      {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {busy && !sharing && <div className="grid gap-2">
         <p className="text-small text-muted-foreground">While we check the venue, write a message to send with it.</p>
@@ -597,13 +677,6 @@ export function AiSaveDialog({ link, sharedText, onPlan, compact = false, initia
             </Button>;
           })}
         </fieldset>}
-        {!venue && !saved && isSocialPost(link) && <div className="grid gap-2 rounded-lg border p-3">
-          <label className="text-sm" htmlFor="ai-save-photo">Add photo</label>
-          <p id="ai-save-photo-help" className="text-xs text-muted-foreground">Only if the venue name is in the video, not the caption. Take a screenshot, swipe this screen down, then swipe back up here and add it.</p>
-          <input id="ai-save-photo" type="file" accept="image/*" aria-describedby="ai-save-photo-help" className="text-sm"
-            onChange={event => setPhoto(event.target.files?.[0] ?? null)} />
-          {photo && <p className="text-xs text-muted-foreground">Added: {photo.name}</p>}
-        </div>}
         <div className="grid gap-2 rounded-lg border p-3">
           <label className="grid gap-1 text-sm" htmlFor="ai-save-place-search">Change location: search Google Places</label>
           <div className="flex gap-2">

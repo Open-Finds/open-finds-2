@@ -182,6 +182,62 @@ export async function probePost(link: string, fetcher: Fetcher = defaultFetcher)
   }
 }
 
+export type PhonePost = { caption: string; location: { name: string; address: string; kind: string } | null };
+type Item = Record<string, unknown>;
+
+/** Every post in the page's data: an object with its own caption and a video or photo slides. */
+function posts(root: unknown): Item[] {
+  const found: Item[] = [];
+  let nodes = 0;
+  const visit = (value: unknown, depth: number) => {
+    if (!value || typeof value !== 'object' || depth > 14 || nodes++ > 200_000) return;
+    if (!Array.isArray(value)) {
+      const item = value as Item;
+      if (typeof item.desc === 'string' && (item.video || item.imagePost)) found.push(item);
+    }
+    for (const child of Object.values(value)) visit(child, depth + 1);
+  };
+  visit(root, 0);
+  return found;
+}
+
+/**
+ * The shared post's own caption and location tag. A page can carry other videos too, so a caption is taken only from the post
+ * whose id is in the page address, or when the page holds exactly one post. Otherwise nothing: another video's caption would
+ * name the wrong venue.
+ */
+export function readTikTokPost(html: string, finalUrl: string): PhonePost | null {
+  const all = jsonBlocks(html).flatMap(posts);
+  const wanted = finalUrl.match(/\/(?:video|photo|v)\/(\d+)/)?.[1];
+  const matching = wanted ? all.filter(item => String(item.id) === wanted) : [];
+  const only = new Set(all.map(item => item.desc)).size === 1 && !(wanted && all.some(item => item.id !== undefined));
+  const post = matching[0] ?? (only ? all[0] : undefined);
+  if (!post) return null;
+  const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+  const poi = (post.poi ?? {}) as Item;
+  const name = text(poi.name, 120);
+  const result: PhonePost = {
+    caption: text(post.desc, 2200),
+    location: name ? { name, address: text(poi.address, 200), kind: text(poi.ttTypeNameTiny, 40) } : null,
+  };
+  return result.caption || result.location ? result : null;
+}
+
+/**
+ * Reads a TikTok post with the phone's own connection, which TikTok answers when it turns our server away. Android app only
+ * (a browser cannot read TikTok's pages). No AI or Google call. Never throws.
+ */
+export async function readTikTokOnPhone(link: string, fetcher: Fetcher = defaultFetcher): Promise<PhonePost | null> {
+  if (!Capacitor.isNativePlatform() || platformOf(link) !== 'tiktok') return null;
+  try {
+    const page = await fetcher(link, { 'User-Agent': MOBILE_UA, 'Accept-Language': 'en-AU,en;q=0.9', Accept: 'text/html,application/xhtml+xml' });
+    if (page.status < 200 || page.status >= 400 || platformOf(page.url) !== 'tiktok') return null;
+    return readTikTokPost(page.text, page.url);
+  } catch {
+    return null;
+  }
+}
+
 const yesNo = (value: boolean) => (value ? 'yes' : 'no');
 
 /** The result as plain lines, for the panel and for copying into a message. */

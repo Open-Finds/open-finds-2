@@ -1,14 +1,22 @@
 package com.example.openfinds2;
 
+import android.Manifest;
 import android.content.Intent;
+import android.os.Build;
+import android.widget.Toast;
 import java.util.concurrent.atomic.AtomicReference;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
-@CapacitorPlugin(name = "UnsavedShare")
+@CapacitorPlugin(name = "UnsavedShare", permissions = {
+    @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
+})
 public class UnsavedSharePlugin extends Plugin {
     private static final String PLAN_ACTION = "com.example.openfinds2.OPEN_SHARED_PLAN";
     private static final AtomicReference<String> pendingPlan = new AtomicReference<>();
@@ -55,6 +63,78 @@ public class UnsavedSharePlugin extends Plugin {
                     && activity.getShareId().equals(call.getString("id"))) activity.finish();
             call.resolve();
         });
+    }
+
+    @PluginMethod
+    public void working(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            if (getActivity() instanceof ShareActivity activity
+                    && activity.getShareId().equals(call.getString("id"))) {
+                activity.setWorking(Boolean.TRUE.equals(call.getBoolean("working", false)));
+            }
+            call.resolve();
+        });
+    }
+
+    /**
+     * Puts the share screen behind the other app while the search carries on. Notifications are asked for so the phone can say
+     * when it is done; without them the result still waits in the app's Notifications.
+     */
+    @PluginMethod
+    public void background(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && getPermissionState("notifications") != PermissionState.GRANTED) {
+            requestPermissionForAlias("notifications", call, "notificationsAnswered");
+            return;
+        }
+        moveBehind(call);
+    }
+
+    @PermissionCallback
+    private void notificationsAnswered(PluginCall call) {
+        moveBehind(call);
+    }
+
+    private void moveBehind(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            boolean moved = false;
+            if (getActivity() instanceof ShareActivity activity
+                    && !activity.isFinishing()
+                    && activity.getShareId().equals(call.getString("id"))) {
+                try {
+                    AiSaveService.start(activity, activity.getShareId());
+                    moved = activity.moveTaskToBack(true);
+                } catch (RuntimeException ignored) {
+                    // Android refused: the screen stays open.
+                }
+                if (moved) {
+                    Toast.makeText(activity.getApplicationContext(), "AI Save is searching. We'll tell you when it's ready.",
+                            Toast.LENGTH_SHORT).show();
+                } else {
+                    AiSaveService.stop(activity, activity.getShareId());
+                }
+            }
+            JSObject result = new JSObject();
+            result.put("moved", moved);
+            call.resolve(result);
+        });
+    }
+
+    @PluginMethod
+    public void ready(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            if (getActivity() instanceof ShareActivity activity
+                    && activity.getShareId().equals(call.getString("id"))) {
+                AiSaveNotifications.ready(activity, activity.getTaskId(), Boolean.TRUE.equals(call.getBoolean("found", false)));
+                AiSaveService.stop(activity, activity.getShareId());
+            }
+            call.resolve();
+        });
+    }
+
+    /** The back button, passed to the web screen. */
+    void requestClose() {
+        notifyListeners("close", new JSObject());
     }
 
     @PluginMethod

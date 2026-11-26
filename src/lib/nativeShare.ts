@@ -9,5 +9,8 @@ export const nativeShare = registerPlugin<{
   dismiss(options: { id: string }): Promise<void>;
   openPlan(options: { id: string; value: string }): Promise<void>;
   takePlan(): Promise<{ value?: string }>;
-  addListener(event: 'incoming' | 'plan', listener: () => void): Promise<{ remove(): Promise<void> }>;
+  working(options: { id: string; working: boolean }): Promise<void>;
+  background(options: { id: string }): Promise<{ moved: boolean }>;
+  ready(options: { id: string; found: boolean }): Promise<void>;
+  addListener(event: 'incoming' | 'plan' | 'close', listener: () => void): Promise<{ remove(): Promise<void> }>;
 }>('UnsavedShare');

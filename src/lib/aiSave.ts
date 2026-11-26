@@ -128,9 +128,10 @@ async function verifyEach(items: ExtractedVenueItem[], link: string, attemptId: 
     }, attemptId);
     const match = check.match;
     const mentioned = mentionedInSource(identification, item.name, match?.name ?? item.name);
+    const closest = check.candidates[0];
     return match
       ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon, venueToken: match.venueToken, ...(mentioned ? {} : { mentioned: false }) }, verified: true, ...(mentioned ? {} : { mentioned: false }) }
-      : { venue: read(item), verified: false, ...(mentioned ? {} : { mentioned: false }), ...(check.candidates[0] ? { suggestion: check.candidates[0] } : {}) };
+      : { venue: read(item), verified: false, ...(mentioned ? {} : { mentioned: false }), ...(closest && mentionedInSource(identification, closest.name) ? { suggestion: closest } : {}) };
   }));
   const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (failures.length === settled.length) throw failures[0].reason;
@@ -257,7 +258,9 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
             }
           }
           // Google's places for this search are the choices to offer; nothing is saved from them automatically.
-          const choices: ExtractedVenueItem[] = check.candidates.map((place, index) => ({
+          // No guessing: a place the post never names is not offered.
+          const named = check.candidates.filter(place => mentionedInSource(progress.identification, place.name));
+          const choices: ExtractedVenueItem[] = named.map((place, index) => ({
             name: place.name, address: place.address, type: place.type ?? candidate?.type ?? 'food',
             order: index + 1, tags: [], lat: place.lat, lon: place.lon, venueToken: place.venueToken,
           }));

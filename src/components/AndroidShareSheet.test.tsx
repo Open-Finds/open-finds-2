@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   dismiss: vi.fn().mockResolvedValue(undefined),
   openPlan: vi.fn().mockResolvedValue(undefined),
   takePlan: vi.fn(),
+  working: vi.fn().mockResolvedValue(undefined),
+  background: vi.fn().mockResolvedValue({ moved: true }),
+  ready: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ session: mocks.owner ? { user: { id: mocks.owner } } : null, loading: false }),
@@ -30,10 +33,15 @@ vi.mock('../lib/aiSave', async original => ({
 const link = 'https://www.instagram.com/reel/example/';
 const sharedVenue = { name: 'Test Cafe', address: '1 Test St', type: 'food', link } as const;
 vi.mock('./AiSaveDialog', () => ({
-  AiSaveDialog: ({ link, sharedText, initialProgress, onProgress, onPlan, onClose }: {
+  AiSaveDialog: ({ link, sharedText, initialProgress, onProgress, onPlan, onClose, onBackground, onReady, closeRequest, instant }: {
     link: string; sharedText?: string; initialProgress?: SharedVenueProgress; onProgress: (progress: SharedVenueProgress) => void;
     onPlan: (venue: SharedVenue) => void; onClose: () => void;
+    onBackground: () => Promise<boolean>; onReady: (found: boolean) => void; closeRequest: number; instant: boolean;
   }) => <>
+    <p data-testid="instant">{String(instant)}</p>
+    <p data-testid="close-requests">{closeRequest}</p>
+    <button onClick={() => { void onBackground(); }}>Go behind</button>
+    <button onClick={() => onReady(true)}>Ready</button>
     <p>{link}</p><p>{initialProgress?.verified?.name}</p><p data-testid="shared-text">{'shared: ' + (sharedText ?? '')}</p>
     <button onClick={() => onProgress({ verified: sharedVenue })}>Finish verification</button>
     <button onClick={() => onProgress({ candidates: [{ ...sharedVenue, order: 1, tags: [] }], identification: { structuredAddress: true } })}>Pause verification</button>
@@ -114,6 +122,34 @@ it('checkpoints source address evidence for a verification retry after recreatio
       identification: { structuredAddress: true },
     },
   });
+});
+
+it('passes background search, readiness and the back button between Android and the search screen', async () => {
+  mocks.owner = 'owner';
+  await act(async () => { render(<AndroidShareSheet initialShare={{ id: 'first', text: link }} />); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Go behind' })); });
+  fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+  expect(mocks.background).toHaveBeenCalledWith({ id: 'first' });
+  expect(mocks.ready).toHaveBeenCalledWith({ id: 'first', found: true });
+  await act(async () => mocks.listeners.get('close')?.());
+  expect(screen.getByTestId('close-requests')).toHaveTextContent('1');
+});
+
+it('returns to the video for a new share, but not for a screen that already has progress', async () => {
+  mocks.owner = 'owner';
+  const fresh = render(<AndroidShareSheet initialShare={{ id: 'first', text: link }} />);
+  expect(screen.getByTestId('instant')).toHaveTextContent('true');
+  fresh.unmount();
+  await act(async () => { render(<AndroidShareSheet initialShare={{ id: 'second', text: link,
+    checkpoint: JSON.stringify({ owner: 'owner', progress: { verified: sharedVenue } }) }} />); });
+  expect(screen.getByTestId('instant')).toHaveTextContent('false');
+});
+
+it('gives each share its own screen, so a search in the background is not replaced', () => {
+  const manifest = readFileSync('android/app/src/main/AndroidManifest.xml', 'utf8');
+  expect(manifest).toContain('android:documentLaunchMode="always"');
+  expect(manifest).toContain('android:foregroundServiceType="shortService"');
+  expect(manifest).toContain('android.permission.POST_NOTIFICATIONS');
 });
 
 it('registers the Android send intent on the translucent activity and keeps launcher routing separate', () => {

@@ -30,6 +30,7 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
   const owner = session?.user.id;
   const [share, setShare] = useState(initialShare);
   const [error, setError] = useState('');
+  const [closeRequest, setCloseRequest] = useState(0);
   const link = parseShareLink(share.text);
   const initialProgress = useMemo(() => restoreProgress(share.checkpoint, owner), [share.checkpoint, owner]);
   const dismiss = () => { void nativeShare.dismiss({ id: share.id }).catch(() => {}); };
@@ -44,15 +45,21 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
     };
     const listener = nativeShare.addListener('incoming', () => { void read().catch(() => {}); });
     void listener.then(() => { if (active) return read(); }).catch(() => {});
+    // The back button while a search is running: the search screen decides how to close.
+    const back = nativeShare.addListener('close', () => setCloseRequest(count => count + 1));
     return () => {
       active = false;
       void listener.then(handle => handle.remove()).catch(() => {});
+      void back.then(handle => handle.remove()).catch(() => {});
     };
   }, []);
 
   if (link && owner && !loading) return <>
     {error && <p role="alert" className="fixed inset-x-4 top-8 z-[60] rounded-lg bg-card p-3">{error}</p>}
-    <AiSaveDialog key={share.id + ':' + owner} compact link={link} sharedText={share.text} onClose={dismiss}
+    <AiSaveDialog key={share.id + ':' + owner} compact link={link} sharedText={share.text} onClose={dismiss} closeRequest={closeRequest} instant={!initialProgress}
+      onWorking={working => { void nativeShare.working({ id: share.id, working }).catch(() => {}); }}
+      onBackground={async () => (await nativeShare.background({ id: share.id })).moved}
+      onReady={found => { void nativeShare.ready({ id: share.id, found }).catch(() => {}); }}
       initialProgress={initialProgress}
       onProgress={({ candidates, verified, identification }) => {
         if (!candidates && !verified && !identification?.metadata) return;

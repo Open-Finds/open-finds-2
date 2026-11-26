@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import androidx.activity.OnBackPressedCallback;
+import com.getcapacitor.PluginHandle;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -12,6 +13,7 @@ public class ShareActivity extends MainActivity {
     private String shareId;
     private String sharedText;
     private String checkpoint;
+    private boolean working;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -26,10 +28,20 @@ public class ShareActivity extends MainActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                finish();
+                PluginHandle share = working ? getBridge().getPlugin("UnsavedShare") : null;
+                if (share != null) ((UnsavedSharePlugin) share.getInstance()).requestClose();
+                else finish();
             }
         });
     }
+
+    @Override
+    public void onDestroy() {
+        if (isFinishing()) AiSaveService.stop(this, shareId);
+        super.onDestroy();
+    }
+
+    void setWorking(boolean value) { working = value; }
 
     @Override
     protected void load() {
