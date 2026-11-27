@@ -1,4 +1,5 @@
 import { isGoogleMapsLink, verifyVenuePlaceDetailed, type GooglePlaceChoice } from './apiKeys';
+import { findBranches } from './aiSaveBranches';
 import { edgeAuthHeaders } from './edgeAuth';
 import { categoryOf } from './taxonomy';
 import { extractVenuesFromLink, hasSourceAddress, mentionedInSource, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
@@ -222,7 +223,9 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
     // A post that names several venues: check each one, and let the user tick which to save.
     if (!mapsLink && !progress.verified && (progress.rows || (progress.candidates?.length ?? 0) > 1)) {
       stage = 'verify';
-      progress.rows ??= await verifyEach((progress.candidates ?? []).slice(0, MAX_VENUES), url, progress.attemptId, progress.identification);
+      // findBranches changes nothing unless every venue lacks an address (see aiSaveBranches).
+      progress.rows ??= await findBranches(await verifyEach((progress.candidates ?? []).slice(0, MAX_VENUES), url, progress.attemptId, progress.identification),
+        progress.identification, url, progress.attemptId, MAX_VENUES);
       return { rows: progress.rows, candidates: progress.candidates ?? [] };
     }
     if (!progress.verified) {

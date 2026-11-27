@@ -458,7 +458,7 @@ export function mentionedInSource(progress: VenueExtractionProgress | undefined,
 }
 
 /** Everything the creator wrote about the post, as plain text: the source for descriptive tags. */
-function captionPlainText(meta: MetaResult | null | undefined): string {
+export function captionPlainText(meta: MetaResult | null | undefined): string {
   return [...new Set([meta?.ogDescription, meta?.oembedTitle, meta?.metaDescription])]
     .filter((value): value is string => !!value && !/^https?:\/\//i.test(value)).map(decodeCaption).join(' ');
 }
