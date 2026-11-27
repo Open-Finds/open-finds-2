@@ -39,7 +39,36 @@ type MetaResult = {
   location?: { name: string; address: string; kind: string } | null;
   /** The page's own search keywords: creators often list the venue and its suburb here. */
   keywords?: string | null;
+  /** An Instagram carousel's slide pictures (Instagram's own image links), for AI Save's slide reading. */
+  slides?: string[];
 };
+
+/** Hosts Instagram serves post pictures from. Nothing else is ever passed on. */
+export const SLIDE_HOSTS = [".cdninstagram.com", ".fbcdn.net"];
+export const MAX_SLIDES = 10;
+
+/**
+ * The slide pictures of an Instagram carousel, from its public embed page: each slide's display_url, in order,
+ * once each. Empty for a single picture or video, and for any link not on Instagram's picture hosts.
+ */
+export function carouselSlides(html: string | null | undefined): string[] {
+  if (!html || !html.includes("GraphSidecar")) return [];
+  const text = html.replace(/\\u0026/g, "&").replace(/\\/g, "").replace(/&amp;/g, "&");
+  const slides: string[] = [];
+  const seen = new Set<string>();
+  for (const [, raw] of text.matchAll(/"display_url"\s*:\s*"(https:\/\/[^"\s]{1,1500})"/g)) {
+    let url: URL;
+    try { url = new URL(raw); } catch { continue; }
+    if (url.protocol !== "https:" || !SLIDE_HOSTS.some((host) => url.hostname.endsWith(host))) continue;
+    // The post's own cover repeats its first slide: the same picture file.
+    const file = url.pathname.split("/").pop() ?? url.pathname;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    slides.push(url.href);
+    if (slides.length >= MAX_SLIDES) break;
+  }
+  return slides;
+}
 
 /**
  * The location tag in a TikTok page: a flat "poi" object with a name, an address
@@ -427,18 +456,22 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
     const contentType = detectContentType(target, platform);
     const handle = extractHandle(target, platform);
 
+    // A carousel's slide pictures, from the same embed page (no extra request).
+    let slides: string[] = [];
+
     // The public caption embed often has the caption when the Reel page serves a login shell.
     if (platform === "instagram" && (contentType === "post" || contentType === "reel")) {
       const shortcode = new URL(target).pathname.match(/\/(?:p|reel)\/([A-Za-z0-9_-]+)\/?$/)?.[1];
       if (shortcode) {
         const embed = await fetchWithHeaders("https://www.instagram.com/p/" + shortcode + "/embed/captioned/", false);
+        slides = carouselSlides(embed);
         const captionHtml = embed?.match(/<div\b[^>]*class=["']Caption["'][^>]*>([\s\S]*?)<\/div>/i)?.[1];
         const caption = captionHtml ? extractMeta(captionHtml).rawText?.slice(0, 1200) : null;
         if (caption) {
           stageLog("extract-venue-meta", "extract", started, "caption_embed", {
-            platform, content: contentType, caption_chars: caption.length, has_handle: !!handle,
+            platform, content: contentType, caption_chars: caption.length, has_handle: !!handle, slides: slides.length,
           });
-          return json(req, { platform, contentType, url: target, handle, ogDescription: caption, fetched: true });
+          return json(req, { platform, contentType, url: target, handle, ogDescription: caption, fetched: true, ...(slides.length ? { slides } : {}) });
         }
       }
     }
@@ -517,7 +550,8 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
         oembedTitle,
         oembedAuthor,
         oembedHtml,
-        fetched: oembedTitle !== null || oembedAuthor !== null,
+        fetched: oembedTitle !== null || oembedAuthor !== null || slides.length > 0,
+        ...(slides.length ? { slides } : {}),
       };
       stageLog("extract-venue-meta", "extract", started, result.fetched ? "oembed_only" : "nothing_fetched", {
         platform, content: contentType, caption_chars: oembedTitle?.length ?? 0, has_handle: !!creatorHandle,
@@ -573,6 +607,7 @@ Deno.serve(withStagingProviderControls("extract-venue-meta", async (req: Request
       fetched: true,
       location: platform === "tiktok" ? tiktokLocation(html) : null,
       keywords: meta.keywords,
+      ...(slides.length ? { slides } : {}),
     };
 
     stageLog("extract-venue-meta", "extract", started, finalOgDescription ? "ok" : "no_caption", {

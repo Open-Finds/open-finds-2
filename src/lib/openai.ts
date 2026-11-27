@@ -6,7 +6,9 @@ import { edgeAuthHeaders } from './edgeAuth';
 import { asProviderError, providerFailure } from './providerErrors';
 import { areaFromLocationTag, fillAddressEvidence, isWrittenAddress, profileBio, type TagLocation } from './venueEvidence';
 
-type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+/** A picture for the AI to read: only AI Save's slide reading sends these (Instagram picture links only, checked by ai-proxy). */
+export type ChatPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } };
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string | ChatPart[] };
 
 /** An error whose message is written for the user, so screens show it as-is. */
 export class UserFacingError extends Error {}
@@ -48,7 +50,7 @@ export function setCreditPrompt(ask: ((purpose: AIPurpose) => Promise<boolean>) 
   askToSpendCredit = ask;
 }
 
-async function callAI(
+export async function callAI(
   messages: ChatMessage[],
   opts?: { temperature?: number; responseFormat?: 'json_object'; purpose?: AIPurpose; attemptId?: string; model?: string }
 ): Promise<string> {
@@ -178,6 +180,8 @@ type MetaResult = {
   location?: TagLocation | null;
   /** The page's own search keywords. */
   keywords?: string | null;
+  /** An Instagram carousel's slide pictures (Instagram's own links), for AI Save's slide reading. */
+  slides?: string[];
 };
 
 /**

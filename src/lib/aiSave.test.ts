@@ -622,3 +622,55 @@ describe('saves linked to the shared venue', () => {
     vi.unstubAllGlobals();
   });
 });
+
+const slideMock = vi.hoisted(() => ({ find: vi.fn() }));
+vi.mock('./aiSaveSlides', () => ({ findFromSlides: slideMock.find }));
+
+describe('carousel slide reading (backup step)', () => {
+  const carousel = 'https://www.instagram.com/p/carousel/';
+  const slides = ['https://x.cdninstagram.com/1.jpg', 'https://x.cdninstagram.com/2.jpg'];
+  const slideRow = { venue: { ...venue, name: 'Phuong 18', link: carousel }, verified: true };
+  const post = (items: unknown[], withSlides = true) => mocks.extract.mockImplementation(async (_url: string, options: { progress: Record<string, unknown> }) => {
+    options.progress.metadata = { platform: 'instagram', ...(withSlides ? { slides } : {}) };
+    return items;
+  });
+  const setup = () => { mocks.lookup.mockResolvedValue({ data: [], error: null }); mocks.maps.mockReturnValue(false); };
+
+  it('reads the slides when the post gives nothing to save, and keeps the result for a reopened screen', async () => {
+    setup();
+    post([]);
+    slideMock.find.mockResolvedValue([slideRow]);
+    const progress = {};
+    expect((await identifySharedVenue(carousel, progress)).rows).toEqual([slideRow]);
+    expect(slideMock.find).toHaveBeenCalledOnce();
+    mocks.extract.mockClear();
+    expect((await identifySharedVenue(carousel, progress)).rows).toEqual([slideRow]);
+    expect(slideMock.find).toHaveBeenCalledOnce();
+    expect(mocks.extract).not.toHaveBeenCalled();
+  });
+
+  it('never reads the slides when the usual reading found a venue', async () => {
+    setup();
+    post([{ name: 'Cafe', address: '1 Test St', type: 'food', order: 1, tags: [] }]);
+    mocks.match.mockResolvedValue({ name: 'Cafe', address: '1 Test St', lat: 1, lon: 2 });
+    expect((await identifySharedVenue(carousel, {})).venue?.name).toBe('Cafe');
+    expect(slideMock.find).not.toHaveBeenCalled();
+  });
+
+  it('never runs for a post that is not a carousel', async () => {
+    setup();
+    post([], false);
+    await identifySharedVenue(carousel, {});
+    expect(slideMock.find).not.toHaveBeenCalled();
+  });
+
+  it('keeps the usual result when the slides give nothing, or reading them fails', async () => {
+    setup();
+    post([]);
+    slideMock.find.mockResolvedValueOnce(null);
+    expect((await identifySharedVenue(carousel, {})).issue?.stage).toBe('identify');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    slideMock.find.mockRejectedValueOnce(new Error('AI down'));
+    expect((await identifySharedVenue(carousel, {})).issue?.stage).toBe('identify');
+  });
+});

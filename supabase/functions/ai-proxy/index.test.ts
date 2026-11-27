@@ -75,3 +75,36 @@ describe('AI endpoint quota boundary', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe('AI Save slide pictures', () => {
+  const slide = (url: string) => ({ type: 'image_url', image_url: { url } });
+  const withSlides = (...urls: string[]) => [{ role: 'user', content: [{ type: 'text', text: 'Read the venues' }, ...urls.map(slide)] }];
+  const ok = () => vi.mocked(fetch).mockResolvedValue(Response.json({
+    choices: [{ message: { content: '{}' } }], usage: { prompt_tokens: 1200, completion_tokens: 40, total_tokens: 1240, cost: 0.002 },
+  }));
+
+  it('sends Instagram slide pictures and logs their tokens as slide reading', async () => {
+    ok();
+    expect((await request({ messages: withSlides('https://scontent.cdninstagram.com/a.jpg'), purpose: 'extract' })).status).toBe(200);
+    const sent = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(sent.messages[0].content[1]).toEqual({ type: 'image_url', image_url: { url: 'https://scontent.cdninstagram.com/a.jpg', detail: 'auto' } });
+    expect(db.inserted).toEqual([expect.objectContaining({ user_id: user, purpose: 'extract-slides', total_tokens: 1240, cost_usd: 0.002 })]);
+  });
+
+  it('logs a plain text request under its own purpose', async () => {
+    ok();
+    await request({ messages, purpose: 'extract' });
+    expect(db.inserted).toEqual([expect.objectContaining({ purpose: 'extract', total_tokens: 1240 })]);
+  });
+
+  it.each([
+    ['a link outside Instagram', withSlides('https://evil.example.com/a.jpg'), 'extract'],
+    ['a plain http link', withSlides('http://scontent.cdninstagram.com/a.jpg'), 'extract'],
+    ['more than six pictures', withSlides(...Array.from({ length: 7 }, (_, i) => `https://x.cdninstagram.com/${i}.jpg`)), 'extract'],
+    ['pictures for AI Discover', withSlides('https://x.cdninstagram.com/a.jpg'), 'discover'],
+    ['pictures in a system message', [{ role: 'system', content: [slide('https://x.cdninstagram.com/a.jpg')] }], 'extract'],
+  ])('refuses %s without billing', async (_name, body, purpose) => {
+    expect((await request({ messages: body, purpose })).status).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,6 @@
 import { isGoogleMapsLink, verifyVenuePlaceDetailed, type GooglePlaceChoice } from './apiKeys';
 import { findBranches } from './aiSaveBranches';
+import { findFromSlides } from './aiSaveSlides';
 import { edgeAuthHeaders } from './edgeAuth';
 import { categoryOf } from './taxonomy';
 import { extractVenuesFromLink, hasSourceAddress, mentionedInSource, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
@@ -91,6 +92,8 @@ export type SharedVenueProgress = {
   searched?: boolean;
   /** A post that names several venues: each one, checked against Google. Kept so a reopened dialog does not check again. */
   rows?: VenueRow[];
+  /** The carousel's slide pictures have been read by the AI, so they are not read (or paid for) again. */
+  slidesRead?: boolean;
 };
 
 /** One venue from a post that names several: the details to save, and whether Google confirmed them. */
@@ -187,7 +190,37 @@ async function previouslySaved(link: string): Promise<SavedVenue | undefined> {
   return data?.length === 1 ? data[0] as SavedVenue : undefined;
 }
 
+/** Reasons that describe the venue. Anything else is a service problem, which the slide step never runs after. */
+const VENUE_REASONS = new Set(['needs_review', 'no_match', 'ambiguous']);
+
+/** Nothing in the result can be saved as it is: no venue, no choice, and no venue with an address. */
+function nothingToSave(result: SharedVenueResult): boolean {
+  if (result.saved || result.venue || result.choices?.length) return false;
+  if (result.issue?.reason && !VENUE_REASONS.has(result.issue.reason)) return false;
+  return !result.candidates.some(item => item.address?.trim()) && !result.rows?.some(row => row.venue.address.trim());
+}
+
 export async function identifySharedVenue(input: string, progress: SharedVenueProgress = {}): Promise<SharedVenueResult> {
+  const result = await identifyFromPost(input, progress);
+  // Backup for a carousel whose venues are only on its pictures (see aiSaveSlides). Runs at most once per attempt.
+  if (!progress.slidesRead && progress.identification?.metadata?.slides?.length && nothingToSave(result)) {
+    progress.slidesRead = true;
+    try {
+      const rows = await findFromSlides(progress.identification, sourceUrl(input), progress.attemptId, MAX_VENUES);
+      if (rows) {
+        // Kept, so a reopened screen shows these without asking the AI again.
+        progress.rows = rows;
+        progress.candidates ??= result.candidates;
+        return { rows, candidates: result.candidates };
+      }
+    } catch (cause) {
+      console.warn('[ai-save] slide reading failed; keeping the usual result', cause);
+    }
+  }
+  return result;
+}
+
+async function identifyFromPost(input: string, progress: SharedVenueProgress): Promise<SharedVenueResult> {
   let stage: SharedVenueIssue['stage'] = 'identify';
   let link: string | undefined;
   try {
