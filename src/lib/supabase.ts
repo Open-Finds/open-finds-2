@@ -2060,6 +2060,22 @@ export type TeamMember = {
   sales: SalesSummary;
 };
 
+export type AiUsageSummary = {
+  totals: { calls: number; tokens: number; cost_usd: number; users: number };
+  by_purpose: { purpose: string; model: string; calls: number; tokens: number; cost_usd: number }[];
+};
+
+/** Admin only: AI call totals for the last N days (ai_usage). Estimates; check against OpenRouter. */
+export async function fetchAiUsageSummary(days = 30): Promise<AiUsageSummary> {
+  const { data, error } = await supabase.rpc('admin_ai_usage_summary', { p_days: days });
+  if (error) throw error;
+  const summary = (data ?? {}) as Partial<AiUsageSummary>;
+  return {
+    totals: { calls: 0, tokens: 0, cost_usd: 0, users: 0, ...summary.totals },
+    by_purpose: summary.by_purpose ?? [],
+  };
+}
+
 export async function fetchAdminPartners(): Promise<AdminPartner[]> {
   const { data, error } = await supabase.rpc('admin_partner_overview');
   if (error) throw error;

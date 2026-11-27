@@ -3,6 +3,7 @@ import { json, preflight } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/auth.ts";
 import { consumeRateLimit } from "../_shared/ratelimit.ts";
 import { stageLog } from "../_shared/stagelog.ts";
+import { usageRow } from "../_shared/aiUsage.ts";
 import { AI_PROXY, configureStagingProviders, providerFetch, withStagingProviderControls } from "../_shared/stagingProviders.ts";
 
 // Staging only: extraction requests pass the access/budget/ledger controls.
@@ -198,6 +199,12 @@ Deno.serve(withStagingProviderControls("ai-proxy", async (req: Request) => {
       }
 
       const data = await res.json();
+      // Records what OpenRouter says the call used. Service role: the caller is verified above,
+      // and the row only holds OpenRouter's usage figures. A failed write never fails the request.
+      const { error: usageError } = await serviceClient()
+        .from("ai_usage")
+        .insert({ user_id: auth.user.id, ...usageRow(data, purposeName, requestedModel) });
+      if (usageError) console.error("[ai-proxy] usage log failed", usageError.message);
       stageLog("ai-proxy", "ai", started, "ok", { model: requestedModel, purpose: purpose as string, online: requestedModel.endsWith(":online") });
       return json(req, data, 200, {
         "X-RateLimit-Remaining": String(limit.remaining),

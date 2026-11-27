@@ -6,8 +6,8 @@ import {
 import {
   fetchAdminPartners, adminUpdatePartner, adminDeletePartner,
   fetchTeam, setTeamRole, setCommission, fetchVisitRate, setVisitRate, fetchPayouts, recordPayout, deletePayout,
-  partnerStatus, isManagerRole, ROLE_LABELS,
-  type AdminPartner, type AppRole, type Payout, type TeamMember, type PartnerStatus,
+  partnerStatus, isManagerRole, ROLE_LABELS, fetchAiUsageSummary,
+  type AiUsageSummary, type AdminPartner, type AppRole, type Payout, type TeamMember, type PartnerStatus,
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
 import { useAuth } from '../context/AuthContext';
@@ -226,6 +226,40 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
 
 /* ── Overview ─────────────────────────────────────────────── */
 
+/** Admin only: what the AI calls have used and cost, for pricing decisions. */
+function AiUsagePanel() {
+  const [usage, setUsage] = useState<AiUsageSummary | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    fetchAiUsageSummary(30).then(setUsage).catch(() => setFailed(true));
+  }, []);
+  const usd = (value: number) => `$${value.toFixed(2)}`;
+  return (
+    <section className="mb-6 rounded-lg border border-border bg-card p-5">
+      <h2 className="mb-3 text-sm font-bold text-foreground">AI usage, last 30 days</h2>
+      {failed ? <p className="text-sm text-destructive-text">Could not load AI usage.</p>
+        : !usage ? <p className="text-sm text-muted-foreground">Loading…</p> : <>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat label="AI calls" value={String(usage.totals.calls)} hint={`${usage.totals.users} people`} />
+            <Stat label="Tokens used" value={usage.totals.tokens.toLocaleString()} />
+            <Stat label="Cost (estimate)" value={usd(usage.totals.cost_usd)} hint="Check against OpenRouter" />
+            <Stat label="Cost per call" value={usd(usage.totals.calls ? usage.totals.cost_usd / usage.totals.calls : 0)} />
+          </div>
+          {usage.by_purpose.length === 0 ? <p className="text-sm text-muted-foreground">No AI calls in this period.</p> : (
+            <ul className="divide-y divide-border text-sm">
+              {usage.by_purpose.map((row) => (
+                <li key={`${row.purpose}-${row.model}`} className="flex flex-wrap justify-between gap-2 py-2">
+                  <span className="font-semibold">{row.purpose} <span className="font-normal text-muted-foreground">· {row.model}</span></span>
+                  <span className="tabular-nums text-muted-foreground">{row.calls} calls · {row.tokens.toLocaleString()} tokens · {usd(row.cost_usd)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>}
+    </section>
+  );
+}
+
 function Overview({ partners, team, isAdmin, onRateChanged }: { partners: AdminPartner[]; team: TeamMember[]; isAdmin: boolean; onRateChanged: () => Promise<void> }) {
   const counts = useMemo(() => {
     const c = { live: 0, pending: 0, rejected: 0, paused: 0 };
@@ -249,6 +283,8 @@ function Overview({ partners, team, isAdmin, onRateChanged }: { partners: AdminP
       </div>
 
       <RateSetting isAdmin={isAdmin} onChanged={onRateChanged} />
+
+      {isAdmin && <AiUsagePanel />}
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5">
         <h2 className="mb-3 text-sm font-bold text-foreground">Pending, approved and rejected</h2>
