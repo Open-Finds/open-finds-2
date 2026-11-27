@@ -374,6 +374,46 @@ describe('Saving and sharing a venue Google has not confirmed', () => {
   const unconfirmed = { ...candidate, lat: null, lon: null };
   const review = { candidates: [unconfirmed], issue: { stage: 'verify' as const, retryable: false, reason: 'needs_review' as const } };
 
+  const found = { name: 'Test cafe', address: '9 Google Rd, Testville VIC 3000', type: 'food', lat: -37.9, lon: 145.1 };
+  /** A post that names the venue but no street, recording what it read as the real search does. */
+  async function startNoStreet() {
+    const candidates = [{ ...unconfirmed, address: '' }];
+    mocks.identifySharedVenue.mockImplementationOnce(async (_link: string, progress: { candidates?: unknown }) => {
+      progress.candidates = candidates;
+      return { candidates, issue: review.issue };
+    });
+    await act(async () => render(<AiSaveDialog link={link} onClose={vi.fn()} onPlan={vi.fn()} />));
+  }
+
+  it('fills the empty address from the automatic Google search when one place has the same name', async () => {
+    places.search.mockResolvedValue([found, { ...found, name: 'Another cafe', address: '2 Other St' }]);
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await startNoStreet();
+    expect(places.search.mock.calls[0][0]).toBe('Test cafe');
+    expect(screen.getByLabelText('Address')).toHaveValue('9 Google Rd, Testville VIC 3000');
+    expect(mocks.saveSharedVenue).not.toHaveBeenCalled();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save this place' })));
+    expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ address: found.address, lat: -37.9, lon: 145.1 });
+  });
+
+  it('leaves the address empty when two places share the name', async () => {
+    places.search.mockResolvedValue([found, { ...found, address: '40 Branch Rd, Elsewhere VIC 3001' }]);
+    await startNoStreet();
+    expect(screen.getByRole('group', { name: 'Places found' })).toHaveTextContent('40 Branch Rd');
+    expect(screen.getByLabelText('Address')).toHaveValue('');
+  });
+
+  it('never fills over an address the user typed while Google was searching', async () => {
+    let answer!: (places: unknown[]) => void;
+    places.search.mockReturnValue(new Promise(resolve => { answer = resolve; }));
+    await startNoStreet();
+    expect(places.search).toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: '5 My St' } });
+    await act(async () => answer([found]));
+    expect(screen.getByRole('group', { name: 'Places found' })).toHaveTextContent('9 Google Rd');
+    expect(screen.getByLabelText('Address')).toHaveValue('5 My St');
+  });
+
   it('shows the saved venue with Quick Share and Create Plan after a save without verification', async () => {
     mocks.saveSharedVenue.mockResolvedValue({ ...saved, lat: null, lon: null });
     await start(review);

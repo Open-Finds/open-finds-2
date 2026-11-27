@@ -85,6 +85,9 @@ export function describeItem(item: AiSaveItem, now = Date.now()): { title: strin
   if (venue) return { title: venue.name, body: 'Ready to check and save.', ready: true };
   if (rows?.length) return { title: `${rows.length} venues found`, body: 'Ready to choose and save.', ready: true };
   if (choices?.length) return { title: 'Confirm the venue', body: 'Choose the right place to save.', ready: true };
+  // The post names a venue that still needs checking: say so, not "No venue found".
+  const named = item.result?.issue?.reason === 'needs_review' ? item.result.candidates?.[0] : undefined;
+  if (named) return { title: named.name, body: 'Check the details, then save.', ready: true };
   return { title: 'No venue found', body: 'Tap to search for it yourself.', ready: true };
 }
 

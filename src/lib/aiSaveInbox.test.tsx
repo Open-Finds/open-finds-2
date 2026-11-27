@@ -69,3 +69,11 @@ it('puts a new search in Notifications as soon as it starts, then its result', a
   await act(async () => finish(result));
   expect(readInbox('me')).toMatchObject([{ link, finished: true, result: { venue: { name: 'Test Cafe' } } }]);
 });
+
+it('names a venue the post mentions that still needs checking, instead of saying none was found', () => {
+  const item = { link, at: Date.now(), finished: true, result: {
+    candidates: [{ name: 'SEAR by Tungthit', address: '', type: 'food', order: 1, tags: [] }],
+    issue: { stage: 'verify', retryable: false, reason: 'needs_review' },
+  } } as unknown as Parameters<typeof describeItem>[0];
+  expect(describeItem(item)).toMatchObject({ title: 'SEAR by Tungthit', ready: true });
+});

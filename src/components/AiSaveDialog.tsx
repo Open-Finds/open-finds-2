@@ -14,6 +14,7 @@ import { resolveMessage } from '../lib/shareMessage';
 import { putInInbox, removeFromInbox, storedResult, type AiSaveItem } from '../lib/aiSaveInbox';
 import { attemptIdFor } from '../lib/attemptId';
 import { ShareMessageComposer } from './ShareMessageComposer';
+import { AddToCollection } from './AddToCollection';
 import { PhoneCheck } from './PhoneCheck';
 import { AiSaveFeedback, type FeedbackValue } from './AiSaveFeedback';
 import { captionFromShare } from '../lib/openai';
@@ -172,7 +173,9 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
         // It waits under Notifications until it is saved or removed.
         void putInInbox({ link, sharedText, at: startedAt.current, finished: true, result, progress: progress.current });
       }
-      found.current = !!(result.saved || result.venue || result.rows?.length || result.choices?.length);
+      // A venue the post names, still to be checked, counts as found: the phone and Notifications should say so.
+      found.current = !!(result.saved || result.venue || result.rows?.length || result.choices?.length
+        || (result.issue?.reason === 'needs_review' && result.candidates.length));
       progressListener.current?.(progress.current);
       void writeProgress(link, progress.current);
       setRows(result.rows);
@@ -330,6 +333,9 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
     sendResult();
   };
 
+  /** Set once the user types in the name or address box, so a search that finishes later leaves them alone. */
+  const typed = useRef(false);
+
   /** Change location: Google places for what the user typed. Choosing one is still a separate Save. */
   const searchPlaces = async (automatic?: string) => {
     const query = (automatic ?? placeQuery).trim();
@@ -344,6 +350,20 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
           name: place.name, address: place.address, type: place.type ?? 'food', order: index + 1, tags: [], lat: place.lat, lon: place.lon,
           venueToken: place.venueToken,
         })));
+      }
+      // The post names the venue but no street: when exactly one Google place has that name, fill the empty boxes
+      // with it. The user still checks it and saves. Never over anything typed, and never between two branches.
+      const named = progress.current.candidates?.[0];
+      if (automatic !== undefined && named && !named.address.trim()) {
+        const sameName = (value: string) => value.trim().toLowerCase() === named.name.trim().toLowerCase();
+        const matches = found.filter(place => sameName(place.name));
+        if (matches.length === 1 && !typed.current) {
+          const [place] = matches;
+          setName(place.name);
+          setAddress(place.address);
+          setType(place.type ?? named.type);
+          setPosition(place.lat != null && place.lon != null ? { lat: place.lat, lon: place.lon } : undefined);
+        }
       }
       if (!found.length && automatic === undefined) setError('Google Places found nothing for that search. Try another name, or save it as entered.');
     } catch (cause) {
@@ -602,7 +622,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
                 onClick={() => toggleRow(index)}
                 className="-m-3 flex min-w-0 flex-1 items-start gap-3 rounded-lg p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default">
                 <span className="min-w-0 flex-1">
-                  <span className={cn('block break-words font-semibold', on && 'underline decoration-primary decoration-[3px] underline-offset-[6px]')}>{row.venue.name}</span>
+                  <span className="block break-words font-semibold">{row.venue.name}</span>
                   <span className="flex items-start gap-1 break-words text-sm">{hasAddress && !row.verified && <UnconfirmedAddressMark />}<span>{hasAddress ? row.venue.address : 'No address found'}</span></span>
                   {!done && row.mentioned === false ? <span className="flex items-start gap-1 text-xs text-warning">
                     <AlertTriangle size={14} className="mt-px shrink-0" aria-hidden="true" /><span>{notMentionedLine}</span>
@@ -682,8 +702,8 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
             </Button>
           </div>
         </div>
-        <label className="grid gap-1 text-sm">Venue name<Input required maxLength={200} value={name} onChange={event => { setName(event.target.value); setPosition(undefined); }} /></label>
-        <label className="grid gap-1 text-sm">Address<Input required maxLength={500} value={address} onChange={event => { setAddress(event.target.value); setPosition(undefined); }} /></label>
+        <label className="grid gap-1 text-sm">Venue name<Input required maxLength={200} value={name} onChange={event => { typed.current = true; setName(event.target.value); setPosition(undefined); }} /></label>
+        <label className="grid gap-1 text-sm">Address<Input required maxLength={500} value={address} onChange={event => { typed.current = true; setAddress(event.target.value); setPosition(undefined); }} /></label>
         {position && <p className="text-sm text-muted-foreground">Location chosen from Google Places. Editing the name or address removes it.</p>}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={busy || saving || !validDetails || correctionSaved}>
@@ -713,6 +733,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
           </Button>
           <Button variant="outline" onClick={() => startSharing()}>Quick Share</Button>
           <Button variant="outline" onClick={() => onPlan(venue)}>Create Plan</Button>
+          {saved && <AddToCollection venueId={saved.id} />}
         </div>
         <AiSaveFeedback value={feedback} onRate={rate} />
       </>}
