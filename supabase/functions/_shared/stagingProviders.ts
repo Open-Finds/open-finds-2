@@ -485,6 +485,25 @@ function classify(url: URL): Kind {
   return "metadata";
 }
 
+/** A picture part from AI Save's slide reading: only an https link on Instagram's picture hosts. */
+function isPicture(part: unknown): boolean {
+  const p = part as { type?: unknown; image_url?: { url?: unknown } } | null;
+  if (!p || p.type !== "image_url" || typeof p.image_url?.url !== "string") return false;
+  try {
+    const url = new URL(p.image_url.url);
+    return url.protocol === "https:" && [".cdninstagram.com", ".fbcdn.net"].some((host) => url.hostname.endsWith(host));
+  } catch {
+    return false;
+  }
+}
+
+/** Text, or (a user message only) text parts and Instagram pictures. */
+function allowedContent(role: unknown, content: unknown): boolean {
+  if (typeof content === "string") return true;
+  return role === "user" && Array.isArray(content) && content.length > 0 && content.every((part) =>
+    isPicture(part) || (!!part && (part as { type?: unknown }).type === "text" && typeof (part as { text?: unknown }).text === "string"));
+}
+
 function aiBody(v: StagingVariant, init: RequestInit): string {
   let payload: { messages?: unknown; response_format?: unknown; model?: unknown };
   try {
@@ -494,7 +513,8 @@ function aiBody(v: StagingVariant, init: RequestInit): string {
   }
   const messages = payload.messages;
   if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20 ||
-    messages.some((m) => !m || !["user", "system", "assistant"].includes(m.role) || typeof m.content !== "string") ||
+    messages.some((m) => !m || !["user", "system", "assistant"].includes(m.role) || !allowedContent(m.role, m.content)) ||
+    messages.reduce((n: number, m: { content: unknown }) => n + (Array.isArray(m.content) ? m.content.filter(isPicture).length : 0), 0) > 6 ||
     new TextEncoder().encode(JSON.stringify(messages)).length > 8e3) throw failure(413, "ai_input_limit");
   const responseFormat = payload.response_format ? { response_format: { type: "json_object" } } : {};
   // A request for the plain model (no web search) is the cheap first try: it is sent as asked, never upgraded to a search.
