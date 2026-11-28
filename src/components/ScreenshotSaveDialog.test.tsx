@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { ScreenshotSaveDialog } from './ScreenshotSaveDialog';
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), search: vi.fn(), insert: vi.fn(), record: vi.fn() }));
-vi.mock('../lib/aiSaveScreenshots', () => ({ findFromScreenshots: mocks.read, MAX_SCREENSHOTS: 6 }));
+vi.mock('../lib/aiSaveScreenshots', () => ({ findFromScreenshots: mocks.read, MAX_SCREENSHOTS: 6, READ: 0.6 }));
 vi.mock('../lib/apiKeys', () => ({ searchGooglePlaces: mocks.search }));
 vi.mock('../lib/geolocation', () => ({ quietLocation: async () => null }));
 vi.mock('../lib/supabase', () => ({ insertSavedVenue: mocks.insert }));
@@ -24,7 +24,7 @@ beforeEach(() => { vi.clearAllMocks(); mocks.insert.mockImplementation(async (ve
 it('reads the screenshots, ticks confirmed venues, and saves them without a link', async () => {
   mocks.read.mockResolvedValue([row('Boulangerie de Saigon', 'Low Pavement, Nottingham, UK', true)]);
   await open();
-  expect(mocks.read).toHaveBeenCalledWith(images, expect.any(String));
+  expect(mocks.read).toHaveBeenCalledWith(images, expect.any(String), expect.any(Function));
   expect(screen.getByRole('checkbox', { name: 'Save Boulangerie de Saigon' })).toHaveAttribute('aria-checked', 'true');
   await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save selected (1)' })));
   expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ name: 'Boulangerie de Saigon', link: null, lat: 1, lon: 2 }));

@@ -1,3 +1,4 @@
+import { ProgressBorder } from './ProgressBorder';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
@@ -5,7 +6,7 @@ import { Input } from './ui/input';
 import { Skeleton } from './ui/skeleton';
 import { AddToCollection } from './AddToCollection';
 import { AiSaveFeedback, type FeedbackValue } from './AiSaveFeedback';
-import { findFromScreenshots, MAX_SCREENSHOTS } from '../lib/aiSaveScreenshots';
+import { findFromScreenshots, MAX_SCREENSHOTS, READ } from '../lib/aiSaveScreenshots';
 import { searchGooglePlaces } from '../lib/apiKeys';
 import { quietLocation } from '../lib/geolocation';
 import { insertSavedVenue, type SavedVenue } from '../lib/supabase';
@@ -38,6 +39,9 @@ export function ScreenshotSaveDialog({ count, loadImages, onClose }: {
   const [searched, setSearched] = useState<VenueRow[] | null>(null);
   const [feedback, setFeedback] = useState<FeedbackValue>();
   const usedSearch = useRef(false);
+  /** The loading ring: opening the pictures, then the AI reading them (the slow part), then the Google checks. */
+  const [ring, setRing] = useState({ value: 0, toward: 0.15 });
+  const [ringFilled, setRingFilled] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -45,7 +49,10 @@ export function ScreenshotSaveDialog({ count, loadImages, onClose }: {
       try {
         const images = await loadImages();
         if (!images.length) throw new Error('unreadable');
-        const found = await findFromScreenshots(images, attemptId.current);
+        if (active) setRing({ value: 0.15, toward: READ });
+        const found = await findFromScreenshots(images, attemptId.current, value => {
+          if (active) setRing({ value, toward: Math.min(1, value + 0.1) });
+        });
         if (!active) return;
         setRows(found);
         setTicked(new Set(found.flatMap((row, index) => row.verified ? [index] : [])));
@@ -147,7 +154,9 @@ export function ScreenshotSaveDialog({ count, loadImages, onClose }: {
 
   const savedList = Object.values(saved);
   return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-    <DialogContent>
+    <DialogContent className="isolate">
+      {(phase === 'reading' || !ringFilled) && <ProgressBorder {...(phase === 'reading' ? ring : { value: 1, toward: 1 })}
+        onFilled={() => setRingFilled(true)} />}
       <img className="size-8 rounded-lg" src={fallbackImage} alt="The Unsaved" />
       <DialogTitle>AI Save from screenshots</DialogTitle>
       <DialogDescription aria-live="polite">

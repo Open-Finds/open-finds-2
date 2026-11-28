@@ -45,8 +45,15 @@ const PROMPT = [
   'Answer JSON only: {"venues":[{"name":"","area":"","type":""}]}. With no venue named, answer {"venues":[]}.',
 ].join(' ');
 
-/** Reads the venues from the screenshots and checks each on Google. An empty list when the AI reads no venue. */
-export async function findFromScreenshots(images: string[], attemptId: string): Promise<VenueRow[]> {
+/** How far the loading ring is once the AI has read the screenshots; the Google checks fill the rest (to CHECKED). */
+export const READ = 0.6;
+const CHECKED = 0.95;
+
+/**
+ * Reads the venues from the screenshots and checks each on Google. An empty list when the AI reads no venue.
+ * `onProgress` hears READ once the AI has answered, then a little more as each venue's check finishes.
+ */
+export async function findFromScreenshots(images: string[], attemptId: string, onProgress?: (value: number) => void): Promise<VenueRow[]> {
   const pictures: ChatPart[] = images.slice(0, MAX_SCREENSHOTS).map(url => ({ type: 'image_url', image_url: { url, detail: 'auto' } }));
   if (!pictures.length) return [];
   const answer = await callAI([
@@ -55,8 +62,11 @@ export async function findFromScreenshots(images: string[], attemptId: string): 
   ], { purpose: 'extract', model: 'openai/gpt-4o-mini', responseFormat: 'json_object', attemptId, temperature: 0 });
 
   const venues = slideVenues(answer, MAX_SCREENSHOT_VENUES);
+  onProgress?.(READ);
   if (!venues.length) return [];
   const near = await quietLocation();
+  let checked = 0;
+  const step = () => onProgress?.(READ + (CHECKED - READ) * (++checked / venues.length));
   return Promise.all(venues.map(async (venue): Promise<VenueRow> => {
     const read: VenueRow = {
       venue: { name: venue.name, address: '', type: venue.type, link: '', lat: null, lon: null, tags: [] }, verified: false,
@@ -65,11 +75,13 @@ export async function findFromScreenshots(images: string[], attemptId: string): 
       const matches = (await searchGooglePlaces([venue.name, venue.area].filter(Boolean).join(' '), attemptId, near))
         .filter(place => sameVenue(venue, place));
       // Several places share the name and no area says which: the nearest is offered, not chosen.
+      step();
       if (matches.length !== 1) return matches.length ? { ...read, suggestion: matches[0] } : read;
       const [place] = matches;
       return { venue: { name: place.name, address: place.address, type: place.type ?? venue.type, link: '', lat: place.lat, lon: place.lon,
         venueToken: place.venueToken, tags: [] }, verified: true };
     } catch {
+      step();
       return read;
     }
   }));

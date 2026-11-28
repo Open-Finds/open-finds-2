@@ -41,6 +41,14 @@ describe('findFromScreenshots', () => {
     expect(rows.map(row => [row.venue.name, row.verified, row.suggestion])).toEqual([['Pho Table', false, undefined], ['Hong Ha', false, undefined]]);
   });
 
+  it('reports progress for the loading ring: read, then each Google check (a failed one too)', async () => {
+    answer([{ name: 'Pho Table', area: '' }, { name: 'Hong Ha', area: '' }]);
+    mocks.search.mockResolvedValueOnce([place('Pho Table', 'Newtown NSW')]).mockRejectedValueOnce(new Error('down'));
+    const onProgress = vi.fn();
+    await findFromScreenshots([shot(4)], 'attempt', onProgress);
+    expect(onProgress.mock.calls.map(([value]) => value)).toEqual([0.6, expect.closeTo(0.775), expect.closeTo(0.95)]);
+  });
+
   it('gives an empty list when the AI reads no venue, and asks nothing for no pictures', async () => {
     answer([]);
     expect(await findFromScreenshots([shot(4)], 'attempt')).toEqual([]);

@@ -1,3 +1,4 @@
+import { ProgressBorder, linkProgress } from './ProgressBorder';
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ImagePlus } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
@@ -147,6 +148,18 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
   const [shots, setShots] = useState<{ images: string[]; count: number }>();
   const [readingShots, setReadingShots] = useState(false);
   const shotInput = useRef<HTMLInputElement>(null);
+  /** The loading ring: how far the search has got (read from `progress` while busy), and whether it has finished filling. */
+  const [ringStep, setRingStep] = useState(() => linkProgress(progress.current));
+  const [ringFilled, setRingFilled] = useState(false);
+  useEffect(() => {
+    if (!busy) return;
+    setRingFilled(false);
+    const timer = setInterval(() => setRingStep(current => {
+      const next = linkProgress(progress.current);
+      return next.value === current.value && next.toward === current.toward ? current : next;
+    }), 250);
+    return () => clearInterval(timer);
+  }, [busy]);
 
   useEffect(() => {
     let active = true;
@@ -573,10 +586,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
     {/* Phones close with the swipe line; the X is only for wide screens, where there is nothing to swipe. */}
     <DialogContent className="isolate focus-visible:outline-none focus-visible:ring-0" closeClassName="hidden sm:flex"
       onOpenAutoFocus={event => { event.preventDefault(); (event.target as HTMLElement).focus(); }}>
-      {busy && <svg aria-hidden="true" className="pointer-events-none absolute inset-0 size-full text-amber-500">
-        <rect className="ai-save-trace" x="2" y="2" width="calc(100% - 4px)" height="calc(100% - 4px)" rx="15"
-          pathLength="100" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="18 82" />
-      </svg>}
+      {(busy || !ringFilled) && <ProgressBorder key={attempt} {...(busy ? ringStep : { value: 1, toward: 1 })} onFilled={() => setRingFilled(true)} />}
       <div className="touch-none" onPointerDown={event => {
         swipe.current = event.clientY;
         event.currentTarget.setPointerCapture(event.pointerId);
