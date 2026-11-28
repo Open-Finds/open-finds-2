@@ -8,6 +8,7 @@ import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { UserFacingError } from '../lib/openai';
 import { ProviderUnavailableError, waitText } from '../lib/providerErrors';
 import { hasStreetNumber, searchGooglePlaces } from '../lib/apiKeys';
+import { quietLocation } from '../lib/geolocation';
 import { readProgress, writeProgress } from '../lib/progressStore';
 import { cleanVenueName, fallbackImage } from '../lib/publicRecommendation.js';
 import { resolveMessage } from '../lib/shareMessage';
@@ -344,7 +345,8 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
     // An automatic search keeps the message already on screen; only a search the user asked for replaces it.
     if (automatic === undefined) setError('');
     try {
-      const found = await searchGooglePlaces(query, progress.current.attemptId);
+      // Ranked near the phone when location is already allowed (never asks), so "Boulangerie de Saigon" finds the local one.
+      const found = await searchGooglePlaces(query, progress.current.attemptId, await quietLocation());
       if (found.length || automatic === undefined) {
         setCandidates(found.map((place, index) => ({
           name: place.name, address: place.address, type: place.type ?? 'food', order: index + 1, tags: [], lat: place.lat, lon: place.lon,

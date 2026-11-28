@@ -3,7 +3,7 @@ import { guestSave, identifySharedVenue, searchableName, publishVenue, readGuest
 import { ProviderUnavailableError } from './providerErrors';
 
 const mocks = vi.hoisted(() => ({
-  extract: vi.fn(), match: vi.fn(), choices: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), updateTags: vi.fn(), session: { id: 'test-user' },
+  extract: vi.fn(), byName: vi.fn(), match: vi.fn(), choices: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), updateTags: vi.fn(), session: { id: 'test-user' },
   /** Which names the post itself mentions (by default, all of them). */
   mentioned: { names: null as string[] | null },
 }));
@@ -15,6 +15,7 @@ vi.mock('./apiKeys', () => ({
   isGoogleMapsLink: mocks.maps,
   verifyVenuePlaceDetailed: async (...args: unknown[]) => ({ match: await mocks.match(...args), candidates: mocks.choices(...args) ?? [] }),
 }));
+vi.mock('./aiSaveNameHint', () => ({ findByName: mocks.byName }));
 vi.mock('./edgeAuth', () => ({ edgeAuthHeaders: async () => ({ Authorization: 'Bearer session' }) }));
 vi.mock('./supabase', () => ({
   supabase: {
@@ -136,6 +137,43 @@ describe('share venue persistence', () => {
       const result = await identifySharedVenue(link);
       expect(searches()).toEqual([false, true]);
       expect(result.venue).toBeDefined();
+    });
+
+    // Regression: with no place in the post, the AI with web search once guessed a US cafe for a UK bakery.
+    it('asks Google for the venue name in the post before the AI with web search guesses where it is', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([{ ...venue, name: 'Boulangerie de Saigon', address: '' }]);
+      mocks.byName.mockResolvedValue({ venue: { ...venue, name: 'Boulangerie de Saigon', address: 'Low Pavement, Nottingham, UK', venueToken: 't' } });
+      const progress = {};
+      const result = await identifySharedVenue(link, progress);
+      expect(searches()).toEqual([false]);
+      expect(mocks.match).not.toHaveBeenCalled();
+      expect(result.venue).toMatchObject({ address: 'Low Pavement, Nottingham, UK' });
+      expect(progress).toMatchObject({ nameSearched: true });
+    });
+
+    it('offers the branches to pick from when several places share the name, and again on a reopened screen', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([{ ...venue, address: '' }]);
+      const choices = [{ ...venue, address: 'Sydney', order: 1, tags: [] }, { ...venue, address: 'Melbourne', order: 2, tags: [] }];
+      mocks.byName.mockResolvedValue({ choices });
+      const progress = {};
+      const first = await identifySharedVenue(link, progress);
+      expect(first).toMatchObject({ choices, issue: { reason: 'ambiguous' } });
+      const again = await identifySharedVenue(link, progress);
+      expect(again.choices).toEqual(choices);
+      expect(mocks.byName).toHaveBeenCalledTimes(1);
+      expect(searches()).toEqual([false]);
+    });
+
+    it('carries on to the AI with web search when the name search finds nothing or fails', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([{ ...venue, address: '' }]).mockResolvedValueOnce([venue]);
+      mocks.byName.mockRejectedValue(new Error('down'));
+      mocks.match.mockResolvedValue({ ...venue, lat: 1, lon: 2 });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect((await identifySharedVenue(link)).venue).toBeDefined();
+      expect(searches()).toEqual([false, true]);
     });
 
     it('searches the web once when Google cannot match the plain answer, then checks Google again', async () => {

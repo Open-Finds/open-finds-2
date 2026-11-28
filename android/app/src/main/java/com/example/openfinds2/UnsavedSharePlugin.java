@@ -1,10 +1,20 @@
 package com.example.openfinds2;
 
 import android.Manifest;
+import android.content.ContentResolver;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.util.Base64;
 import android.os.Build;
 import android.widget.Toast;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -37,10 +47,74 @@ public class UnsavedSharePlugin extends Plugin {
             if (getActivity() instanceof ShareActivity activity) {
                 result.put("id", activity.getShareId());
                 result.put("text", activity.getSharedText());
+                result.put("images", activity.getImageUris().size());
                 result.put("checkpoint", activity.getCheckpoint());
             }
             call.resolve(result);
         });
+    }
+
+    /** Longest side of a screenshot sent to the AI: small enough to send quickly, big enough to read a caption. */
+    private static final int MAX_SIDE = 1600;
+
+    /**
+     * The shared screenshots, shrunk and re-encoded as JPEG (which also drops the photo's hidden details such as GPS),
+     * as data links the AI can read. Read off the main thread; pictures that cannot be opened are skipped.
+     */
+    @PluginMethod
+    public void getImages(PluginCall call) {
+        if (!(getActivity() instanceof ShareActivity activity) || !activity.getShareId().equals(call.getString("id"))) {
+            call.reject("No shared pictures");
+            return;
+        }
+        List<String> uris = new ArrayList<>(activity.getImageUris());
+        ContentResolver resolver = activity.getContentResolver();
+        new Thread(() -> {
+            JSArray images = new JSArray();
+            for (String uri : uris) {
+                String image = shrink(resolver, Uri.parse(uri));
+                if (image != null) images.put(image);
+            }
+            JSObject result = new JSObject();
+            result.put("images", images);
+            call.resolve(result);
+        }, "unsaved-share-images").start();
+    }
+
+    private static String shrink(ContentResolver resolver, Uri uri) {
+        try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            try (InputStream in = resolver.openInputStream(uri)) {
+                if (in == null) return null;
+                BitmapFactory.decodeStream(in, null, bounds);
+            }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            int sample = 1;
+            while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_SIDE) sample *= 2;
+            options.inSampleSize = sample;
+            Bitmap bitmap;
+            try (InputStream in = resolver.openInputStream(uri)) {
+                if (in == null) return null;
+                bitmap = BitmapFactory.decodeStream(in, null, options);
+            }
+            if (bitmap == null) return null;
+            float scale = Math.min(1f, (float) MAX_SIDE / Math.max(bitmap.getWidth(), bitmap.getHeight()));
+            if (scale < 1f) {
+                Bitmap scaled = Bitmap.createScaledBitmap(bitmap,
+                        Math.max(1, Math.round(bitmap.getWidth() * scale)), Math.max(1, Math.round(bitmap.getHeight() * scale)), true);
+                if (scaled != bitmap) bitmap.recycle();
+                bitmap = scaled;
+            }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 72, out);
+            bitmap.recycle();
+            String data = "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
+            return data.length() <= 1_400_000 ? data : null;
+        } catch (Exception | OutOfMemoryError ignored) {
+            return null;
+        }
     }
 
     @PluginMethod

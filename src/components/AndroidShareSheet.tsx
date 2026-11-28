@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AiSaveDialog } from './AiSaveDialog';
+import { ScreenshotSaveDialog } from './ScreenshotSaveDialog';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { LoginPage } from '../pages/Login';
 import { useAuth } from '../context/AuthContext';
@@ -54,6 +55,10 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
     };
   }, []);
 
+  // Screenshots instead of a link: their own screen (the link flow below is unchanged).
+  if (!link && share.images && owner && !loading) return <ScreenshotSaveDialog key={share.id + ':' + owner} count={share.images}
+    loadImages={async () => (await nativeShare.getImages({ id: share.id })).images ?? []} onClose={dismiss} />;
+
   if (link && owner && !loading) return <>
     {error && <p role="alert" className="fixed inset-x-4 top-8 z-[60] rounded-lg bg-card p-3">{error}</p>}
     <AiSaveDialog key={share.id + ':' + owner} compact link={link} sharedText={share.text} onClose={dismiss} closeRequest={closeRequest}
@@ -85,9 +90,9 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
     <DialogContent>
       <img className="size-8 rounded-lg" src="/icon-512.png" alt="The Unsaved" />
       <DialogTitle>{title}</DialogTitle>
-      <DialogDescription>{!link ? 'Share an HTTPS venue link to continue.'
-        : loading ? 'Checking your session…' : 'Sign in to continue with this link.'}</DialogDescription>
-      {link && !loading && <LoginPage compact />}
+      <DialogDescription>{!link && !share.images ? 'Share a venue link or screenshots of a post to continue.'
+        : loading ? 'Checking your session…' : link ? 'Sign in to continue with this link.' : 'Sign in to continue with these screenshots.'}</DialogDescription>
+      {(link || !!share.images) && !loading && <LoginPage compact />}
     </DialogContent>
   </Dialog>;
 }

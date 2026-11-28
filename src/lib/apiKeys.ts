@@ -344,13 +344,14 @@ export async function verifyVenuePlace(
  * "Change location": Google places matching what the user typed. Nothing is
  * verified or saved by this; the user picks one place and then confirms the save.
  */
-export async function searchGooglePlaces(query: string, attemptId?: string): Promise<GooglePlaceChoice[]> {
+export async function searchGooglePlaces(query: string, attemptId?: string, near?: { lat: number; lon: number } | null): Promise<GooglePlaceChoice[]> {
   let res: Response;
   try {
     res = await fetch(`${SUPABASE_URL}/functions/v1/resolve-place`, {
       method: 'POST',
       headers: await edgeAuthHeaders(),
-      body: JSON.stringify({ search: true, query, ...(attemptId ? { attempt_id: attemptId } : {}) }),
+      // `near`: the phone's rough position, only to rank nearby places first.
+      body: JSON.stringify({ search: true, query, ...(near ? { near } : {}), ...(attemptId ? { attempt_id: attemptId } : {}) }),
       signal: AbortSignal.timeout(15_000),
     });
   } catch (error) {

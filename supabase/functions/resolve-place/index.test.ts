@@ -288,6 +288,22 @@ describe('resolve-place Phase 4 verification', () => {
     expect(sent).toMatchObject({ textQuery: 'Sculpture by the Sea Bondi', pageSize: 5 });
   });
 
+  it('ranks a search near the phone (rounded to about 1 km) instead of Australia when a position is sent', async () => {
+    places(place());
+    await request({ search: true, query: 'boulangerie de saigon', near: { lat: 52.953123, lon: -1.149876 } });
+    const sent = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(sent).not.toHaveProperty('regionCode');
+    expect(sent.locationBias).toEqual({ circle: { center: { latitude: 52.95, longitude: -1.15 }, radius: 50000 } });
+  });
+
+  it.each([[{ lat: 'x', lon: 1 }], [{ lat: 95, lon: 1 }], ['52,1'], [null]])('ignores a malformed position %j', async (near) => {
+    places(place());
+    await request({ search: true, query: 'Test Cafe', near });
+    const sent = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(sent).toMatchObject({ regionCode: 'AU' });
+    expect(sent).not.toHaveProperty('locationBias');
+  });
+
   it('refuses an empty search and fails closed when the limit cannot be checked', async () => {
     expect((await request({ search: true, query: '  ' })).status).toBe(400);
     mocks.limit.mockResolvedValue({ available: false, allowed: false, remaining: 0, retryAfter: 0 });

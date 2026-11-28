@@ -243,12 +243,12 @@ type PlacesApiResult = {
  * name, address, pin, kind of place and Google place id.
  */
 async function searchPlaces(
-  query: string, near: Coord | null, apiKey: string, pageSize: number, region: string | null = "AU",
+  query: string, near: Coord | null, apiKey: string, pageSize: number, region: string | null = "AU", radius = 500,
 ): Promise<Place[]> {
   // The region only biases the ranking; it is left off for places outside Australia.
   const body: Record<string, unknown> = { textQuery: query, languageCode: "en", ...(region ? { regionCode: region } : {}), pageSize };
   if (near) {
-    body.locationBias = { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: 500 } };
+    body.locationBias = { circle: { center: { latitude: near.lat, longitude: near.lng }, radius } };
   }
   const res = await providerFetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
@@ -729,6 +729,14 @@ async function stamped<T extends { name?: string | null; address?: string | null
   return venueToken ? { ...rest, venueToken } : rest;
 }
 
+/** A rough position to rank search results by: real coordinates, rounded to about 1 km. Anything else is ignored. */
+export function nearHint(value: unknown): Coord | null {
+  const v = value as { lat?: unknown; lon?: unknown } | null;
+  if (!v || typeof v !== "object" || typeof v.lat !== "number" || typeof v.lon !== "number") return null;
+  if (!Number.isFinite(v.lat) || !Number.isFinite(v.lon) || Math.abs(v.lat) > 90 || Math.abs(v.lon) > 180) return null;
+  return { lat: Math.round(v.lat * 100) / 100, lng: Math.round(v.lon * 100) / 100 };
+}
+
 const stampAll = <T extends Candidate>(list: T[], userId: string) => Promise.all(list.map((item) => stamped(item, userId)));
 
 const RATE_LIMIT = 60;
@@ -749,7 +757,7 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
     const auth = await requireUser(req);
     if (!auth.ok) return json(req, { error: auth.error }, auth.status);
 
-    const { url, verify, name, address, outdoor, addressFromSource, verificationDiagnostics, search, query } = await req.json();
+    const { url, verify, name, address, outdoor, addressFromSource, verificationDiagnostics, search, query, near } = await req.json();
     // Verification and search gate what gets saved, so if the limit cannot be checked they fail closed.
     const gated = verify === true || search === true;
     const limit = await consumeRateLimit(
@@ -773,7 +781,10 @@ Deno.serve(withStagingProviderControls("resolve-place", async (req: Request) => 
       if (typeof query !== "string" || !query.trim() || query.length > 200) {
         return json(req, { error: "A place search of 1–200 characters is required" }, 400);
       }
-      const places = await searchPlaces(query.trim(), null, await resolverMapsKey(), 5);
+      // `near` (optional, the phone's rough position) only ranks nearby places first; it never filters. With it, the
+      // Australia bias is dropped, so a user in the UK sees the UK branch first.
+      const hint = nearHint(near);
+      const places = await searchPlaces(query.trim(), hint, await resolverMapsKey(), 5, hint ? null : "AU", 50_000);
       stageLog("resolve-place", "search", started, places.length ? "found" : "none", { count: places.length });
       return json(req, { candidates: await stampAll(toCandidates(places, 5), auth.user.id) }, 200, { "Cache-Control": "no-store" });
     }

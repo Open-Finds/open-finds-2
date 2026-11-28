@@ -1,6 +1,7 @@
 import { isGoogleMapsLink, verifyVenuePlaceDetailed, type GooglePlaceChoice } from './apiKeys';
 import { findBranches } from './aiSaveBranches';
 import { findFromSlides } from './aiSaveSlides';
+import { findByName } from './aiSaveNameHint';
 import { edgeAuthHeaders } from './edgeAuth';
 import { categoryOf } from './taxonomy';
 import { extractVenuesFromLink, hasSourceAddress, mentionedInSource, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
@@ -94,6 +95,10 @@ export type SharedVenueProgress = {
   rows?: VenueRow[];
   /** The carousel's slide pictures have been read by the AI, so they are not read (or paid for) again. */
   slidesRead?: boolean;
+  /** The name-first Google search has run for this attempt (see aiSaveNameHint). */
+  nameSearched?: boolean;
+  /** Google's places for the post's venue name when there are several (a chain): kept so a reopened screen offers them again. */
+  nameChoices?: ExtractedVenueItem[];
 };
 
 /** One venue from a post that names several: the details to save, and whether Google confirmed them. */
@@ -244,11 +249,36 @@ async function identifyFromPost(input: string, progress: SharedVenueProgress): P
       verifySeparately: true, progress: progress.identification, attemptId: progress.attemptId, search,
     });
     let readByAI = false;
+    // Several Google places share the post's venue name: the user picks (see below).
+    const nameChoices = (choices: ExtractedVenueItem[]): SharedVenueResult =>
+      ({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'ambiguous' } });
+    if (progress.nameChoices && !progress.verified) return nameChoices(progress.nameChoices);
     if (!mapsLink && !progress.candidates) {
       progress.identification ??= {};
       readByAI = true;
       progress.candidates = await identify(false);
       if (!hasAddressEvidence(progress.candidates)) {
+        // Name first: Google's search for the venue name (ranked near the phone) before any AI guess about where it is.
+        if (!progress.nameSearched) {
+          progress.nameSearched = true;
+          stage = 'lookup';
+          let byName: Awaited<ReturnType<typeof findByName>> = null;
+          try {
+            byName = await findByName(progress.candidates, progress.identification, url, progress.attemptId);
+          } catch (cause) {
+            console.warn('[ai-save] name search failed; carrying on as before', cause);
+          }
+          stage = 'identify';
+          if (byName && 'venue' in byName) {
+            progress.verified = byName.venue;
+            progress.candidates = [{ ...byName.venue, order: 1, tags: byName.venue.tags ?? [] }];
+            return { venue: progress.verified, candidates: progress.candidates };
+          }
+          if (byName) {
+            progress.nameChoices = byName.choices;
+            return nameChoices(byName.choices);
+          }
+        }
         progress.searched = true;
         progress.candidates = await identify(true);
       }

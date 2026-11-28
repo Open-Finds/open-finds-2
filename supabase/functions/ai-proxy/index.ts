@@ -36,33 +36,43 @@ const MAX_MESSAGES = 20;
 const MAX_TOTAL_CHARS = 60_000;
 
 /**
- * AI Save's slide reading sends an Instagram carousel's pictures. Only Instagram's own picture links are accepted
- * (never an arbitrary URL for OpenRouter to fetch), only for link extraction, and at most MAX_IMAGES per request.
+ * AI Save reads pictures in two ways, only for link extraction, and at most MAX_IMAGES per request:
+ *  - an Instagram carousel's slides: only Instagram's own picture links (never an arbitrary URL for OpenRouter to fetch);
+ *  - screenshots the user shared to the app: sent inline as JPEG/PNG/WebP data (nothing is fetched, nothing is stored).
  */
 const MAX_IMAGES = 6;
 const IMAGE_HOSTS = [".cdninstagram.com", ".fbcdn.net"];
+/** One inline screenshot: the phone shrinks it to well under 1 MB first. */
+const MAX_INLINE_IMAGE_CHARS = 1_500_000;
+const INLINE_IMAGE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
 
 type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "low" | "high" | "auto" } };
 type ChatMessage = { role: string; content: string | ContentPart[] };
 
 function imagePart(value: Record<string, unknown>): ContentPart | null {
   const image = value.image_url as Record<string, unknown> | undefined;
-  if (!image || typeof image.url !== "string" || image.url.length > 2000) return null;
+  if (!image || typeof image.url !== "string") return null;
+  const detail = image.detail === "low" || image.detail === "high" ? image.detail : "auto";
+  if (image.url.startsWith("data:")) {
+    return image.url.length <= MAX_INLINE_IMAGE_CHARS && INLINE_IMAGE.test(image.url)
+      ? { type: "image_url", image_url: { url: image.url, detail } } : null;
+  }
+  if (image.url.length > 2000) return null;
   let url: URL;
   try { url = new URL(image.url); } catch { return null; }
   if (url.protocol !== "https:" || url.username || url.password || !IMAGE_HOSTS.some((host) => url.hostname.endsWith(host))) return null;
-  const detail = image.detail === "low" || image.detail === "high" ? image.detail : "auto";
   return { type: "image_url", image_url: { url: url.href, detail } };
 }
 
 export function validateMessages(raw: unknown, allowImages = false):
-  { ok: true; messages: ChatMessage[]; images: number } | { ok: false; error: string } {
+  { ok: true; messages: ChatMessage[]; images: number; screenshots: number } | { ok: false; error: string } {
   if (!Array.isArray(raw)) return { ok: false, error: "messages array is required" };
   if (raw.length === 0) return { ok: false, error: "messages array is empty" };
   if (raw.length > MAX_MESSAGES) return { ok: false, error: `messages exceeds ${MAX_MESSAGES} entries` };
 
   let total = 0;
   let images = 0;
+  let screenshots = 0;
   const messages: ChatMessage[] = [];
   for (const m of raw) {
     if (!m || typeof m !== "object") return { ok: false, error: "each message must be an object" };
@@ -87,8 +97,9 @@ export function validateMessages(raw: unknown, allowImages = false):
         parts.push({ type: "text", text: value.text });
       } else if (value.type === "image_url") {
         const image = imagePart(value);
-        if (!image) return { ok: false, error: "pictures must be Instagram picture links" };
+        if (!image) return { ok: false, error: "pictures must be Instagram picture links or a shared screenshot" };
         if (++images > MAX_IMAGES) return { ok: false, error: `at most ${MAX_IMAGES} pictures` };
+        if (image.type === "image_url" && image.image_url.url.startsWith("data:")) screenshots++;
         parts.push(image);
       } else {
         return { ok: false, error: "content parts must be text or a picture" };
@@ -98,7 +109,7 @@ export function validateMessages(raw: unknown, allowImages = false):
     if (!parts.length) return { ok: false, error: "message content is empty" };
     messages.push({ role, content: parts });
   }
-  return { ok: true, messages, images };
+  return { ok: true, messages, images, screenshots };
 }
 
 Deno.serve(withStagingProviderControls("ai-proxy", async (req: Request) => {
@@ -246,8 +257,10 @@ Deno.serve(withStagingProviderControls("ai-proxy", async (req: Request) => {
       // and the row only holds OpenRouter's usage figures. A failed write never fails the request.
       const { error: usageError } = await serviceClient()
         .from("ai_usage")
-        // Slide reading is logged on its own line ("extract-slides"): pictures cost more than text.
-        .insert({ user_id: auth.user.id, ...usageRow(data, validated.images ? `${purposeName}-slides` : purposeName, requestedModel) });
+        // Pictures cost more than text, so they are logged on their own lines: "extract-screenshots" for photos the user
+        // shared, "extract-slides" for a carousel's slides.
+        .insert({ user_id: auth.user.id, ...usageRow(data,
+          validated.screenshots ? `${purposeName}-screenshots` : validated.images ? `${purposeName}-slides` : purposeName, requestedModel) });
       if (usageError) console.error("[ai-proxy] usage log failed", usageError.message);
       stageLog("ai-proxy", "ai", started, "ok", { model: requestedModel, purpose: purpose as string, online: requestedModel.endsWith(":online") });
       return json(req, data, 200, {

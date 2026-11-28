@@ -6,6 +6,7 @@ import type { SharedVenue, SharedVenueProgress } from '../lib/aiSave';
 
 const mocks = vi.hoisted(() => ({
   owner: undefined as string | undefined,
+  loaded: [] as string[],
   listeners: new Map<string, () => void>(),
   getShare: vi.fn(),
   remember: vi.fn().mockResolvedValue(undefined),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   working: vi.fn().mockResolvedValue(undefined),
   background: vi.fn().mockResolvedValue({ moved: true }),
   ready: vi.fn().mockResolvedValue(undefined),
+  getImages: vi.fn().mockResolvedValue({ images: ['data:image/jpeg;base64,AAAA'] }),
 }));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ session: mocks.owner ? { user: { id: mocks.owner } } : null, loading: false }),
@@ -49,8 +51,17 @@ vi.mock('./AiSaveDialog', () => ({
   </>,
 }));
 
+vi.mock('./ScreenshotSaveDialog', () => ({
+  ScreenshotSaveDialog: ({ count, loadImages, onClose }: { count: number; loadImages: () => Promise<string[]>; onClose: () => void }) => <>
+    <p>{count} screenshots</p>
+    <button onClick={() => { void loadImages().then(images => mocks.loaded.push(...images)); }}>Load</button>
+    <button onClick={onClose}>Close screenshots</button>
+  </>,
+}));
+
 beforeEach(() => {
   mocks.owner = undefined;
+  mocks.loaded.length = 0;
   mocks.listeners.clear();
   mocks.getShare.mockReset().mockResolvedValue({});
   mocks.takePlan.mockReset().mockResolvedValue({});
@@ -148,11 +159,28 @@ it('registers the Android send intent on the translucent activity and keeps laun
   const activity = (name: string) => [...manifest.getElementsByTagName('activity')].find(node => node.getAttributeNS(ns, 'name') === name);
   const actions = (name: string) => [...activity(name)!.getElementsByTagName('action')].map(node => node.getAttributeNS(ns, 'name'));
   expect(actions('.MainActivity')).toEqual(['android.intent.action.MAIN']);
-  expect(actions('.ShareActivity')).toEqual(['android.intent.action.SEND']);
+  // Links (text), and screenshots: one picture or several.
+  expect(actions('.ShareActivity')).toEqual(['android.intent.action.SEND', 'android.intent.action.SEND', 'android.intent.action.SEND_MULTIPLE']);
   expect(activity('.ShareActivity')?.getAttributeNS(ns, 'theme')).toBe('@style/AppTheme.Share');
-  expect(activity('.ShareActivity')?.getElementsByTagName('data')[0].getAttributeNS(ns, 'mimeType')).toBe('text/plain');
+  expect([...activity('.ShareActivity')!.getElementsByTagName('data')].map(node => node.getAttributeNS(ns, 'mimeType')))
+    .toEqual(['text/plain', 'image/*']);
   const styles = readFileSync('android/app/src/main/res/values/styles.xml', 'utf8');
   expect(styles).toContain('<item name="android:windowIsTranslucent">true</item>');
   expect([...manifest.getElementsByTagName('uses-permission')].map(node => node.getAttributeNS(ns, 'name')))
     .not.toContain('android.permission.SYSTEM_ALERT_WINDOW');
 });
+
+it('opens AI Save from screenshots when pictures are shared instead of a link, after sign-in', async () => {
+  const share = { id: 'shots-1', images: 3 };
+  const { rerender } = render(<AndroidShareSheet initialShare={share} />);
+  expect(screen.getByText('Sign in to continue with these screenshots.')).toBeInTheDocument();
+  mocks.owner = 'user-1';
+  rerender(<AndroidShareSheet initialShare={share} />);
+  expect(screen.getByText('3 screenshots')).toBeInTheDocument();
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Load' })));
+  expect(mocks.getImages).toHaveBeenCalledWith({ id: 'shots-1' });
+  expect(mocks.loaded).toEqual(['data:image/jpeg;base64,AAAA']);
+  fireEvent.click(screen.getByRole('button', { name: 'Close screenshots' }));
+  expect(mocks.dismiss).toHaveBeenCalledWith({ id: 'shots-1' });
+});
+
