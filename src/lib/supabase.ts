@@ -1016,6 +1016,44 @@ export async function insertSavedVenue(
   return data as SavedVenue;
 }
 
+/** One of my own saved venues, or null (deleted, or not mine). */
+export async function fetchSavedVenue(id: string): Promise<SavedVenue | null> {
+  const { data, error } = await supabase.from('saved_venues').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as SavedVenue | null;
+}
+
+/** A venue's public page: the place, without anything personal to whoever saved it. */
+export type PublicVenue = Pick<SavedVenue, 'id' | 'name' | 'address' | 'type' | 'link' | 'lat' | 'lon' | 'tags' | 'photo_url'> & { is_mine: boolean };
+
+/** Works signed in or out (get_public_venue). Null when there's no such venue. */
+export async function fetchPublicVenue(id: string): Promise<PublicVenue | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { data, error } = await supabase.rpc('get_public_venue', { p_id: id });
+  if (error) throw error;
+  return ((data as PublicVenue[] | null)?.[0]) ?? null;
+}
+
+/**
+ * Saves someone else's venue into my library (and a collection, if one is
+ * picked). When I already have it (same name and address), that one is used,
+ * so saving twice never makes a duplicate.
+ */
+export async function copyVenueToLibrary(
+  venue: Pick<SavedVenue, 'name' | 'address' | 'type' | 'link' | 'lat' | 'lon' | 'tags' | 'photo_url'>,
+  collectionId: string | null,
+): Promise<{ venue: SavedVenue; existed: boolean }> {
+  const key = (v: { name: string; address: string }) => `${v.name.trim().toLowerCase()}|${v.address.trim().toLowerCase()}`;
+  const mine = (await fetchSavedVenues()).find((v) => key(v) === key(venue));
+  const saved = mine ?? await insertSavedVenue({
+    name: venue.name, address: venue.address, type: venue.type, link: venue.link,
+    lat: venue.lat, lon: venue.lon, tags: venue.tags ?? [], photo_url: venue.photo_url ?? null,
+    ...(venue.photo_url ? { photo_checked_at: new Date().toISOString() } : {}),
+  });
+  if (collectionId) await addVenueToCollection(collectionId, saved.id);
+  return { venue: saved, existed: !!mine };
+}
+
 export async function deleteSavedVenue(id: string) {
   const { error } = await supabase
     .from('saved_venues')

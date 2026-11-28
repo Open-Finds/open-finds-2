@@ -23,6 +23,7 @@ import { GuidedTour } from './components/GuidedTour';
 import { CreditPrompt } from './components/CreditPrompt';
 import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isSigningUp } from './lib/supabase';
 import { Bell, Menu } from 'lucide-react';
+import { pendingVenueAction } from './lib/pendingVenue';
 
 /*
   Pages most people rarely open (admin, venue portal, subscription and its
@@ -38,6 +39,7 @@ const TripRsvpPage = lazy(() => import('./pages/TripRsvp').then((m) => ({ defaul
 const TripDayPage = lazy(() => import('./pages/TripDay').then((m) => ({ default: m.TripDayPage })));
 const VenuePortalPage = lazy(() => import('./pages/VenuePortal').then((m) => ({ default: m.VenuePortalPage })));
 const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })));
+const PublicVenuePage = lazy(() => import('./pages/PublicVenue').then((m) => ({ default: m.PublicVenuePage })));
 const SubscriptionPage = lazy(() => import('./pages/Subscription').then((m) => ({ default: m.SubscriptionPage })));
 
 type View = AppView;
@@ -157,6 +159,14 @@ function AppInner() {
     }
   }, [route]);
 
+  // Back from Google or Facebook sign-in (which returns to "/"), carry on
+  // with the venue page they were on when asked to log in.
+  useEffect(() => {
+    if (!session || !profileLoaded || !username || route.name === 'venue') return;
+    const pending = pendingVenueAction();
+    if (pending) navigate(`/venue/${pending.id}`);
+  }, [session, profileLoaded, username, route.name]);
+
   // Fetch unread notification count
   const refreshUnread = useCallback(async () => {
     if (!session) return;
@@ -213,6 +223,11 @@ function AppInner() {
   // Blank screen while session loads — avoids flash of login page for returning users
   if (authLoading) {
     return <div className="min-h-screen bg-background" />;
+  }
+
+  // A venue's page from a shared link: open to everyone.
+  if (route.name === 'venue' && !session) {
+    return <PublicVenuePage id={route.id} signedIn={false} onClose={() => navigate('/')} />;
   }
 
   // Not authenticated — show landing / login screen
@@ -331,6 +346,15 @@ function AppInner() {
           onBack={() => { setShowNotifications(false); refreshUnread(); }}
           onOpenFriends={() => { switchView('friends'); refreshUnread(); }}
         />
+      </Shell>
+    );
+  }
+
+  if (route.name === 'venue') {
+    return (
+      <Shell {...shellProps}>
+        <PublicVenuePage id={route.id} signedIn onClose={() => navigate('/')} onPlan={(v) => startPlanner('saved', v)}
+          unreadCount={unreadCount} onNotifications={shellProps.onOpenNotifications} onSettings={() => switchView('settings')} />
       </Shell>
     );
   }

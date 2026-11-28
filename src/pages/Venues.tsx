@@ -453,7 +453,7 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
       {detail && <VenueDetails venue={detail} owned={detail.user_id === myId} onClose={() => setDetail(null)}
         onPlan={() => { onPlan?.(detail); setDetail(null); }} onEdit={() => { setEditingId(detail.id); setDetail(null); }}
         onSaved={(updated) => { setDetail(updated); setVenues((prev) => prev.map((v) => v.id === updated.id ? updated : v)); }}
-        related={venues} onOpenVenue={setDetail} unreadCount={unreadCount} onNotifications={onNotifications} onSettings={onSettings} />}
+        related={venues} onOpenVenue={setDetail} onCopied={(saved) => setVenues((prev) => [saved, ...prev.filter((v) => v.id !== saved.id)])} unreadCount={unreadCount} onNotifications={onNotifications} onSettings={onSettings} />}
       <div className="mb-5 grid grid-cols-3 gap-2 pt-12" aria-label="Venue categories"><button className={`col-span-3 min-h-11 rounded-full border px-3 text-small ${categoryFilter === 'all' ? 'border-primary bg-primary-soft text-primary-text' : 'border-border'}`} onClick={() => setCategoryFilter('all')}>All venues</button>{CATEGORIES.map((c) => <button key={c} aria-pressed={categoryFilter === c} className={`min-h-11 rounded-full border px-3 text-small ${categoryFilter === c ? 'border-primary bg-primary-soft text-primary-text' : 'border-border'}`} onClick={() => setCategoryFilter(c)} aria-label={CATEGORY_LABELS[c]}>{CATEGORY_SHORT[c]}</button>)}</div>
       <DuplicateVenueDialog
         pending={dupPending}

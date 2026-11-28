@@ -21,3 +21,6 @@ export function sourceOf(url: string): { name: string; video: boolean } {
   if (/google\.[a-z.]+$|goo\.gl$/.test(host) && /maps|goo\.gl/.test(url)) return { name: 'Google Maps', video: false };
   return { name: host || 'the web', video: false };
 }
+
+/** The address anyone can open to see a venue's page, signed in or not. */
+export const venuePageUrl = (id: string) => `${window.location.origin}/#/venue/${id}`;

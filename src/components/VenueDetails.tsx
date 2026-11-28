@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {
-  CalendarPlus, Check, ChevronLeft, ChevronRight, ExternalLink, MapPin, Navigation, Pencil, Share2, Star, Tag,
+  Bookmark, BookmarkCheck, CalendarPlus, Check, LogIn, ChevronLeft, ChevronRight, ExternalLink, MapPin, Navigation, Pencil, Share2, Star, Tag,
 } from 'lucide-react';
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { linkHref } from '../lib/links';
@@ -11,7 +11,9 @@ import { copyToClipboard } from '../lib/invite';
 import { BrandWordmark } from './BrandWordmark';
 import { HeaderActions } from './HeaderActions';
 import { VenueThumb } from './VenueThumb';
-import { sourceOf, suburbOf } from '../lib/venuePage';
+import { SaveVenueSheet } from './SaveVenueSheet';
+import type { VenueAction } from '../lib/pendingVenue';
+import { sourceOf, suburbOf, venuePageUrl } from '../lib/venuePage';
 
 const pill = 'inline-flex min-h-14 w-full items-center justify-center gap-2.5 rounded-full px-5 text-body font-bold transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 const panel = 'rounded-[19px] border border-border/70 bg-card shadow-1 dark:border-border dark:shadow-none';
@@ -21,9 +23,14 @@ const panel = 'rounded-[19px] border border-border/70 bg-card shadow-1 dark:bord
  * (save state and Add to plan), directions, the map, the post it was saved
  * from, and more saved places like it. Full screen over the current view;
  * Back (or Escape) returns to it.
+ *
+ * Someone else's venue (a shared collection, or a link) offers Save instead
+ * of Mark visited. Signed out, Save and Add to plan ask to log in first.
  */
+
 export function VenueDetails({
   venue, onClose, onPlan, onEdit, onSaved, owned, related = [], onOpenVenue, unreadCount, onNotifications, onSettings,
+  signedIn = true, onLoginRequired, autoSave = false, onCopied,
 }: {
   venue: SavedVenue; onClose: () => void; onPlan: () => void; onEdit: () => void;
   onSaved: (v: SavedVenue) => void; owned: boolean;
@@ -33,8 +40,17 @@ export function VenueDetails({
   unreadCount?: number;
   onNotifications?: () => void;
   onSettings?: () => void;
+  /** Signed out: Save and Add to plan call onLoginRequired instead. */
+  signedIn?: boolean;
+  onLoginRequired?: (action: VenueAction | null) => void;
+  /** Open the Save sheet straight away (carrying on after logging in). */
+  autoSave?: boolean;
+  /** Someone else's venue was saved to my venues. */
+  onCopied?: (saved: SavedVenue) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(autoSave && signedIn && !owned);
+  const [copied, setCopied] = useState<{ venue: SavedVenue; existed: boolean } | null>(null);
   const [error, setError] = useState('');
   const [shared, setShared] = useState(false);
   const [showDock, setShowDock] = useState(false);
@@ -54,7 +70,9 @@ export function VenueDetails({
   ].slice(0, 6);
 
   // Back to the top when moving to another venue from "You might also like".
-  useEffect(() => { scroller.current?.scrollTo?.({ top: 0 }); setError(''); setShared(false); }, [venue.id]);
+  useEffect(() => { scroller.current?.scrollTo?.({ top: 0 }); setError(''); setShared(false); setCopied(null); }, [venue.id]);
+  const plan = () => (signedIn ? onPlan() : onLoginRequired?.('plan'));
+  const startSave = () => (signedIn ? setSaveOpen(true) : onLoginRequired?.('save'));
 
   // The bottom bar repeats the main actions once they have scrolled away.
   const onScroll = () => {
@@ -65,8 +83,9 @@ export function VenueDetails({
   const share = async () => {
     setError('');
     try {
-      if (navigator.share) await navigator.share({ title: venue.name, text: `${venue.name}\n${venue.address}`, ...(source ? { url: source } : {}) });
-      else if (await copyToClipboard(`${venue.name}\n${venue.address}${source ? `\n${source}` : ''}`)) setShared(true);
+      const url = venuePageUrl(venue.id);
+      if (navigator.share) await navigator.share({ title: venue.name, text: `${venue.name}, ${suburbOf(venue.address)}`, url });
+      else if (await copyToClipboard(`${venue.name}\n${url}`)) setShared(true);
       else setError('Could not copy. You can select the address above.');
     } catch (e) { if (!(e instanceof Error && e.name === 'AbortError')) setError('Sharing is unavailable in this browser.'); }
   };
@@ -78,14 +97,20 @@ export function VenueDetails({
   };
 
   const mainActions = (dock = false) => (
-    <div className={`grid gap-3 ${owned ? 'grid-cols-2' : 'grid-cols-1'}`}>
+    <div className="grid grid-cols-2 gap-3">
+      {!owned && (
+        <button type="button" className={`${pill} ${dock || copied ? 'bg-primary-soft text-primary-soft-foreground hover:bg-primary-soft/80' : 'bg-primary-gradient text-primary-foreground hover:bg-primary-gradient-hover'}`}
+          disabled={!!copied} aria-pressed={copied ? true : undefined} onClick={startSave} tabIndex={dock && !showDock ? -1 : undefined}>
+          {copied ? <BookmarkCheck size={22} strokeWidth={2.2} /> : <Bookmark size={22} strokeWidth={2.2} />}{copied ? 'Saved' : 'Save'}
+        </button>
+      )}
       {owned && (
         <button type="button" className={`${pill} ${dock || venue.visited ? 'bg-primary-soft text-primary-soft-foreground hover:bg-primary-soft/80' : 'bg-primary-gradient text-primary-foreground hover:bg-primary-gradient-hover'}`}
           disabled={busy} aria-pressed={venue.visited} onClick={toggleVisited} tabIndex={dock && !showDock ? -1 : undefined}>
           <Check size={22} strokeWidth={2.4} />{busy ? 'Saving…' : venue.visited ? 'Visited' : 'Mark visited'}
         </button>
       )}
-      <button type="button" className={`${pill} bg-ai text-ai-foreground hover:bg-ai/90`} onClick={onPlan} tabIndex={dock && !showDock ? -1 : undefined}>
+      <button type="button" className={`${pill} bg-ai text-ai-foreground hover:bg-ai/90`} onClick={plan} tabIndex={dock && !showDock ? -1 : undefined}>
         <CalendarPlus size={22} strokeWidth={2.2} />Add to plan
       </button>
     </div>
@@ -105,9 +130,9 @@ export function VenueDetails({
                 </DialogPrimitive.Close>
                 <BrandWordmark className="block w-[clamp(120px,38vw,170px)] min-w-0" />
                 <span className="flex-1" />
+                {!signedIn && <button type="button" onClick={() => onLoginRequired?.(null)} className="btn-outline btn-sm shrink-0 rounded-full"><LogIn size={16} />Log in</button>}
                 <HeaderActions unreadCount={unreadCount}
-                  onNotifications={onNotifications && (() => { onClose(); onNotifications(); })}
-                  onSettings={onSettings && (() => { onClose(); onSettings(); })} />
+                  onNotifications={onNotifications} onSettings={onSettings} />
               </header>
 
               <div className="relative mt-3 grid aspect-[16/10] place-items-center overflow-hidden rounded-[22px] bg-muted">
@@ -132,6 +157,7 @@ export function VenueDetails({
 
               <div ref={actions} className="mt-6">{mainActions()}</div>
               {error && <p role="alert" className="mt-3 text-small text-destructive-text">{error}</p>}
+              {copied && <p role="status" className="mt-3 rounded-md bg-success-soft px-4 py-3 text-small">{copied.existed ? 'Already in your venues' : 'Saved to your venues'}.</p>}
 
               <div className="mt-2 grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-center">
                 {directions
@@ -199,6 +225,8 @@ export function VenueDetails({
             </div>
           </div>
 
+          {saveOpen && <SaveVenueSheet venue={venue} onClose={() => setSaveOpen(false)}
+            onSaved={(saved, existed) => { setSaveOpen(false); setCopied({ venue: saved, existed }); onCopied?.(saved); }} />}
           <div aria-hidden={!showDock}
             className={`fixed inset-x-0 bottom-0 border-t border-border bg-background/95 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] pt-3 transition-transform duration-200 motion-reduce:transition-none ${showDock ? 'translate-y-0' : 'pointer-events-none translate-y-full'}`}>
             <div className="mx-auto max-w-2xl">{mainActions(true)}</div>
