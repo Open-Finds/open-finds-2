@@ -16,6 +16,9 @@ vi.mock('../lib/supabase', () => ({ updateSavedVenue: vi.fn() }));
 vi.mock('../lib/openai', () => ({ UserFacingError: Error, captionFromShare: (text?: string) => (text ?? '').replace(/https?:\/\/\S+/g, '').trim() }));
 const results = vi.hoisted(() => ({ record: vi.fn<(input: import('../lib/aiSaveResults').AiSaveResultInput) => Promise<boolean>>(async () => true) }));
 vi.mock('../lib/aiSaveResults', async original => ({ ...(await original<typeof import('../lib/aiSaveResults')>()), recordAiSaveResult: results.record }));
+const shotMocks = vi.hoisted(() => ({ shrinkImages: vi.fn() }));
+vi.mock('../lib/screenshotImages', () => shotMocks);
+vi.mock('./ScreenshotSaveDialog', () => ({ ScreenshotSaveDialog: ({ count }: { count: number }) => <p>Screenshot screen: {count} picked</p> }));
 const phone = vi.hoisted(() => ({ probe: vi.fn() }));
 vi.mock('../lib/phoneProbe', async original => ({ ...(await original<typeof import('../lib/phoneProbe')>()), probePost: phone.probe }));
 
@@ -307,12 +310,27 @@ describe('Confirm the venue choices', () => {
     expect(mocks.saveSharedVenue.mock.calls[0][0]).toMatchObject({ name: 'Kiddo Coffee (edited)', lat: null, lon: null });
   });
 
-  it('says the caption could not be read, and offers a retry, instead of guessing', async () => {
+  it('says nothing could be read, offers screenshots and a retry, instead of guessing', async () => {
     const message = "We couldn't read this post's caption. TikTok and Instagram sometimes block us, so try again, or search for the venue below.";
     await start({ candidates: [], issue: { stage: 'identify', retryable: true, cause: new Error(message) } });
-    expect(screen.getByRole('alert')).toHaveTextContent("We couldn't read this post's caption");
+    expect(screen.getByRole('alert')).toHaveTextContent("Sorry, we couldn't AI Save this. Add screenshots and we'll try again!");
+    expect(screen.getByRole('button', { name: 'Add screenshots' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry identification' })).toBeInTheDocument();
     expect(screen.getByLabelText(/search Google Places/)).toBeInTheDocument();
+  });
+
+  it('reads picked screenshots on the screenshot screen (at most six, shrunk first)', async () => {
+    shotMocks.shrinkImages.mockResolvedValue(['data:image/jpeg;base64,AAAA']);
+    await start({ candidates: [], issue: { stage: 'identify', retryable: true } });
+    const files = Array.from({ length: 8 }, (_, i) => new File(['x'], `shot${i}.png`, { type: 'image/png' }));
+    await act(async () => fireEvent.change(screen.getByTestId('screenshot-input'), { target: { files } }));
+    expect(shotMocks.shrinkImages).toHaveBeenCalledWith(files, 6);
+    expect(screen.getByText('Screenshot screen: 8 picked')).toBeInTheDocument();
+  });
+
+  it('does not offer screenshots when a venue was read, or when the service is the problem', async () => {
+    await start({ candidates: [{ ...candidate, address: '' }], issue: { stage: 'verify', retryable: false, reason: 'needs_review' } });
+    expect(screen.queryByRole('button', { name: 'Add screenshots' })).not.toBeInTheDocument();
   });
 
   it('passes the caption that came with the share on to AI Save', async () => {

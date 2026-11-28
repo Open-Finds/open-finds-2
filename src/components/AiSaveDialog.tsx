@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ImagePlus } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -16,6 +16,9 @@ import { putInInbox, removeFromInbox, storedResult, type AiSaveItem } from '../l
 import { attemptIdFor } from '../lib/attemptId';
 import { ShareMessageComposer } from './ShareMessageComposer';
 import { AddToCollection } from './AddToCollection';
+import { ScreenshotSaveDialog } from './ScreenshotSaveDialog';
+import { MAX_SCREENSHOTS } from '../lib/aiSaveScreenshots';
+import { shrinkImages } from '../lib/screenshotImages';
 import { PhoneCheck } from './PhoneCheck';
 import { AiSaveFeedback, type FeedbackValue } from './AiSaveFeedback';
 import { captionFromShare } from '../lib/openai';
@@ -138,6 +141,12 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
   /** When nothing could be confirmed, Google is searched once on its own so the user can tap a place instead of typing. */
   const autoSearch = useRef<(query: string) => void>();
   const autoSearched = useRef(false);
+  /** Nothing could be found from the link (and the service itself was fine): offer to read screenshots instead. */
+  const [offerShots, setOfferShots] = useState(false);
+  /** Screenshots the user picked: read on their own screen (ScreenshotSaveDialog). */
+  const [shots, setShots] = useState<{ images: string[]; count: number }>();
+  const [readingShots, setReadingShots] = useState(false);
+  const shotInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -209,6 +218,11 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
         setPlaceQuery(query);
         autoSearch.current?.(query);
       }
+      // Only when nothing at all was read: a venue the AI did read keeps its own message and the search box.
+      const offer = !found.current && !serviceDown && !result.saved && !result.candidates.some(item => item.name?.trim());
+      setOfferShots(offer);
+      // The screenshot offer says what happened, in its own words.
+      if (offer) { setError(''); return; }
       if (!result.issue) return;
       const { stage, cause, retryable, reason, retryAfterSeconds } = result.issue;
       // A service problem is never worded as a verdict on the venue.
@@ -553,6 +567,8 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
     AI Save is still searching. It will open here when it's ready.
   </p>;
 
+  if (shots) return <ScreenshotSaveDialog count={shots.count} loadImages={async () => shots.images} onClose={onClose} />;
+
   return <Dialog open onOpenChange={open => { if (!open) void close(); }}>
     {/* Phones close with the swipe line; the X is only for wide screens, where there is nothing to swipe. */}
     <DialogContent className="isolate focus-visible:outline-none focus-visible:ring-0" closeClassName="hidden sm:flex"
@@ -681,6 +697,22 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
             place.name === name.trim() && place.address === address.trim())?.venueToken : undefined,
         });
       }}>
+        {offerShots && !saved && <div className="grid gap-2 rounded-lg border p-3">
+          <p role="alert" className="text-body">Sorry, we couldn't AI Save this. Add screenshots and we'll try again!</p>
+          <Button type="button" variant="ai" className="w-fit" disabled={readingShots || saving} onClick={() => shotInput.current?.click()}>
+            <ImagePlus aria-hidden="true" />{readingShots ? 'Opening screenshots…' : 'Add screenshots'}
+          </Button>
+          <input ref={shotInput} type="file" accept="image/*" multiple hidden data-testid="screenshot-input" onChange={event => {
+            const files = [...(event.target.files ?? [])];
+            event.target.value = '';
+            if (!files.length) return;
+            setReadingShots(true);
+            void shrinkImages(files, MAX_SCREENSHOTS).then(images => {
+              if (images.length) setShots({ images, count: files.length });
+              else setError("We couldn't open those pictures. Try other screenshots.");
+            }).finally(() => setReadingShots(false));
+          }} />
+        </div>}
         {googlePlaces.length > 0 && !saved && <fieldset className="grid gap-2 text-sm">
           <legend className="text-label">Places found</legend>
           {googlePlaces.map((candidate, index) => {
