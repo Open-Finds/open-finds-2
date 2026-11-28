@@ -155,10 +155,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
   useEffect(() => {
     if (!busy) return;
     setRingFilled(false);
-    const timer = setInterval(() => setRingStep(current => {
-      const next = linkProgress(progress.current);
-      return next.value === current.value && next.toward === current.toward ? current : next;
-    }), 250);
+    const timer = setInterval(() => setRingStep(linkProgress(progress.current)), 250);
     return () => clearInterval(timer);
   }, [busy]);
 
@@ -587,7 +584,7 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
     {/* Phones close with the swipe line; the X is only for wide screens, where there is nothing to swipe. */}
     <DialogContent className="isolate focus-visible:outline-none focus-visible:ring-0" closeClassName="hidden sm:flex"
       onOpenAutoFocus={event => { event.preventDefault(); (event.target as HTMLElement).focus(); }}>
-      {(busy || !ringFilled) && <ProgressBorder key={attempt} {...(busy ? ringStep : { value: 1, toward: 1 })} onFilled={() => setRingFilled(true)} />}
+      {(busy || !ringFilled) && <ProgressBorder key={attempt} value={ringStep} done={!busy} onFilled={() => setRingFilled(true)} />}
       <div className="touch-none" onPointerDown={event => {
         swipe.current = event.clientY;
         event.currentTarget.setPointerCapture(event.pointerId);

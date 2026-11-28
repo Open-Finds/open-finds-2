@@ -1,45 +1,74 @@
 import { act, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { ProgressBorder } from './ProgressBorder';
-import { linkProgress, stepProgress } from '../lib/progressRing';
+import { linkProgress, RING_START, stepRing, type RingState } from '../lib/progressRing';
 
-const run = (shown: number, value: number, toward: number, seconds: number) => {
-  for (let t = 0; t < seconds; t += 1 / 60) shown = stepProgress(shown, value, toward, 1 / 60);
-  return shown;
+const TICK = 0.05;
+/** The line after `seconds`, with the real progress fixed at `value`; also the biggest single move seen. */
+const run = (seconds: number, value: number, from: RingState = RING_START, done = false) => {
+  let state = from;
+  let biggest = 0;
+  for (let t = 0; t < seconds - 1e-9; t += TICK) {
+    const next = stepRing(state, value, done, TICK);
+    biggest = Math.max(biggest, next.shown - state.shown);
+    expect(next.shown).toBeGreaterThanOrEqual(state.shown);
+    state = next;
+  }
+  return { state, biggest };
 };
 
-it('catches up smoothly: faster when further behind, never past the real progress', () => {
-  const far = stepProgress(0, 0.8, 0.8, 1 / 60);
-  const near = stepProgress(0.7, 0.8, 0.8, 1 / 60) - 0.7;
-  expect(far).toBeGreaterThan(near);
-  expect(far).toBeLessThan(0.1);
-  expect(run(0, 0.8, 0.8, 3)).toBeCloseTo(0.8, 5);
+it('follows a curve planned around a typical 20 second save, and never sits still or reaches the end on its own', () => {
+  // Real progress keeping pace with the line: about 80% at 20 s, still moving and short of the end at 40 s.
+  let state = RING_START;
+  for (let t = 0; t < 20; t += TICK) state = stepRing(state, state.shown, false, TICK);
+  expect(state.shown).toBeGreaterThan(0.75);
+  expect(state.shown).toBeLessThan(0.85);
+  const later = run(20, state.shown, state).state.shown;
+  expect(later).toBeGreaterThan(state.shown);
+  expect(later).toBeLessThan(0.95);
 });
 
-it('creeps while waiting, but stops short of where the step ends and never goes backwards', () => {
-  const waited = run(0.15, 0.15, 0.6, 30);
-  expect(waited).toBeGreaterThan(0.4);
-  expect(waited).toBeLessThan(0.6);
-  expect(stepProgress(0.5, 0.2, 0.3, 1)).toBe(0.5);
-  expect(run(0, 1, 1, 3)).toBe(1);
+it('real steps change the speed (at most twice, at least 0.3x), never the position', () => {
+  const ahead = run(5, 0.9);
+  const behind = run(5, 0);
+  const even = (() => { let s = RING_START; for (let t = 0; t < 5; t += TICK) s = stepRing(s, s.shown, false, TICK); return s; })();
+  expect(ahead.state.shown).toBeGreaterThan(even.shown);
+  expect(behind.state.shown).toBeLessThan(even.shown);
+  expect(behind.state.shown).toBeGreaterThan(0);
+  expect(ahead.state.rate).toBeLessThanOrEqual(2);
+  expect(behind.state.rate).toBeGreaterThanOrEqual(0.3);
+  // A step landing never makes the line lurch: no tick moves more than a sliver.
+  expect(ahead.biggest).toBeLessThan(0.02);
+});
+
+it('glides the rest of the way round in under a second once the result is in', () => {
+  const start = run(8, 0.3).state;
+  const { state, biggest } = run(0.9, 1, start, true);
+  expect(state.shown).toBe(1);
+  expect(biggest).toBeLessThan(0.1);
 });
 
 it('reads how far a link search has got from its progress', () => {
-  expect(linkProgress({}).value).toBe(0);
-  expect(linkProgress({ checkedSaved: true }).value).toBe(0.1);
-  expect(linkProgress({ checkedSaved: true, identification: { metadata: {} } }).value).toBe(0.3);
-  expect(linkProgress({ candidates: [] }).value).toBe(0.6);
-  expect(linkProgress({ candidates: [], searched: true }).value).toBe(0.7);
-  expect(linkProgress({ rows: [] }).value).toBe(0.9);
+  expect(linkProgress({})).toBe(0);
+  expect(linkProgress({ checkedSaved: true })).toBe(0.1);
+  expect(linkProgress({ checkedSaved: true, identification: { metadata: {} } })).toBe(0.3);
+  expect(linkProgress({ candidates: [] })).toBe(0.6);
+  expect(linkProgress({ candidates: [], searched: true })).toBe(0.7);
+  expect(linkProgress({ rows: [] })).toBe(0.9);
 });
 
 it('fills the ring on a timer (the share pop-up may get no animation frames) and says when it is done', () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'performance'] });
   vi.stubGlobal('requestAnimationFrame', () => 0);
   const onFilled = vi.fn();
-  render(<ProgressBorder value={1} onFilled={onFilled} />);
-  act(() => { vi.advanceTimersByTime(5000); });
-  expect(screen.getByRole('progressbar', { name: 'AI Save progress' })).toHaveAttribute('aria-valuenow', '100');
+  const { rerender } = render(<ProgressBorder value={0} onFilled={onFilled} />);
+  act(() => { vi.advanceTimersByTime(3000); });
+  const ring = screen.getByRole('progressbar', { name: 'AI Save progress' });
+  expect(Number(ring.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+  expect(onFilled).not.toHaveBeenCalled();
+  rerender(<ProgressBorder value={0.9} done onFilled={onFilled} />);
+  act(() => { vi.advanceTimersByTime(1500); });
+  expect(ring).toHaveAttribute('aria-valuenow', '100');
   expect(onFilled).toHaveBeenCalledTimes(1);
   vi.unstubAllGlobals();
   vi.useRealTimers();

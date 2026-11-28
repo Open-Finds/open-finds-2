@@ -1,40 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
-import { stepProgress, TICK_MS } from '../lib/progressRing';
+import { RING_START, stepRing, TICK_MS } from '../lib/progressRing';
 
 /**
- * The AI Save loading ring: an orange line fills the card's border as real steps finish, while two violet dots
- * run around it to show it is still working (hidden when the phone asks for reduced motion).
- *
- * The line never jumps. It moves faster the further it is behind the real progress (`value`), and while it waits
- * for the next step it creeps slowly towards `toward` (where the current step ends) without ever reaching it.
- * It never goes backwards.
+ * The AI Save loading ring: an orange line fills the card's border while two violet dots run around it
+ * (hidden when the phone asks for reduced motion). How the line moves: see lib/progressRing.
  */
-
-export function ProgressBorder({ value, toward = value, onFilled }: {
-  /** Real progress, 0 to 1. 1 fills the ring. */
+export function ProgressBorder({ value, done = false, onFilled }: {
+  /** Real progress, 0 to 1: it only changes the line's speed. */
   value: number;
-  /** Where the current step will end: the line creeps towards it while waiting. */
-  toward?: number;
+  /** The result is in: the line finishes the ring. */
+  done?: boolean;
   /** Called once the line has gone all the way round. */
   onFilled?: () => void;
 }) {
   const [shown, setShown] = useState(0);
-  const latest = useRef({ value, toward, onFilled });
-  latest.current = { value, toward, onFilled };
+  const latest = useRef({ value, done, onFilled });
+  latest.current = { value, done, onFilled };
 
   useEffect(() => {
     // A timer, not requestAnimationFrame: the share pop-up over another app may never get animation frames,
     // and the line must still move there. The CSS transition below smooths between ticks.
     let last = performance.now();
-    let current = 0;
+    let state = RING_START;
     const timer = setInterval(() => {
       const now = performance.now();
       const dt = Math.min(0.25, Math.max(0, (now - last) / 1000));
       last = now;
-      const { value: target, toward: next } = latest.current;
-      current = stepProgress(current, target, next, dt);
-      setShown(current);
-      if (current >= 1) {
+      state = stepRing(state, latest.current.value, latest.current.done, dt);
+      setShown(state.shown);
+      if (state.shown >= 1) {
         clearInterval(timer);
         latest.current.onFilled?.();
       }
