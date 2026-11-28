@@ -29,7 +29,8 @@ import type { SharedVenue } from './lib/aiSave';
 import { GuidedTour } from './components/GuidedTour';
 import { CreditPrompt } from './components/CreditPrompt';
 import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isSigningUp } from './lib/supabase';
-import { Bell, Settings } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
+import { pendingVenueAction } from './lib/pendingVenue';
 
 /*
   Pages most people rarely open (admin, venue portal, subscription and its
@@ -45,6 +46,7 @@ const TripRsvpPage = lazy(() => import('./pages/TripRsvp').then((m) => ({ defaul
 const TripDayPage = lazy(() => import('./pages/TripDay').then((m) => ({ default: m.TripDayPage })));
 const VenuePortalPage = lazy(() => import('./pages/VenuePortal').then((m) => ({ default: m.VenuePortalPage })));
 const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })));
+const VenuePage = lazy(() => import('./pages/VenuePage').then((m) => ({ default: m.VenuePage })));
 const SubscriptionPage = lazy(() => import('./pages/Subscription').then((m) => ({ default: m.SubscriptionPage })));
 
 type View = AppView;
@@ -93,7 +95,7 @@ function Shell({
         )}
       </button>}
 
-      {view !== 'home' && view !== 'planner' && view !== 'discover' && !isEditingItinerary && <button aria-label="Settings" onClick={() => onChangeView('settings')} className="ux-icon fixed right-16 top-4 z-40"><Settings size={19} /></button>}
+      {view !== 'home' && view !== 'planner' && view !== 'discover' && !isEditingItinerary && <button aria-label="Settings" onClick={() => onChangeView('settings')} className="ux-icon fixed right-16 top-4 z-40"><Menu size={19} /></button>}
       <MainNavigation view={view} onChange={onChangeView} />
       {guard}
     </>
@@ -175,6 +177,14 @@ function AppInner() {
     }
   }, [route]);
 
+  // Back from Google or Facebook sign-in (which returns to "/"), carry on
+  // with the venue page they were on when asked to log in.
+  useEffect(() => {
+    if (!session || !profileLoaded || !username || route.name === 'venue-page') return;
+    const pending = pendingVenueAction();
+    if (pending) navigate(`/place/${pending.id}`);
+  }, [session, profileLoaded, username, route.name]);
+
   // Fetch unread notification count
   const refreshUnread = useCallback(async () => {
     if (!session) return;
@@ -235,6 +245,11 @@ function AppInner() {
   // Blank screen while session loads — avoids flash of login page for returning users
   if (authLoading) {
     return <div className="min-h-screen bg-background" />;
+  }
+
+  // A venue's page from a shared link: open to everyone.
+  if (route.name === 'venue-page' && !session) {
+    return <VenuePage id={route.id} signedIn={false} onClose={() => navigate('/')} />;
   }
 
   // Not authenticated — show landing / login screen
@@ -393,6 +408,15 @@ function AppInner() {
     );
   }
 
+  if (route.name === 'venue-page') {
+    return (
+      <Shell {...shellProps}>
+        <VenuePage id={route.id} signedIn onClose={() => navigate('/')} onPlan={(v) => startPlanner('saved', savedCandidate(v))}
+          unreadCount={unreadCount} onNotifications={shellProps.onOpenNotifications} onSettings={() => switchView('settings')} />
+      </Shell>
+    );
+  }
+
   // Signed in: an invitation or RSVP page, inside the app with the menu.
   if (planPage) {
     return <Shell {...shellProps}>{planPage}</Shell>;
@@ -437,7 +461,8 @@ function AppInner() {
           <SettingsPage onBack={() => switchView('home')} onFriends={() => switchView('friends')} />
         ) : (
           <VenuesPage saveVersion={venueSaveVersion} initialAdd={openSave} onSaveLink={setIncomingShare} onPlan={(v) => startPlanner('saved', savedCandidate(v))}
-            onPlanCollection={(id) => startPlanner('saved', undefined, id)} />
+            onPlanCollection={(id) => startPlanner('saved', undefined, id)}
+            unreadCount={unreadCount} onNotifications={shellProps.onOpenNotifications} onSettings={() => switchView('settings')} />
         )}
       </div>
     </Shell>

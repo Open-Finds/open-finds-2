@@ -8,6 +8,7 @@ export type Route =
   | { name: 'saved' }
   | { name: 'venues' }
   | { name: 'public-venue'; id: string }
+  | { name: 'venue-page'; id: string }
   | { name: 'my-venues' }
   | { name: 'plan'; id: string }
   | { name: 'share'; id: string }
@@ -38,9 +39,12 @@ function parseHash(): Route {
   }
   if (parts[0] === 'saved') return { name: 'saved' };
   if (parts[0] === 'venues') return { name: 'venues' };
+  // Quick Share's page (a venue recommendation).
   if (parts[0] === 'venue' && /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(parts[1] ?? '')) {
     return { name: 'public-venue', id: parts[1] };
   }
+  // A saved venue's own page, open to anyone with the link.
+  if (parts[0] === 'place' && parts[1]) return { name: 'venue-page', id: parts[1] };
   if (parts[0] === 'my-venues') return { name: 'my-venues' };
   if (parts[0] === 'plan' && parts[1]) {
     const id = parts[1];

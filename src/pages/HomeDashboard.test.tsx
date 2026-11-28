@@ -57,7 +57,7 @@ it('connects dashboard actions to the selected event, venue and navigation', asy
   await userEvent.click(screen.getByRole('button', { name: /Dinner/ }));
   await userEvent.click(screen.getByRole('button', { name: /Upcoming events/ }));
   await userEvent.click(screen.getByRole('button', { name: /All venues/ }));
-  await userEvent.click(screen.getByRole('button', { name: 'Profile and settings' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
   await userEvent.click(screen.getByRole('button', { name: 'Notifications, 2 unread' }));
   await userEvent.click(screen.getByRole('button', { name: 'Plan it at Supper Club' }));
   await userEvent.click(screen.getByRole('button', { name: 'Favourite Supper Club' }));
