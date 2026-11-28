@@ -21,7 +21,6 @@ import { AddToCollection } from './AddToCollection';
 import { ScreenshotSaveDialog } from './ScreenshotSaveDialog';
 import { MAX_SCREENSHOTS } from '../lib/aiSaveScreenshots';
 import { shrinkImages } from '../lib/screenshotImages';
-import { PhoneCheck } from './PhoneCheck';
 import { AiSaveFeedback, type FeedbackValue } from './AiSaveFeedback';
 import { captionFromShare } from '../lib/openai';
 import { describeLink, foundByFrom, recordAiSaveResult, type Outcome } from '../lib/aiSaveResults';
@@ -762,24 +761,22 @@ export function AiSaveDialog({ link, sharedText, onClose, onPlan, compact = fals
           <div className="min-w-0 flex-1">
             <p className="break-words font-semibold">{venue.name}</p>
             <p className="flex items-start gap-1 text-sm">{!isVerified(venue) && <UnconfirmedAddressMark />}<span>{venue.address}</span></p>
-            {candidates[0]?.address && candidates[0].address !== venue.address &&
-              <p className="text-xs text-muted-foreground">Extracted address: {candidates[0].address}</p>}
             {!isVerified(venue) && <p className="text-xs text-muted-foreground">{unverifiedNote(venue)}</p>}
             {venue.mentioned === false && <NotMentionedNote />}
           </div>
           <Button variant="ghost" size="sm" disabled={saving} onClick={() => { signals.current.edited = true; setEditing(true); setError(''); }}>Edit</Button>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {/* Two by two, all the same size. Before saving there are three: Create Plan takes the second row. */}
+        <div className="grid grid-cols-2 gap-2 [&>button]:px-2">
           <Button disabled={saving || detailsMatchSaved} onClick={() => void save(venue)}>
             {saving ? 'Saving…' : detailsMatchSaved ? 'Saved to My Venues' : 'Save Venue'}
           </Button>
           <Button variant="outline" onClick={() => startSharing()}>Quick Share</Button>
-          <Button variant="outline" onClick={() => onPlan(venue)}>Create Plan</Button>
+          <Button variant="outline" className={saved ? undefined : 'col-span-2'} onClick={() => onPlan(venue)}>Create Plan</Button>
           {saved && <AddToCollection venueId={saved.id} />}
         </div>
         <AiSaveFeedback value={feedback} onRate={rate} />
       </>}
-      {!sharing && <PhoneCheck link={link} />}
     </DialogContent>
   </Dialog>;
 }

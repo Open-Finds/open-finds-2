@@ -19,8 +19,6 @@ vi.mock('../lib/aiSaveResults', async original => ({ ...(await original<typeof i
 const shotMocks = vi.hoisted(() => ({ shrinkImages: vi.fn() }));
 vi.mock('../lib/screenshotImages', () => shotMocks);
 vi.mock('./ScreenshotSaveDialog', () => ({ ScreenshotSaveDialog: ({ count }: { count: number }) => <p>Screenshot screen: {count} picked</p> }));
-const phone = vi.hoisted(() => ({ probe: vi.fn() }));
-vi.mock('../lib/phoneProbe', async original => ({ ...(await original<typeof import('../lib/phoneProbe')>()), probePost: phone.probe }));
 
 const link = 'https://www.instagram.com/reel/test/';
 const venue = { name: 'Test cafe', address: '1 Test St', type: 'food' as const, link, lat: 1, lon: 2 };
@@ -135,6 +133,19 @@ describe('Shared venue actions', () => {
     expect(mocks.saveSharedVenue.mock.calls).toEqual([[venue, link], [venue, link]]);
     expect(mocks.identifySharedVenue).toHaveBeenCalledOnce();
     expect(mocks.publishVenue).not.toHaveBeenCalled();
+  });
+
+  it('shows the address once and lays the actions out two by two', async () => {
+    mocks.saveSharedVenue.mockResolvedValue(saved);
+    await start({ venue, candidates: [{ ...candidate, address: '1 Test Street, Australia' }] });
+    expect(screen.queryByText(/Extracted address/)).not.toBeInTheDocument();
+    const plan = screen.getByRole('button', { name: 'Create Plan' });
+    expect(plan.parentElement).toHaveClass('grid', 'grid-cols-2');
+    expect(plan).toHaveClass('col-span-2');
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save Venue' })));
+    expect(plan).not.toHaveClass('col-span-2');
+    expect(screen.getByRole('button', { name: 'Add to collection' }).parentElement).toBe(plan.parentElement);
+    expect(plan.parentElement?.children).toHaveLength(4);
   });
 
   it('publishes without saving and reuses the URL after a cancelled share', async () => {
@@ -350,25 +361,6 @@ describe('Confirm the venue choices', () => {
     expect(screen.getByLabelText('Venue name')).toHaveValue('');
     expect(screen.getByLabelText('Address')).toHaveValue('');
     expect(screen.getByLabelText(/search Google Places/)).toHaveValue('');
-  });
-
-  it('shows the phone check, and runs it once, for a TikTok link in the staging test build', async () => {
-    vi.stubEnv('VITE_SUPABASE_URL', 'https://crpkzysdtnoomzimibhe.supabase.co');
-    try {
-      phone.probe.mockResolvedValue({ platform: 'tiktok', via: 'phone', reached: false, error: 'The page answered 429.' });
-      mocks.identifySharedVenue.mockResolvedValueOnce({ venue, candidates: [candidate] });
-      await act(async () => render(<AiSaveDialog link="https://vt.tiktok.com/ZSsFTaXA9/" onClose={vi.fn()} onPlan={vi.fn()} />));
-      expect(screen.getByText('Phone check (test build): done')).toBeInTheDocument();
-      expect(phone.probe).toHaveBeenCalledTimes(1);
-      expect(phone.probe).toHaveBeenCalledWith('https://vt.tiktok.com/ZSsFTaXA9/');
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it('does not show the phone check in a normal build', async () => {
-    await start({ candidates: [], issue: { stage: 'identify', retryable: true } });
-    expect(screen.queryByText(/Phone check/)).not.toBeInTheDocument();
   });
 
   it('never shows what the AI read as a Google choice when Google found nothing', async () => {

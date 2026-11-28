@@ -32,10 +32,10 @@ export function AddToCollection({ venueId }: { venueId: string }) {
     finally { setBusy(false); }
   };
 
-  if (added) return <p role="status" className="text-sm text-muted-foreground">Added to {added}.</p>;
+  if (added) return <p role="status" className="col-span-full self-center text-sm text-muted-foreground">Added to {added}.</p>;
   if (!open) return <Button variant="outline" onClick={() => void openList()}>Add to collection</Button>;
   return (
-    <div className="grid w-full gap-2 rounded-lg border border-border bg-card p-3">
+    <div className="col-span-full grid w-full gap-2 rounded-lg border border-border bg-card p-3">
       <p className="text-sm font-semibold">Add to which collection?</p>
       {collections.map(collection => (
         <Button key={collection.id} variant="outline" disabled={busy} onClick={() => void addTo(collection)}>{collection.name}</Button>
