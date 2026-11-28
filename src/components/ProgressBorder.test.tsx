@@ -1,6 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { linkProgress, ProgressBorder, stepProgress } from './ProgressBorder';
+import { ProgressBorder } from './ProgressBorder';
+import { linkProgress, stepProgress } from '../lib/progressRing';
 
 const run = (shown: number, value: number, toward: number, seconds: number) => {
   for (let t = 0; t < seconds; t += 1 / 60) shown = stepProgress(shown, value, toward, 1 / 60);
@@ -32,18 +33,14 @@ it('reads how far a link search has got from its progress', () => {
   expect(linkProgress({ rows: [] }).value).toBe(0.9);
 });
 
-it('fills the ring and says when it is done', () => {
-  // Drives the animation frames by hand: 1/60 s apart.
-  const frames: FrameRequestCallback[] = [];
-  let now = 0;
-  vi.spyOn(performance, 'now').mockImplementation(() => now);
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => frames.push(callback));
-  vi.stubGlobal('cancelAnimationFrame', () => undefined);
+it('fills the ring on a timer (the share pop-up may get no animation frames) and says when it is done', () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'performance'] });
+  vi.stubGlobal('requestAnimationFrame', () => 0);
   const onFilled = vi.fn();
   render(<ProgressBorder value={1} onFilled={onFilled} />);
-  act(() => { for (let i = 0; i < 300 && frames.length; i++) { now += 1000 / 60; frames.shift()!(now); } });
+  act(() => { vi.advanceTimersByTime(5000); });
   expect(screen.getByRole('progressbar', { name: 'AI Save progress' })).toHaveAttribute('aria-valuenow', '100');
   expect(onFilled).toHaveBeenCalledTimes(1);
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
+  vi.useRealTimers();
 });

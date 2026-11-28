@@ -1,4 +1,5 @@
-import { ProgressBorder, linkProgress } from './ProgressBorder';
+import { ProgressBorder } from './ProgressBorder';
+import { linkProgress } from '../lib/progressRing';
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ImagePlus } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
