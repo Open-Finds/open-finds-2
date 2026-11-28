@@ -33,7 +33,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: 'tab-settings',
     title: 'Bring your friends',
-    body: 'Open your profile and choose Friends and group collections to add friends and share places. When a plan is ready, invite them in the app or share the link. Anyone can RSVP, even without the app.',
+    body: 'Open the menu (☰) and choose Friends and group collections to add friends and share places. When a plan is ready, invite them in the app or share the link. Anyone can RSVP, even without the app.',
   },
   {
     target: 'tab-settings',

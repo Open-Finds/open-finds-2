@@ -22,7 +22,7 @@ import type { SavedVenue } from './lib/supabase';
 import { GuidedTour } from './components/GuidedTour';
 import { CreditPrompt } from './components/CreditPrompt';
 import { fetchUnreadNotificationCount, subscribeToPush, completeOnboarding, updateDietaryPreferences, isSigningUp } from './lib/supabase';
-import { Bell, Settings } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
 
 /*
   Pages most people rarely open (admin, venue portal, subscription and its
@@ -86,7 +86,7 @@ function Shell({
         )}
       </button>}
 
-      {view !== 'home' && view !== 'planner' && view !== 'discover' && !isEditingItinerary && <button aria-label="Settings" onClick={() => onChangeView('settings')} className="ux-icon fixed right-16 top-4 z-40"><Settings size={19} /></button>}
+      {view !== 'home' && view !== 'planner' && view !== 'discover' && !isEditingItinerary && <button aria-label="Settings" onClick={() => onChangeView('settings')} className="ux-icon fixed right-16 top-4 z-40"><Menu size={19} /></button>}
       <MainNavigation view={view} onChange={onChangeView} />
       {guard}
     </>
@@ -377,7 +377,8 @@ function AppInner() {
           <SettingsPage onBack={() => switchView('home')} onFriends={() => switchView('friends')} />
         ) : (
           <VenuesPage initialAdd={openSave} sharedLink={incomingShare} onPlan={(v) => startPlanner('saved', v)}
-            onPlanCollection={(id) => startPlanner('saved', undefined, id)} />
+            onPlanCollection={(id) => startPlanner('saved', undefined, id)}
+            unreadCount={unreadCount} onNotifications={shellProps.onOpenNotifications} onSettings={() => switchView('settings')} />
         )}
       </div>
     </Shell>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrandWordmark } from '../components/BrandWordmark';
-import { ArrowRight, Bell, Bookmark, CalendarDays, ChevronRight, Heart, Plus, Utensils } from 'lucide-react';
+import { ArrowRight, Bookmark, CalendarDays, ChevronRight, Heart, Plus, Utensils } from 'lucide-react';
 import {
   fetchSavedVenues, fetchAllPlans, fetchInvitedPlanIds, fetchPlansByIds, fetchStops, fetchRsvps,
   sortStops, updateSavedVenue, type SavedVenue, type Plan, type Rsvp,
@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { LoadError } from '../components/LoadError';
 import { formatTime, parseLocalDate } from '../lib/time';
 import { VenueDetails } from '../components/VenueDetails';
+import { HeaderActions } from '../components/HeaderActions';
 import { SavedVenueCard } from '../components/SavedVenueCard';
 import { VenueThumb } from '../components/VenueThumb';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
@@ -95,7 +96,9 @@ export function HomeDashboard({
       {detail && <VenueDetails venue={detail} owned={detail.user_id === session?.user.id}
         onClose={() => setDetail(null)} onPlan={() => { onPlan('saved', detail); setDetail(null); }}
         onEdit={() => { setEditing(detail); setDetail(null); }}
-        onSaved={updated => { setDetail(updated); updateVenue(updated); }} />}
+        onSaved={updated => { setDetail(updated); updateVenue(updated); }}
+        related={venues} onOpenVenue={setDetail}
+        unreadCount={unreadCount} onNotifications={onNotifications} onSettings={onSettings} />}
       <Sheet open={!!editing} onOpenChange={open => { if (!open) setEditing(null); }}>
         <SheetContent side="bottom" className="lg:mx-auto lg:max-w-2xl">
           <SheetHeader><SheetTitle>Edit saved venue</SheetTitle><SheetDescription>Changes update your saved library.</SheetDescription></SheetHeader>
@@ -105,11 +108,7 @@ export function HomeDashboard({
 
       <header className="reference-header">
         <BrandWordmark className="reference-wordmark" />
-        <button type="button" onClick={onNotifications} className="reference-bell"
-          aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}>
-          <Bell size={23} />
-          {unreadCount > 0 && <span className="reference-unread">{unreadCount > 9 ? '9+' : unreadCount}</span>}
-        </button>
+        <HeaderActions unreadCount={unreadCount} onNotifications={onNotifications} onSettings={onSettings} tour />
       </header>
 
       <div className="reference-greeting">
@@ -117,10 +116,11 @@ export function HomeDashboard({
           <h1>Hi, <span className="reference-stroke">{firstName}</span></h1>
           <p>{new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
-        <button type="button" data-tour="tab-settings" className="reference-avatar" onClick={onSettings} aria-label="Profile and settings">
-          <span aria-hidden>{firstName.slice(0, 1).toUpperCase()}</span>
+        {/* Just the person's picture: Settings is the menu button above. */}
+        <span className="reference-avatar" aria-hidden>
+          <span>{firstName.slice(0, 1).toUpperCase()}</span>
           {typeof avatar === 'string' && /^https:\/\//i.test(avatar) && <img src={avatar} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.hidden = true; }} />}
-        </button>
+        </span>
       </div>
 
       {state === 'loading' ? <p role="status" className="py-6 text-muted-foreground">Getting your next good plan ready…</p>

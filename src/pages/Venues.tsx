@@ -39,8 +39,9 @@ import { VenueDetails } from '../components/VenueDetails';
 import { CATEGORIES, CATEGORY_LABELS } from '../lib/planner';
 import { categoriesOf } from '../lib/taxonomy';
 
-export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanCollection }: {
+export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanCollection, unreadCount, onNotifications, onSettings }: {
   initialAdd?: boolean; sharedLink?: string | null; onPlan?: (venue: SavedVenue) => void; onPlanCollection?: (id: string) => void;
+  unreadCount?: number; onNotifications?: () => void; onSettings?: () => void;
 }) {
   // Remembered between visits; the fresh copy loads behind it.
   const [venues, setVenues] = useCachedState<SavedVenue[]>('venues', []);
@@ -451,7 +452,8 @@ export function VenuesPage({ initialAdd = false, sharedLink, onPlan, onPlanColle
     <div className="ux-page">
       {detail && <VenueDetails venue={detail} owned={detail.user_id === myId} onClose={() => setDetail(null)}
         onPlan={() => { onPlan?.(detail); setDetail(null); }} onEdit={() => { setEditingId(detail.id); setDetail(null); }}
-        onSaved={(updated) => { setDetail(updated); setVenues((prev) => prev.map((v) => v.id === updated.id ? updated : v)); }} />}
+        onSaved={(updated) => { setDetail(updated); setVenues((prev) => prev.map((v) => v.id === updated.id ? updated : v)); }}
+        related={venues} onOpenVenue={setDetail} unreadCount={unreadCount} onNotifications={onNotifications} onSettings={onSettings} />}
       <div className="mb-5 grid grid-cols-3 gap-2 pt-12" aria-label="Venue categories"><button className={`col-span-3 min-h-11 rounded-full border px-3 text-small ${categoryFilter === 'all' ? 'border-primary bg-primary-soft text-primary-text' : 'border-border'}`} onClick={() => setCategoryFilter('all')}>All venues</button>{CATEGORIES.map((c) => <button key={c} aria-pressed={categoryFilter === c} className={`min-h-11 rounded-full border px-3 text-small ${categoryFilter === c ? 'border-primary bg-primary-soft text-primary-text' : 'border-border'}`} onClick={() => setCategoryFilter(c)} aria-label={CATEGORY_LABELS[c]}>{CATEGORY_SHORT[c]}</button>)}</div>
       <DuplicateVenueDialog
         pending={dupPending}
