@@ -5,7 +5,7 @@ import type { SavedVenue } from '../lib/supabase';
 const update = vi.hoisted(() => vi.fn());
 vi.mock('../lib/supabase', () => ({ updateSavedVenue: update }));
 const share = vi.hoisted(() => ({ publish: vi.fn(), send: vi.fn() }));
-vi.mock('../lib/aiSave', () => ({ publishVenue: share.publish, sendRecommendation: share.send, shareRecommendationOrigin: () => 'https://staging.example.test' }));
+vi.mock('../lib/aiSave', () => ({ publishVenue: share.publish, sendRecommendationLink: share.send, shareRecommendationOrigin: () => 'https://staging.example.test' }));
 import { VenueDetails } from './VenueDetails';
 it('persists visited status and reports the returned record to the library', async () => {
   const venue = { id: 'v', name: 'Fixture café', address: '1 Test St', type: 'food', tags: [], visited: false } as unknown as SavedVenue;
@@ -31,6 +31,7 @@ it('shares an owned saved venue through the existing recommendation RPC path', a
   share.send.mockResolvedValue('shared');
   render(<VenueDetails venue={venue} owned onClose={vi.fn()} onEdit={vi.fn()} onPlan={vi.fn()} onSaved={vi.fn()} />);
   await userEvent.click(screen.getByRole('button', { name: 'Quick Share' }));
-  await waitFor(() => expect(share.send).toHaveBeenCalledWith('Fixture cafe', url));
-  expect(share.publish).toHaveBeenCalledWith({ name: venue.name, address: venue.address, type: venue.type, link: null }, venue.id);
+  await waitFor(() => expect(share.send).toHaveBeenCalledWith(url, 'Fixture cafe'));
+  // The link goes alone (no address text); a venue with no coordinates is flagged as unverified for the public page.
+  expect(share.publish).toHaveBeenCalledWith({ name: venue.name, address: venue.address, type: venue.type, link: null }, venue.id, { unverified: true });
 });

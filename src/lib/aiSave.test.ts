@@ -1,15 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { guestSave, identifySharedVenue, publishVenue, readGuestSave, saveSharedVenue, sendRecommendation, sourceUrl } from './aiSave';
+import { guestSave, identifySharedVenue, searchableName, publishVenue, readGuestSave, saveSharedVenue, sendRecommendation, sendRecommendationLink, sendRecommendationMessage, sourceUrl } from './aiSave';
 import { ProviderUnavailableError } from './providerErrors';
 
 const mocks = vi.hoisted(() => ({
-  extract: vi.fn(), match: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), updateTags: vi.fn(), session: { id: 'test-user' },
+  extract: vi.fn(), byName: vi.fn(), match: vi.fn(), choices: vi.fn(), maps: vi.fn(), lookup: vi.fn(), rpc: vi.fn(), updateTags: vi.fn(), session: { id: 'test-user' },
+  /** Which names the post itself mentions (by default, all of them). */
+  mentioned: { names: null as string[] | null },
 }));
-vi.mock('./openai', () => ({ extractVenuesFromLink: mocks.extract, hasSourceAddress: () => false }));
+vi.mock('./openai', () => ({
+  extractVenuesFromLink: mocks.extract, hasSourceAddress: () => false,
+  mentionedInSource: (_progress: unknown, ...names: string[]) => !mocks.mentioned.names || names.some(name => mocks.mentioned.names!.includes(name)),
+}));
 vi.mock('./apiKeys', () => ({
   isGoogleMapsLink: mocks.maps,
-  verifyVenuePlaceDetailed: async (...args: unknown[]) => ({ match: await mocks.match(...args), candidates: [] }),
+  verifyVenuePlaceDetailed: async (...args: unknown[]) => ({ match: await mocks.match(...args), candidates: mocks.choices(...args) ?? [] }),
 }));
+vi.mock('./aiSaveNameHint', () => ({ findByName: mocks.byName }));
+vi.mock('./edgeAuth', () => ({ edgeAuthHeaders: async () => ({ Authorization: 'Bearer session' }) }));
 vi.mock('./supabase', () => ({
   supabase: {
     auth: { getSession: async () => ({ data: { session: { user: { id: mocks.session.id } } } }) },
@@ -79,6 +86,22 @@ describe('share venue persistence', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it('marks a Google-confirmed venue the post never names, and leaves a named one unmarked', async () => {
+    mocks.lookup.mockResolvedValue({ data: [], error: null });
+    mocks.extract.mockResolvedValue([{ ...venue, name: 'Oyama Ramen' }]);
+    mocks.match.mockResolvedValue({ ...venue, name: 'Oyama Ramen', address: '363 Anzac Parade, Kingsford NSW 2032', lat: 1, lon: 2 });
+    mocks.mentioned.names = ['Ocean Royale'];
+    try {
+      const guessed = await identifySharedVenue(link);
+      expect(guessed.venue).toMatchObject({ name: 'Oyama Ramen', lat: 1, mentioned: false });
+      mocks.mentioned.names = ['Oyama Ramen'];
+      const named = await identifySharedVenue(link + '?again');
+      expect(named.venue?.mentioned).toBeUndefined();
+    } finally {
+      mocks.mentioned.names = null;
+    }
+  });
+
   it('returns the corroborated venue and waits for an explicit save', async () => {
     mocks.lookup.mockResolvedValue({ data: [], error: null });
     mocks.extract.mockResolvedValue([venue]);
@@ -114,6 +137,43 @@ describe('share venue persistence', () => {
       const result = await identifySharedVenue(link);
       expect(searches()).toEqual([false, true]);
       expect(result.venue).toBeDefined();
+    });
+
+    // Regression: with no place in the post, the AI with web search once guessed a US cafe for a UK bakery.
+    it('asks Google for the venue name in the post before the AI with web search guesses where it is', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([{ ...venue, name: 'Boulangerie de Saigon', address: '' }]);
+      mocks.byName.mockResolvedValue({ venue: { ...venue, name: 'Boulangerie de Saigon', address: 'Low Pavement, Nottingham, UK', venueToken: 't' } });
+      const progress = {};
+      const result = await identifySharedVenue(link, progress);
+      expect(searches()).toEqual([false]);
+      expect(mocks.match).not.toHaveBeenCalled();
+      expect(result.venue).toMatchObject({ address: 'Low Pavement, Nottingham, UK' });
+      expect(progress).toMatchObject({ nameSearched: true });
+    });
+
+    it('offers the branches to pick from when several places share the name, and again on a reopened screen', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([{ ...venue, address: '' }]);
+      const choices = [{ ...venue, address: 'Sydney', order: 1, tags: [] }, { ...venue, address: 'Melbourne', order: 2, tags: [] }];
+      mocks.byName.mockResolvedValue({ choices });
+      const progress = {};
+      const first = await identifySharedVenue(link, progress);
+      expect(first).toMatchObject({ choices, issue: { reason: 'ambiguous' } });
+      const again = await identifySharedVenue(link, progress);
+      expect(again.choices).toEqual(choices);
+      expect(mocks.byName).toHaveBeenCalledTimes(1);
+      expect(searches()).toEqual([false]);
+    });
+
+    it('carries on to the AI with web search when the name search finds nothing or fails', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValueOnce([{ ...venue, address: '' }]).mockResolvedValueOnce([venue]);
+      mocks.byName.mockRejectedValue(new Error('down'));
+      mocks.match.mockResolvedValue({ ...venue, lat: 1, lon: 2 });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect((await identifySharedVenue(link)).venue).toBeDefined();
+      expect(searches()).toEqual([false, true]);
     });
 
     it('searches the web once when Google cannot match the plain answer, then checks Google again', async () => {
@@ -192,6 +252,48 @@ describe('share venue persistence', () => {
       expect(result.rows?.[0].venue).toMatchObject({ address: '2 Real St', lat: 1, lon: 2, link, tags: ['pizza'] });
       expect(result.rows?.[1].venue).toMatchObject({ address: '1 Test St, Sydney NSW 2000', lat: null, lon: null });
       expect(mocks.match).toHaveBeenCalledTimes(3);
+    });
+
+    it('marks each row the post never names, confirmed by Google or not', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('Ame'), item('The Palace')]);
+      mocks.match.mockImplementation(async (details: { name: string }) => ({ name: details.name, address: '2 Real St', type: 'food', lat: 1, lon: 2 }));
+      mocks.mentioned.names = ['The Palace'];
+      try {
+        const result = await identifySharedVenue(link);
+        expect(result.rows?.map(row => [row.venue.name, row.verified, row.mentioned])).toEqual([['Ame', true, false], ['The Palace', true, undefined]]);
+      } finally {
+        mocks.mentioned.names = null;
+      }
+    });
+
+    // Update 14 (I2, 25 Nov): @handles reached Google as one word, and Google's closest place was thrown away.
+    it('sends an @handle to Google as words and keeps the original name on screen', async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('connection_n_co.rosebery', 'Rosebery, Sydney'), item('B-side cafe', 'Darling Point, Sydney')]);
+      mocks.match.mockResolvedValue(null);
+      const result = await identifySharedVenue(link);
+      expect(mocks.match.mock.calls.map(([details]) => (details as { name: string }).name)).toEqual(['connection n co rosebery', 'B-side cafe']);
+      expect(result.rows?.[0].venue.name).toBe('connection_n_co.rosebery');
+    });
+
+    it("keeps Google's closest place as a suggestion when it did not confirm the venue", async () => {
+      mocks.lookup.mockResolvedValue({ data: [], error: null });
+      mocks.extract.mockResolvedValue([item('brothersbencafe', 'Petersham, Sydney'), item('A')]);
+      const place = { name: 'Brothers Ben Cafe', address: '1 Crystal St, Petersham NSW 2049', lat: -33.89, lon: 151.15 };
+      mocks.match.mockImplementation(async (details: { name: string }) => details.name === 'A' ? { name: 'A', address: '1 Test St', type: 'food', lat: 1, lon: 2 } : null);
+      mocks.choices.mockImplementation((details: { name: string }) => details.name === 'A' ? [] : [place]);
+      const result = await identifySharedVenue(link);
+      expect(result.rows?.[0]).toMatchObject({ verified: false, suggestion: place, venue: { name: 'brothersbencafe', lat: null } });
+      expect(result.rows?.[1].suggestion).toBeUndefined();
+    });
+
+    it('reads only real handles as handles', () => {
+      expect(searchableName('@b_side_cafe')).toBe('b side cafe');
+      expect(searchableName('sanjava2.0')).toBe('sanjava2 0');
+      expect(searchableName('Feng You')).toBe('Feng You');
+      expect(searchableName('St. Ali Cafe')).toBe('St. Ali Cafe');
+      expect(searchableName('brothersbencafe')).toBe('brothersbencafe');
     });
 
     it('takes at most five venues', async () => {
@@ -325,6 +427,31 @@ describe('share venue persistence', () => {
     await expect(publishVenue(details))
       .resolves.toBe('https://staging.example.test/venue/recommendation-id');
     expect(mocks.rpc).toHaveBeenCalledWith('publish_standalone_venue_recommendation', { p_venue: venue });
+  });
+
+  it('flags an unverified venue in the public link, and only then', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://crpkzysdtnoomzimibhe.supabase.co');
+    vi.stubEnv('VITE_STAGING_RECOMMENDATION_ORIGIN', 'https://staging.example.test');
+    mocks.rpc.mockResolvedValue({ data: 'recommendation-id', error: null });
+    await expect(publishVenue(venue, undefined, { unverified: true }))
+      .resolves.toBe('https://staging.example.test/venue/recommendation-id?u=1');
+    await expect(publishVenue(venue, undefined, { unverified: false }))
+      .resolves.toBe('https://staging.example.test/venue/recommendation-id');
+  });
+
+  it('shares the message and the link as two separate shares', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    try {
+      await expect(sendRecommendationMessage('Down?')).resolves.toBe('shared');
+      await expect(sendRecommendationLink('https://example.com/v/test', 'Yee3')).resolves.toBe('shared');
+      expect(share.mock.calls).toEqual([
+        [{ title: 'Venue recommendation', text: 'Down?' }],
+        [{ title: 'Yee3', url: 'https://example.com/v/test' }],
+      ]);
+    } finally {
+      Reflect.deleteProperty(navigator, 'share');
+    }
   });
 
   it('fails before publishing when a staging URL is missing or points to production', async () => {
@@ -484,5 +611,104 @@ describe('AI Save attempt ids', () => {
     await identifySharedVenue(link, {});
     expect(idsUsed()).toEqual([]);
     expect(localStorage.length).toBe(0);
+  });
+});
+
+describe('saves linked to the shared venue', () => {
+  const stamped = { ...venue, lat: 1, lon: 2, tags: ['category:cafe'], venueToken: 'stamp' };
+  const row = { ...venue, id: 'linked', venue_id: 'shared-1', tags: [] as string[] };
+
+  it('saves a stamped Google place through save-verified-venue', async () => {
+    const fetchMock = vi.fn(async () => Response.json(row));
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.updateTags.mockResolvedValue({ ...row, tags: ['category:cafe'] });
+    await expect(saveSharedVenue(stamped, link)).resolves.toMatchObject({ id: 'linked' });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/functions\/v1\/save-verified-venue$/);
+    expect(JSON.parse(String(init.body))).toEqual({
+      venueToken: 'stamp', name: 'Cafe', address: '1 Test St', type: 'food', link, category: 'cafe',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to the usual save when the linked save is refused', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'invalid_venue_token' }, { status: 400 })));
+    mocks.rpc.mockResolvedValue({ data: { ...row, id: 'plain', venue_id: null }, error: null });
+    mocks.updateTags.mockImplementation(async (id: string, patch: object) => ({ ...row, id, venue_id: null, ...patch }));
+    await expect(saveSharedVenue(stamped, link)).resolves.toMatchObject({ id: 'plain' });
+    expect(mocks.rpc).toHaveBeenCalledWith('save_shared_venue', {
+      p_venue: { name: 'Cafe', address: '1 Test St', type: 'food', lat: 1, lon: 2, link },
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back when the network fails, and never sends the stamp to the database', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    mocks.rpc.mockResolvedValue({ data: { ...row, id: 'plain' }, error: null });
+    await saveSharedVenue(stamped, link);
+    expect(JSON.stringify(mocks.rpc.mock.calls)).not.toContain('stamp');
+    vi.unstubAllGlobals();
+  });
+
+  it('saves an unstamped venue the usual way without calling the server', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.rpc.mockResolvedValue({ data: { ...row, id: 'plain' }, error: null });
+    await saveSharedVenue(venue, link);
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});
+
+const slideMock = vi.hoisted(() => ({ find: vi.fn() }));
+vi.mock('./aiSaveSlides', () => ({ findFromSlides: slideMock.find }));
+
+describe('carousel slide reading (backup step)', () => {
+  const carousel = 'https://www.instagram.com/p/carousel/';
+  const slides = ['https://x.cdninstagram.com/1.jpg', 'https://x.cdninstagram.com/2.jpg'];
+  const slideRow = { venue: { ...venue, name: 'Phuong 18', link: carousel }, verified: true };
+  const post = (items: unknown[], withSlides = true) => mocks.extract.mockImplementation(async (_url: string, options: { progress: Record<string, unknown> }) => {
+    options.progress.metadata = { platform: 'instagram', ...(withSlides ? { slides } : {}) };
+    return items;
+  });
+  const setup = () => { mocks.lookup.mockResolvedValue({ data: [], error: null }); mocks.maps.mockReturnValue(false); };
+
+  it('reads the slides when the post gives nothing to save, and keeps the result for a reopened screen', async () => {
+    setup();
+    post([]);
+    slideMock.find.mockResolvedValue([slideRow]);
+    const progress = {};
+    expect((await identifySharedVenue(carousel, progress)).rows).toEqual([slideRow]);
+    expect(slideMock.find).toHaveBeenCalledOnce();
+    mocks.extract.mockClear();
+    expect((await identifySharedVenue(carousel, progress)).rows).toEqual([slideRow]);
+    expect(slideMock.find).toHaveBeenCalledOnce();
+    expect(mocks.extract).not.toHaveBeenCalled();
+  });
+
+  it('never reads the slides when the usual reading found a venue', async () => {
+    setup();
+    post([{ name: 'Cafe', address: '1 Test St', type: 'food', order: 1, tags: [] }]);
+    mocks.match.mockResolvedValue({ name: 'Cafe', address: '1 Test St', lat: 1, lon: 2 });
+    expect((await identifySharedVenue(carousel, {})).venue?.name).toBe('Cafe');
+    expect(slideMock.find).not.toHaveBeenCalled();
+  });
+
+  it('never runs for a post that is not a carousel', async () => {
+    setup();
+    post([], false);
+    await identifySharedVenue(carousel, {});
+    expect(slideMock.find).not.toHaveBeenCalled();
+  });
+
+  it('keeps the usual result when the slides give nothing, or reading them fails', async () => {
+    setup();
+    post([]);
+    slideMock.find.mockResolvedValueOnce(null);
+    expect((await identifySharedVenue(carousel, {})).issue?.stage).toBe('identify');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    slideMock.find.mockRejectedValueOnce(new Error('AI down'));
+    expect((await identifySharedVenue(carousel, {})).issue?.stage).toBe('identify');
   });
 });

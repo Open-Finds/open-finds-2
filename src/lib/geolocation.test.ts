@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { locateUser, GeolocationFailure } from './geolocation';
+import { locateUser, GeolocationFailure, quietLocation } from './geolocation';
 
 type Outcome = { pos: [number, number] } | { code: number };
 
@@ -53,5 +53,36 @@ describe('locateUser', () => {
 
   it('explains when the device has no geolocation at all', async () => {
     await expect(locateUser()).rejects.toMatchObject({ reason: 'unsupported' });
+  });
+});
+
+describe('quietLocation', () => {
+  const permission = (state: string | null) => Object.defineProperty(navigator, 'permissions', {
+    value: state ? { query: vi.fn(async () => ({ state })) } : undefined, configurable: true,
+  });
+  afterEach(() => permission(null));
+
+  it('never asks for location: nothing unless the user already allowed it', async () => {
+    const seen = mockGeolocation();
+    for (const state of ['prompt', 'denied']) {
+      permission(state);
+      expect(await quietLocation()).toBeNull();
+    }
+    permission(null);
+    expect(await quietLocation()).toBeNull();
+    expect(seen).toHaveLength(0);
+  });
+
+  it('gives a quick, coarse position rounded to about 1 km when allowed', async () => {
+    permission('granted');
+    const seen = mockGeolocation({ pos: [52.953123, -1.149876] });
+    expect(await quietLocation()).toEqual({ lat: 52.95, lon: -1.15 });
+    expect(seen[0]).toMatchObject({ enableHighAccuracy: false, timeout: 3000 });
+  });
+
+  it('gives nothing (no error) when the phone cannot get a fix', async () => {
+    permission('granted');
+    mockGeolocation({ code: 3 });
+    expect(await quietLocation()).toBeNull();
   });
 });

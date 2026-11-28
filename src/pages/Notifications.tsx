@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, CheckCheck, ChevronLeft } from 'lucide-react';
+import { Bell, CheckCheck, ChevronLeft, X } from 'lucide-react';
 import {
   fetchNotifications, markNotificationRead, markAllNotificationsRead,
   type NotificationItem,
@@ -8,9 +8,13 @@ import { navigate } from '../lib/router';
 import { useAuth } from '../context/AuthContext';
 import { hasCached, useCachedState } from '../lib/cache';
 import { LoadError } from '../components/LoadError';
+import { describeItem, removeFromInbox, useAiSaveInbox, type AiSaveItem } from '../lib/aiSaveInbox';
 
-export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => void; onOpenFriends: () => void }) {
-  const { refreshProfile } = useAuth();
+export function NotificationsPage({ onBack, onOpenFriends, onOpenAiSave }: {
+  onBack: () => void; onOpenFriends: () => void; onOpenAiSave: (item: AiSaveItem) => void;
+}) {
+  const { refreshProfile, session } = useAuth();
+  const aiSaves = useAiSaveInbox(session?.user.id);
   const [notifications, setNotifications] = useCachedState<NotificationItem[]>('notifications', []);
   // Seen before: show that while the fresh list loads.
   const [loading, setLoading] = useState(() => !hasCached('notifications'));
@@ -111,11 +115,42 @@ export function NotificationsPage({ onBack, onOpenFriends }: { onBack: () => voi
           )}
         </div>
 
+        {aiSaves.length > 0 && (
+          <section aria-label="AI Save" className="mb-4 space-y-2">
+            {aiSaves.map((item) => {
+              const { title, body, ready } = describeItem(item);
+              return (
+                <div key={item.link} className="flex items-stretch gap-1 rounded-md border border-border bg-card">
+                  <button
+                    onClick={() => onOpenAiSave(item)}
+                    disabled={!ready}
+                    className="flex min-w-0 flex-1 items-start gap-3 rounded-md p-4 text-left"
+                  >
+                    <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${ready ? 'bg-primary' : 'bg-transparent'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm font-bold text-foreground">{title}</p>
+                      <p className="mt-0.5 text-sm text-muted-foreground">{body}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">AI Save · {formatTime(new Date(item.at).toISOString())}</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => void removeFromInbox(item.link)}
+                    aria-label={`Remove ${title}`}
+                    className="flex size-11 shrink-0 items-center justify-center self-center rounded-full text-muted-foreground hover:bg-muted"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              );
+            })}
+          </section>
+        )}
+
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : failed && notifications.length === 0 ? (
           <LoadError onRetry={load} />
-        ) : notifications.length === 0 ? (
+        ) : notifications.length === 0 ? aiSaves.length === 0 && (
           <div className="rounded-lg border border-border bg-card p-8 text-center">
             <Bell size={32} className="mx-auto mb-3 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">No notifications yet.</p>

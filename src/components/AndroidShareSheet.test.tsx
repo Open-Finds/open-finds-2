@@ -6,12 +6,17 @@ import type { SharedVenue, SharedVenueProgress } from '../lib/aiSave';
 
 const mocks = vi.hoisted(() => ({
   owner: undefined as string | undefined,
+  loaded: [] as string[],
   listeners: new Map<string, () => void>(),
   getShare: vi.fn(),
   remember: vi.fn().mockResolvedValue(undefined),
   dismiss: vi.fn().mockResolvedValue(undefined),
   openPlan: vi.fn().mockResolvedValue(undefined),
   takePlan: vi.fn(),
+  working: vi.fn().mockResolvedValue(undefined),
+  background: vi.fn().mockResolvedValue({ moved: true }),
+  ready: vi.fn().mockResolvedValue(undefined),
+  getImages: vi.fn().mockResolvedValue({ images: ['data:image/jpeg;base64,AAAA'] }),
 }));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ session: mocks.owner ? { user: { id: mocks.owner } } : null, loading: false }),
@@ -30,11 +35,15 @@ vi.mock('../lib/aiSave', async original => ({
 const link = 'https://www.instagram.com/reel/example/';
 const sharedVenue = { name: 'Test Cafe', address: '1 Test St', type: 'food', link } as const;
 vi.mock('./AiSaveDialog', () => ({
-  AiSaveDialog: ({ link, initialProgress, onProgress, onPlan, onClose }: {
-    link: string; initialProgress?: SharedVenueProgress; onProgress: (progress: SharedVenueProgress) => void;
+  AiSaveDialog: ({ link, sharedText, initialProgress, onProgress, onPlan, onClose, onBackground, onReady, closeRequest }: {
+    link: string; sharedText?: string; initialProgress?: SharedVenueProgress; onProgress: (progress: SharedVenueProgress) => void;
     onPlan: (venue: SharedVenue) => void; onClose: () => void;
+    onBackground: () => Promise<boolean>; onReady: (found: boolean) => void; closeRequest: number;
   }) => <>
-    <p>{link}</p><p>{initialProgress?.verified?.name}</p>
+    <p data-testid="close-requests">{closeRequest}</p>
+    <button onClick={() => { void onBackground(); }}>Go behind</button>
+    <button onClick={() => onReady(true)}>Ready</button>
+    <p>{link}</p><p>{initialProgress?.verified?.name}</p><p data-testid="shared-text">{'shared: ' + (sharedText ?? '')}</p>
     <button onClick={() => onProgress({ verified: sharedVenue })}>Finish verification</button>
     <button onClick={() => onProgress({ candidates: [{ ...sharedVenue, order: 1, tags: [] }], identification: { structuredAddress: true } })}>Pause verification</button>
     <button onClick={() => onPlan(sharedVenue)}>Create Plan</button>
@@ -42,8 +51,17 @@ vi.mock('./AiSaveDialog', () => ({
   </>,
 }));
 
+vi.mock('./ScreenshotSaveDialog', () => ({
+  ScreenshotSaveDialog: ({ count, loadImages, onClose }: { count: number; loadImages: () => Promise<string[]>; onClose: () => void }) => <>
+    <p>{count} screenshots</p>
+    <button onClick={() => { void loadImages().then(images => mocks.loaded.push(...images)); }}>Load</button>
+    <button onClick={onClose}>Close screenshots</button>
+  </>,
+}));
+
 beforeEach(() => {
   mocks.owner = undefined;
+  mocks.loaded.length = 0;
   mocks.listeners.clear();
   mocks.getShare.mockReset().mockResolvedValue({});
   mocks.takePlan.mockReset().mockResolvedValue({});
@@ -59,6 +77,8 @@ it('keeps the shared link through sign-in and dismisses through the Android acti
   mocks.owner = 'owner';
   await act(async () => view.rerender(<AndroidShareSheet initialShare={initialShare} />));
   expect(screen.getByText(link)).toBeInTheDocument();
+  // The whole shared text (TikTok puts the caption beside the link) goes to AI Save, not only the link.
+  expect(screen.getByTestId('shared-text')).toHaveTextContent('shared: Shared from Instagram ' + link);
   fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
   expect(mocks.dismiss).toHaveBeenCalledOnce();
   expect(mocks.dismiss).toHaveBeenCalledWith({ id: 'first' });
@@ -114,6 +134,24 @@ it('checkpoints source address evidence for a verification retry after recreatio
   });
 });
 
+it('passes background search, readiness and the back button between Android and the search screen', async () => {
+  mocks.owner = 'owner';
+  await act(async () => { render(<AndroidShareSheet initialShare={{ id: 'first', text: link }} />); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Go behind' })); });
+  fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+  expect(mocks.background).toHaveBeenCalledWith({ id: 'first' });
+  expect(mocks.ready).toHaveBeenCalledWith({ id: 'first', found: true });
+  await act(async () => mocks.listeners.get('close')?.());
+  expect(screen.getByTestId('close-requests')).toHaveTextContent('1');
+});
+
+it('gives each share its own screen, so a search in the background is not replaced', () => {
+  const manifest = readFileSync('android/app/src/main/AndroidManifest.xml', 'utf8');
+  expect(manifest).toContain('android:documentLaunchMode="always"');
+  expect(manifest).toContain('android:foregroundServiceType="shortService"');
+  expect(manifest).toContain('android.permission.POST_NOTIFICATIONS');
+});
+
 it('registers the Android send intent on the translucent activity and keeps launcher routing separate', () => {
   const parser = new DOMParser();
   const manifest = parser.parseFromString(readFileSync('android/app/src/main/AndroidManifest.xml', 'utf8'), 'application/xml');
@@ -121,11 +159,28 @@ it('registers the Android send intent on the translucent activity and keeps laun
   const activity = (name: string) => [...manifest.getElementsByTagName('activity')].find(node => node.getAttributeNS(ns, 'name') === name);
   const actions = (name: string) => [...activity(name)!.getElementsByTagName('action')].map(node => node.getAttributeNS(ns, 'name'));
   expect(actions('.MainActivity')).toEqual(['android.intent.action.MAIN']);
-  expect(actions('.ShareActivity')).toEqual(['android.intent.action.SEND']);
+  // Links (text), and screenshots: one picture or several.
+  expect(actions('.ShareActivity')).toEqual(['android.intent.action.SEND', 'android.intent.action.SEND', 'android.intent.action.SEND_MULTIPLE']);
   expect(activity('.ShareActivity')?.getAttributeNS(ns, 'theme')).toBe('@style/AppTheme.Share');
-  expect(activity('.ShareActivity')?.getElementsByTagName('data')[0].getAttributeNS(ns, 'mimeType')).toBe('text/plain');
+  expect([...activity('.ShareActivity')!.getElementsByTagName('data')].map(node => node.getAttributeNS(ns, 'mimeType')))
+    .toEqual(['text/plain', 'image/*']);
   const styles = readFileSync('android/app/src/main/res/values/styles.xml', 'utf8');
   expect(styles).toContain('<item name="android:windowIsTranslucent">true</item>');
   expect([...manifest.getElementsByTagName('uses-permission')].map(node => node.getAttributeNS(ns, 'name')))
     .not.toContain('android.permission.SYSTEM_ALERT_WINDOW');
 });
+
+it('opens AI Save from screenshots when pictures are shared instead of a link, after sign-in', async () => {
+  const share = { id: 'shots-1', images: 3 };
+  const { rerender } = render(<AndroidShareSheet initialShare={share} />);
+  expect(screen.getByText('Sign in to continue with these screenshots.')).toBeInTheDocument();
+  mocks.owner = 'user-1';
+  rerender(<AndroidShareSheet initialShare={share} />);
+  expect(screen.getByText('3 screenshots')).toBeInTheDocument();
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Load' })));
+  expect(mocks.getImages).toHaveBeenCalledWith({ id: 'shots-1' });
+  expect(mocks.loaded).toEqual(['data:image/jpeg;base64,AAAA']);
+  fireEvent.click(screen.getByRole('button', { name: 'Close screenshots' }));
+  expect(mocks.dismiss).toHaveBeenCalledWith({ id: 'shots-1' });
+});
+

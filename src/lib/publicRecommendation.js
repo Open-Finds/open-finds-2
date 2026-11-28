@@ -42,3 +42,14 @@ export function publicVenueLink(value) {
     return null;
   }
 }
+
+/**
+ * The venue's name as a friend should read it: AI Save sometimes leaves separators on the end
+ * ("Yee3 • World Square •"), which look like a mistake in a card title.
+ */
+export function cleanVenueName(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s•·|,;:–—-]+/u, '')
+    .replace(/[\s•·|,;:–—-]+$/u, '');
+}

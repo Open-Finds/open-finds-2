@@ -1,7 +1,12 @@
-import { isGoogleMapsLink, verifyVenuePlaceDetailed } from './apiKeys';
-import { extractVenuesFromLink, hasSourceAddress, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
+import { isGoogleMapsLink, verifyVenuePlaceDetailed, type GooglePlaceChoice } from './apiKeys';
+import { findBranches } from './aiSaveBranches';
+import { findFromSlides } from './aiSaveSlides';
+import { findByName } from './aiSaveNameHint';
+import { edgeAuthHeaders } from './edgeAuth';
+import { categoryOf } from './taxonomy';
+import { extractVenuesFromLink, hasSourceAddress, mentionedInSource, type ExtractedVenueItem, type VenueExtractionProgress } from './openai';
 import { supabase, updateSavedVenue, type SavedVenue, type VenueType } from './supabase';
-import { shareOrCopy } from './invite';
+import { shareOrCopy, shareTextOnly } from './invite';
 import { ProviderUnavailableError, type ProviderReason } from './providerErrors';
 import { attemptIdFor, forgetAttempt } from './attemptId';
 import { recommendationOrigin, recommendationPath, stagingSupabase } from './publicRecommendation.js';
@@ -22,10 +27,36 @@ export function sourceUrl(input: string): string {
   return url.href;
 }
 
-export async function saveSharedVenue(venue: PublicVenue & { tags?: string[] }, link: string, position?: { lat: number; lon: number }): Promise<SavedVenue> {
-  const { tags, ...details } = venue;
-  const { data, error } = await supabase.rpc('save_shared_venue', {
-    p_venue: { ...details, ...position, link: sourceUrl(link) },
+/**
+ * Saves a Google place through save-verified-venue, which links the save to the shared venue record.
+ * Null when that is not possible (no stamp, expired stamp, service down): the caller then saves it the usual way.
+ */
+async function saveVerifiedVenue(venue: SharedVenue, link: string): Promise<SavedVenue | null> {
+  try {
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-verified-venue`, {
+      method: 'POST',
+      headers: await edgeAuthHeaders(),
+      body: JSON.stringify({
+        venueToken: venue.venueToken, name: venue.name, address: venue.address, type: venue.type, link,
+        category: categoryOf({ type: venue.type, tags: venue.tags ?? [], name: venue.name }),
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    const row = await res.json().catch(() => null);
+    return row && typeof row.id === 'string' ? row as SavedVenue : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSharedVenue(venue: SharedVenue, link: string, position?: { lat: number; lon: number }): Promise<SavedVenue> {
+  const { tags, venueToken, ...details } = venue;
+  // A Google place with its stamp is saved linked to the shared venue; anything else, or any failure there,
+  // is saved exactly as before (unlinked), so a venue is never lost.
+  const linked = venueToken && !position ? await saveVerifiedVenue(venue, sourceUrl(link)) : null;
+  const { data, error } = linked ? { data: linked, error: null } : await supabase.rpc('save_shared_venue', {
+    p_venue: { name: details.name, address: details.address, type: details.type, lat: details.lat ?? null, lon: details.lon ?? null, ...position, link: sourceUrl(link) },
   });
   if (error || !data) throw error ?? new Error('Saving returned no venue.');
   // The save ends this AI Save attempt: the next intentional save of the link starts a new one.
@@ -45,7 +76,11 @@ export async function saveSharedVenue(venue: PublicVenue & { tags?: string[] }, 
   return row;
 }
 
-export type SharedVenue = PublicVenue & { lat?: number | null; lon?: number | null; tags?: string[] };
+export type SharedVenue = PublicVenue & {
+  lat?: number | null; lon?: number | null; tags?: string[]; venueToken?: string;
+  /** false: Google found this place, but the post never names it (the AI found it elsewhere). Missing means named or unknown. */
+  mentioned?: boolean;
+};
 
 export type SharedVenueProgress = {
   checkedSaved?: boolean;
@@ -58,10 +93,31 @@ export type SharedVenueProgress = {
   searched?: boolean;
   /** A post that names several venues: each one, checked against Google. Kept so a reopened dialog does not check again. */
   rows?: VenueRow[];
+  /** The carousel's slide pictures have been read by the AI, so they are not read (or paid for) again. */
+  slidesRead?: boolean;
+  /** The name-first Google search has run for this attempt (see aiSaveNameHint). */
+  nameSearched?: boolean;
+  /** Google's places for the post's venue name when there are several (a chain): kept so a reopened screen offers them again. */
+  nameChoices?: ExtractedVenueItem[];
 };
 
 /** One venue from a post that names several: the details to save, and whether Google confirmed them. */
-export type VenueRow = { venue: SharedVenue; verified: boolean };
+export type VenueRow = {
+  venue: SharedVenue; verified: boolean; /** false: the post never names this venue. */ mentioned?: boolean;
+  /** Google's closest place when it did not confirm this venue. Offered as "Is this it?", never ticked for the user. */
+  suggestion?: GooglePlaceChoice;
+};
+
+/**
+ * A venue name the AI copied from an @handle ("connection_n_co.rosebery", "@b_side_cafe") reads to Google as words
+ * ("connection n co rosebery"). Any other name is sent as it is.
+ */
+export function searchableName(name: string): string {
+  const trimmed = name.trim();
+  const handle = trimmed.startsWith('@') || (!/\s/.test(trimmed) && /[_.]/.test(trimmed));
+  if (!handle) return trimmed;
+  return trimmed.replace(/^@+/, '').replace(/[_.]+/g, ' ').replace(/\s+/g, ' ').trim() || trimmed;
+}
 
 /** The most venues taken from one post. */
 export const MAX_VENUES = 5;
@@ -76,13 +132,14 @@ async function verifyEach(items: ExtractedVenueItem[], link: string, attemptId: 
   const settled = await Promise.allSettled(items.map(async (item): Promise<VenueRow> => {
     if (!item.address.trim()) return { venue: read(item), verified: false };
     const check = await verifyVenuePlaceDetailed({
-      name: item.name, address: item.address, outdoor: item.type === 'activity',
+      name: searchableName(item.name), address: item.address, outdoor: item.type === 'activity',
       addressFromSource: hasSourceAddress(identification, item.address),
     }, attemptId);
     const match = check.match;
+    const mentioned = mentionedInSource(identification, item.name, match?.name ?? item.name);
     return match
-      ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon }, verified: true }
-      : { venue: read(item), verified: false };
+      ? { venue: { ...read(item), name: match.name, address: match.address, type: match.type ?? item.type, lat: match.lat, lon: match.lon, venueToken: match.venueToken, ...(mentioned ? {} : { mentioned: false }) }, verified: true, ...(mentioned ? {} : { mentioned: false }) }
+      : { venue: read(item), verified: false, ...(mentioned ? {} : { mentioned: false }), ...(check.candidates[0] ? { suggestion: check.candidates[0] } : {}) };
   }));
   const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (failures.length === settled.length) throw failures[0].reason;
@@ -138,7 +195,37 @@ async function previouslySaved(link: string): Promise<SavedVenue | undefined> {
   return data?.length === 1 ? data[0] as SavedVenue : undefined;
 }
 
+/** Reasons that describe the venue. Anything else is a service problem, which the slide step never runs after. */
+const VENUE_REASONS = new Set(['needs_review', 'no_match', 'ambiguous']);
+
+/** Nothing in the result can be saved as it is: no venue, no choice, and no venue with an address. */
+function nothingToSave(result: SharedVenueResult): boolean {
+  if (result.saved || result.venue || result.choices?.length) return false;
+  if (result.issue?.reason && !VENUE_REASONS.has(result.issue.reason)) return false;
+  return !result.candidates.some(item => item.address?.trim()) && !result.rows?.some(row => row.venue.address.trim());
+}
+
 export async function identifySharedVenue(input: string, progress: SharedVenueProgress = {}): Promise<SharedVenueResult> {
+  const result = await identifyFromPost(input, progress);
+  // Backup for a carousel whose venues are only on its pictures (see aiSaveSlides). Runs at most once per attempt.
+  if (!progress.slidesRead && progress.identification?.metadata?.slides?.length && nothingToSave(result)) {
+    progress.slidesRead = true;
+    try {
+      const rows = await findFromSlides(progress.identification, sourceUrl(input), progress.attemptId, MAX_VENUES);
+      if (rows) {
+        // Kept, so a reopened screen shows these without asking the AI again.
+        progress.rows = rows;
+        progress.candidates ??= result.candidates;
+        return { rows, candidates: result.candidates };
+      }
+    } catch (cause) {
+      console.warn('[ai-save] slide reading failed; keeping the usual result', cause);
+    }
+  }
+  return result;
+}
+
+async function identifyFromPost(input: string, progress: SharedVenueProgress): Promise<SharedVenueResult> {
   let stage: SharedVenueIssue['stage'] = 'identify';
   let link: string | undefined;
   try {
@@ -162,11 +249,36 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
       verifySeparately: true, progress: progress.identification, attemptId: progress.attemptId, search,
     });
     let readByAI = false;
+    // Several Google places share the post's venue name: the user picks (see below).
+    const nameChoices = (choices: ExtractedVenueItem[]): SharedVenueResult =>
+      ({ candidates: choices, choices, issue: { stage: 'verify', retryable: false, reason: 'ambiguous' } });
+    if (progress.nameChoices && !progress.verified) return nameChoices(progress.nameChoices);
     if (!mapsLink && !progress.candidates) {
       progress.identification ??= {};
       readByAI = true;
       progress.candidates = await identify(false);
       if (!hasAddressEvidence(progress.candidates)) {
+        // Name first: Google's search for the venue name (ranked near the phone) before any AI guess about where it is.
+        if (!progress.nameSearched) {
+          progress.nameSearched = true;
+          stage = 'lookup';
+          let byName: Awaited<ReturnType<typeof findByName>> = null;
+          try {
+            byName = await findByName(progress.candidates, progress.identification, url, progress.attemptId);
+          } catch (cause) {
+            console.warn('[ai-save] name search failed; carrying on as before', cause);
+          }
+          stage = 'identify';
+          if (byName && 'venue' in byName) {
+            progress.verified = byName.venue;
+            progress.candidates = [{ ...byName.venue, order: 1, tags: byName.venue.tags ?? [] }];
+            return { venue: progress.verified, candidates: progress.candidates };
+          }
+          if (byName) {
+            progress.nameChoices = byName.choices;
+            return nameChoices(byName.choices);
+          }
+        }
         progress.searched = true;
         progress.candidates = await identify(true);
       }
@@ -174,7 +286,9 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
     // A post that names several venues: check each one, and let the user tick which to save.
     if (!mapsLink && !progress.verified && (progress.rows || (progress.candidates?.length ?? 0) > 1)) {
       stage = 'verify';
-      progress.rows ??= await verifyEach((progress.candidates ?? []).slice(0, MAX_VENUES), url, progress.attemptId, progress.identification);
+      // findBranches changes nothing unless every venue lacks an address (see aiSaveBranches).
+      progress.rows ??= await findBranches(await verifyEach((progress.candidates ?? []).slice(0, MAX_VENUES), url, progress.attemptId, progress.identification),
+        progress.identification, url, progress.attemptId, MAX_VENUES);
       return { rows: progress.rows, candidates: progress.candidates ?? [] };
     }
     if (!progress.verified) {
@@ -211,7 +325,7 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
           // Google's places for this search are the choices to offer; nothing is saved from them automatically.
           const choices: ExtractedVenueItem[] = check.candidates.map((place, index) => ({
             name: place.name, address: place.address, type: place.type ?? candidate?.type ?? 'food',
-            order: index + 1, tags: [], lat: place.lat, lon: place.lon,
+            order: index + 1, tags: [], lat: place.lat, lon: place.lon, venueToken: place.venueToken,
           }));
           return {
             candidates: choices.length ? choices : candidates,
@@ -219,9 +333,12 @@ export async function identifySharedVenue(input: string, progress: SharedVenuePr
             issue: { stage, retryable: false, reason: check.reason ?? 'no_match', ...(check.weak ? { weak: true } : {}) },
           };
         }
+        // Google confirms the place exists; whether the post names it is a separate question.
+        const mentioned = mentionedInSource(progress.identification, candidate?.name ?? match.name, match.name);
         progress.verified = {
           name: match.name, address: match.address, link,
           type: match.type ?? candidate?.type ?? 'activity', lat: match.lat, lon: match.lon, tags: candidate?.tags ?? [],
+          venueToken: match.venueToken, ...(mentioned ? {} : { mentioned: false }),
         };
         progress.candidates ??= [{ ...progress.verified, order: 1, tags: [] }];
         break;
@@ -251,14 +368,18 @@ export function shareRecommendationOrigin(): string | null {
     import.meta.env.VITE_RECOMMENDATION_ORIGIN, import.meta.env.VITE_STAGING_RECOMMENDATION_ORIGIN);
 }
 
-export async function publishVenue({ name, address, type, link }: PublicVenue, savedVenueId?: string): Promise<string> {
+/**
+ * The public link for a venue. `unverified` adds a flag the public page reads to say Google has not confirmed the address;
+ * the flag only changes a label, never what is shown about the venue.
+ */
+export async function publishVenue({ name, address, type, link }: PublicVenue, savedVenueId?: string, options: { unverified?: boolean } = {}): Promise<string> {
   const origin = shareRecommendationOrigin();
   if (!origin) throw new Error('Public recommendation URL is unavailable.');
   const { data, error } = savedVenueId
     ? await supabase.rpc('publish_venue_recommendation', { p_venue_id: savedVenueId })
     : await supabase.rpc('publish_standalone_venue_recommendation', { p_venue: { name, address, type, link } });
   if (error || typeof data !== 'string') throw error ?? new Error('No share link returned.');
-  return origin + recommendationPath(data, import.meta.env.VITE_SUPABASE_URL === stagingSupabase);
+  return origin + recommendationPath(data, import.meta.env.VITE_SUPABASE_URL === stagingSupabase) + (options.unverified ? '?u=1' : '');
 }
 
 export async function readPublicVenue(id: string): Promise<PublicVenue | null> {
@@ -279,6 +400,16 @@ export function readGuestSave(id: string): PublicVenue | null {
   } catch {
     return null;
   }
+}
+
+/** Step one of a Quick Share: the optional message, on its own. */
+export function sendRecommendationMessage(message: string) {
+  return shareTextOnly('Venue recommendation', message);
+}
+
+/** Step two: the link alone, so the other app shows it as a preview card instead of a long address. */
+export function sendRecommendationLink(url: string, title = 'Venue recommendation') {
+  return shareOrCopy(title, '', url);
 }
 
 export function sendRecommendation(message: string, url: string) {

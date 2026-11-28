@@ -376,6 +376,46 @@ describe('what differs between the deployed functions', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  describe('AI Save slide pictures', () => {
+    const picture = (url: string) => ({ type: 'image_url', image_url: { url, detail: 'auto' } });
+    const send = async (m: Module, content: unknown, role = 'user') => m.withStagingProviderControls('ai-proxy', async () => {
+      await m.providerFetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST', body: JSON.stringify({ model: 'openai/gpt-4o-mini', messages: [{ role, content }] }),
+      });
+      return Response.json({ ok: true });
+    })(post({ purpose: 'extract' }));
+
+    it('passes Instagram pictures through to the plain mini model', async () => {
+      const m = await load(stagingEnv, 'AI_PROXY');
+      vi.mocked(fetch).mockResolvedValue(Response.json({ choices: [] }));
+      const content = [{ type: 'text', text: 'Read the venues' }, picture('https://scontent.cdninstagram.com/a.jpg')];
+      expect((await send(m, content)).status).toBe(200);
+      expect(sentBody()).toMatchObject({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content }] });
+    });
+
+    it('passes shared screenshots (larger than the 8 KB text cap) through to the plain mini model', async () => {
+      const m = await load(stagingEnv, 'AI_PROXY');
+      vi.mocked(fetch).mockResolvedValue(Response.json({ choices: [] }));
+      const shot = picture('data:image/jpeg;base64,' + 'A'.repeat(200_000));
+      const content = [{ type: 'text', text: 'Read the venues' }, shot, shot];
+      expect((await send(m, content)).status).toBe(200);
+      expect(sentBody()).toMatchObject({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content }] });
+    });
+
+    it.each([
+      ['a picture outside Instagram', [picture('https://evil.example.com/a.jpg')], 'user'],
+      ['more than six pictures', Array.from({ length: 7 }, (_, i) => picture(`https://x.cdninstagram.com/${i}.jpg`)), 'user'],
+      ['a screenshot that is not an image', [picture('data:text/html;base64,PGgxPg==')], 'user'],
+      ['a screenshot over the size limit', [picture('data:image/jpeg;base64,' + 'A'.repeat(1_500_001))], 'user'],
+      ['a long text hidden beside a screenshot', [{ type: 'text', text: 'x'.repeat(9000) }, picture('data:image/png;base64,AAAA')], 'user'],
+      ['pictures in a system message', [picture('https://x.cdninstagram.com/a.jpg')], 'system'],
+    ])('refuses %s', async (_name, content, role) => {
+      const m = await load(stagingEnv, 'AI_PROXY');
+      expect((await send(m, content, role)).status).toBe(413);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
   it('ai-proxy is open to extraction only, and never spends credits', async () => {
     const m = await load(stagingEnv, 'AI_PROXY');
     const wrapped = m.withStagingProviderControls('ai-proxy', ok);

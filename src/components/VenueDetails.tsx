@@ -4,7 +4,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { updateSavedVenue, type SavedVenue } from '../lib/supabase';
 import { linkHref } from '../lib/links';
 import { savedCandidate, CATEGORY_LABELS } from '../lib/planner';
-import { publishVenue, sendRecommendation, shareRecommendationOrigin } from '../lib/aiSave';
+import { publishVenue, sendRecommendationLink, shareRecommendationOrigin } from '../lib/aiSave';
+import { cleanVenueName } from '../lib/publicRecommendation.js';
 
 export function VenueDetails({ venue, onClose, onPlan, onEdit, onSaved, owned }: {
   venue: SavedVenue; onClose: () => void; onPlan: () => void; onEdit: () => void;
@@ -22,9 +23,9 @@ export function VenueDetails({ venue, onClose, onPlan, onEdit, onSaved, owned }:
     setSharing(true);
     setError('');
     try {
-      const url = shareUrl || await publishVenue({ name: venue.name, address: venue.address, type: venue.type, link: venue.link }, venue.id);
+      const url = shareUrl || await publishVenue({ name: venue.name, address: venue.address, type: venue.type, link: venue.link }, venue.id, { unverified: venue.lat == null || venue.lon == null });
       setShareUrl(url);
-      setShared(await sendRecommendation(venue.name, url) === 'copied');
+      setShared(await sendRecommendationLink(url, cleanVenueName(venue.name)) === 'copied');
     } catch {
       setError('Could not share this venue. Try again.');
     } finally {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AiSaveDialog } from './AiSaveDialog';
+import { ScreenshotSaveDialog } from './ScreenshotSaveDialog';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { LoginPage } from '../pages/Login';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +31,7 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
   const owner = session?.user.id;
   const [share, setShare] = useState(initialShare);
   const [error, setError] = useState('');
+  const [closeRequest, setCloseRequest] = useState(0);
   const link = parseShareLink(share.text);
   const initialProgress = useMemo(() => restoreProgress(share.checkpoint, owner), [share.checkpoint, owner]);
   const dismiss = () => { void nativeShare.dismiss({ id: share.id }).catch(() => {}); };
@@ -44,15 +46,25 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
     };
     const listener = nativeShare.addListener('incoming', () => { void read().catch(() => {}); });
     void listener.then(() => { if (active) return read(); }).catch(() => {});
+    // The back button while a search is running: the search screen decides how to close.
+    const back = nativeShare.addListener('close', () => setCloseRequest(count => count + 1));
     return () => {
       active = false;
       void listener.then(handle => handle.remove()).catch(() => {});
+      void back.then(handle => handle.remove()).catch(() => {});
     };
   }, []);
 
+  // Screenshots instead of a link: their own screen (the link flow below is unchanged).
+  if (!link && share.images && owner && !loading) return <ScreenshotSaveDialog key={share.id + ':' + owner} count={share.images}
+    loadImages={async () => (await nativeShare.getImages({ id: share.id })).images ?? []} onClose={dismiss} />;
+
   if (link && owner && !loading) return <>
     {error && <p role="alert" className="fixed inset-x-4 top-8 z-[60] rounded-lg bg-card p-3">{error}</p>}
-    <AiSaveDialog key={share.id + ':' + owner} compact link={link} onClose={dismiss}
+    <AiSaveDialog key={share.id + ':' + owner} compact link={link} sharedText={share.text} onClose={dismiss} closeRequest={closeRequest}
+      onWorking={working => { void nativeShare.working({ id: share.id, working }).catch(() => {}); }}
+      onBackground={async () => (await nativeShare.background({ id: share.id })).moved}
+      onReady={found => { void nativeShare.ready({ id: share.id, found }).catch(() => {}); }}
       initialProgress={initialProgress}
       onProgress={({ candidates, verified, identification }) => {
         if (!candidates && !verified && !identification?.metadata) return;
@@ -78,9 +90,9 @@ export function AndroidShareSheet({ initialShare }: { initialShare: AndroidShare
     <DialogContent>
       <img className="size-8 rounded-lg" src="/icon-512.png" alt="The Unsaved" />
       <DialogTitle>{title}</DialogTitle>
-      <DialogDescription>{!link ? 'Share an HTTPS venue link to continue.'
-        : loading ? 'Checking your session…' : 'Sign in to continue with this link.'}</DialogDescription>
-      {link && !loading && <LoginPage compact />}
+      <DialogDescription>{!link && !share.images ? 'Share a venue link or screenshots of a post to continue.'
+        : loading ? 'Checking your session…' : link ? 'Sign in to continue with this link.' : 'Sign in to continue with these screenshots.'}</DialogDescription>
+      {(link || !!share.images) && !loading && <LoginPage compact />}
     </DialogContent>
   </Dialog>;
 }

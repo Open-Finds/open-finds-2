@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAddresses, extractVenuesFromLink, hasSourceAddress, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
+import { captionFromShare, checkAddresses, extractVenuesFromLink, hasSourceAddress, looksLikeSentence, mentionedInSource, NO_CAPTION_MESSAGE, normalizeType, setCreditPrompt, usableAddress, withoutKnownVenues, type ExtractedVenueItem } from './openai';
 
 // Google lookups for checkAddresses: answers by venue name, so each test says
 // what Google "knows". Unknown names find nothing.
@@ -50,11 +50,11 @@ describe('AI Save provider failures', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it('keeps going when the link itself was rejected as invalid (HTTP 400)', async () => {
+  it('keeps going when a website link itself was rejected as invalid (HTTP 400)', async () => {
     vi.mocked(fetch).mockClear();
     vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: 'bad url' }, { status: 400 }))
       .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
-    await expect(extractVenuesFromLink(link, strict)).resolves.toEqual([]);
+    await expect(extractVenuesFromLink('https://test.example/best-cafes', strict)).resolves.toEqual([]);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -77,6 +77,184 @@ describe('AI Save provider failures', () => {
       .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
     await expect(extractVenuesFromLink(link)).resolves.toEqual([]);
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * A TikTok or Instagram post whose caption never arrived (TikTok turns some requests away) used to go to the AI with only
+ * the link and the creator's name. It then guessed venues the post never named, and Google "confirmed" them.
+ */
+describe('a social post with no readable caption', () => {
+  it.each([
+    ['a TikTok video whose caption lookup was turned away', 'https://www.tiktok.com/@sydney_edited/video/123',
+      { platform: 'tiktok', contentType: 'video', url: 'https://www.tiktok.com/@sydney_edited/video/123', handle: 'sydney_edited', fetched: false }],
+    ['a TikTok photo post with an empty caption', 'https://www.tiktok.com/@someone/photo/456',
+      { platform: 'tiktok', contentType: 'video', url: 'https://www.tiktok.com/@someone/photo/456', fetched: true, oembedTitle: '  ' }],
+    ['an Instagram reel the metadata service rejected', 'https://www.instagram.com/reel/test/', null],
+  ])('stops before the AI for %s, and says to try again or search', async (_case, link, meta) => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(meta ? Response.json(meta) : Response.json({ error: 'bad url' }, { status: 400 }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true })).rejects.toThrow(NO_CAPTION_MESSAGE);
+    // Only the metadata request: no AI call, so nothing is guessed and nothing is spent.
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('still asks the AI when only the place the creator tagged came through', async () => {
+    const link = 'https://www.tiktok.com/@someone/video/789';
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'video', url: link, fetched: true,
+      location: { name: 'Ocean Royale', address: 'Auburn NSW', kind: 'poi' } }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
+    await extractVenuesFromLink(link, { verifySeparately: true, search: false });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('still asks the AI for a profile, and for callers other than AI Save', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'profile', url: 'https://www.tiktok.com/@cafe', fetched: false }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }))
+      .mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'video', url: 'https://www.tiktok.com/@a/video/1', fetched: false }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"venues":[]}' } }] }));
+    await extractVenuesFromLink('https://www.tiktok.com/@cafe', { verifySeparately: true, search: false });
+    await extractVenuesFromLink('https://www.tiktok.com/@a/video/1');
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+});
+
+/**
+ * When you share a TikTok to The Unsaved, TikTok puts the caption beside the link. That text comes from the phone, so it is
+ * there even when TikTok turns our server away.
+ */
+describe('the caption TikTok sends with a share', () => {
+  const link = 'https://vt.tiktok.com/ZSsFTaXA9/';
+  const shared = 'Best yum cha in Sydney\n\u{1F4CD} Ocean Royale at Club Auburn\n12-14 Northumberland Road, Auburn NSW 2144 ' + link;
+  const blocked = () => Response.json({ platform: 'tiktok', contentType: 'video', url: link, fetched: false });
+  const prompt = () => String(JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body)).messages[1].content);
+
+  it('takes the caption out of the shared text, without the link', () => {
+    expect(captionFromShare('Korean fusion burgers \u{1F354} https://vt.tiktok.com/ZSbaLC6gH/')).toBe('Korean fusion burgers \u{1F354}');
+    expect(captionFromShare('https://vt.tiktok.com/ZSbaLC6gH/')).toBe('');
+    expect(captionFromShare(undefined)).toBe('');
+  });
+
+  it('reads the venue from the shared caption when TikTok turned the server away', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(blocked())
+      .mockResolvedValueOnce(aiVenues({ name: 'Ocean Royale', address: '12-14 Northumberland Road, Auburn NSW 2144', type: 'food' }));
+    const progress = { sharedText: shared };
+    // The name exactly as the creator wrote it; the Google check then matches it to the listing.
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress })).resolves.toMatchObject([
+      { name: 'Ocean Royale at Club Auburn', address: '12-14 Northumberland Road, Auburn NSW 2144' },
+    ]);
+    expect(prompt()).toContain('Ocean Royale at Club Auburn');
+    expect(prompt()).not.toContain('vt.tiktok.com/ZSsFTaXA9/ ');
+    // The shared caption counts as the creator's own words: the address is source-backed for the Google check.
+    expect(hasSourceAddress(progress, '12-14 Northumberland Road, Auburn NSW 2144')).toBe(true);
+    expect(mentionedInSource(progress, 'Ocean Royale')).toBe(true);
+    expect(mentionedInSource(progress, 'Oyama Ramen')).toBe(false);
+  });
+
+  it('carries on with the shared caption when the metadata service itself fails', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: 'refused' }, { status: 503 }))
+      .mockResolvedValueOnce(aiVenues({ name: 'Ocean Royale', address: '12-14 Northumberland Road, Auburn NSW 2144', type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress: { sharedText: shared } })).resolves.toHaveLength(1);
+    expect(prompt()).toContain('Ocean Royale');
+  });
+
+  it('prefers the full caption the server read over the shared text', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'tiktok', contentType: 'video', url: link, fetched: true,
+      oembedTitle: 'The whole caption: \u{1F4CD} Golden Sands, Hurstville' }))
+      .mockResolvedValueOnce(aiVenues());
+    await extractVenuesFromLink(link, { verifySeparately: true, progress: { sharedText: 'A shorter shared text ' + link } });
+    expect(prompt()).toContain('Golden Sands');
+    expect(prompt()).not.toContain('A shorter shared text');
+  });
+
+  it('still stops when only the link was shared and the server got nothing', async () => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(blocked());
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress: { sharedText: link } })).rejects.toThrow(NO_CAPTION_MESSAGE);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+/**
+ * A reel with no tag and no venue in the caption: the AI returned the video's headline as a "venue". It filled the form and
+ * the Google search with a sentence.
+ */
+describe('a headline is not a venue name', () => {
+  it.each([
+    "ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!",
+    "Best pizza in Sydney!!! You have to try this place",
+    'my new favourite sando spot in Sydney and trust me I have tried a lot',
+    'We tried every dumpling place in the Sydney CBD so you do not have to',
+  ])('rejects %s', name => expect(looksLikeSentence(name)).toBe(true));
+
+  it.each([
+    'Johnny Gio\u2019s Pizza Waterloo', 'Which Wich?', 'Yum Cha Palace!', 'Oyama Ramen', 'The Palace Chinese Restaurant',
+    'Ocean Royale at Club Auburn', 'SALTED. Cafe & Bakery', 'Daruma Dumplings Beer House', 'Sculpture by the Sea, Bondi',
+    '\u8336\u4ead \u7fbd\u7576 (Chatei Hatou)',
+  ])('keeps the real name %s', name => expect(looksLikeSentence(name)).toBe(false));
+
+  it('drops a headline the AI returned as a venue, and keeps the venue next to it', async () => {
+    const link = 'https://www.instagram.com/reel/test/';
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Spicy Roni ($31) is a must' }))
+      .mockResolvedValueOnce(aiVenues(
+        { name: "ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!", address: 'Sydney NSW', type: 'food' },
+        { name: 'Real Pizza Co', address: '1 Test St, Sydney NSW 2000', type: 'food' },
+      ));
+    const items = await extractVenuesFromLink(link, { verifySeparately: true, search: false });
+    expect(items.map(item => item.name)).toEqual(['Real Pizza Co']);
+  });
+
+  it('returns nothing when the only "venue" is a headline, so the form starts empty', async () => {
+    const link = 'https://www.instagram.com/reel/test/';
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription: 'Spicy Roni ($31) is a must' }))
+      .mockResolvedValueOnce(aiVenues({ name: "ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!", address: 'Sydney NSW', type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, search: false })).resolves.toEqual([]);
+  });
+});
+
+describe('whether the post itself names a venue', () => {
+  const progress = (caption: string, extra: Record<string, unknown> = {}) => ({ metadata: {
+    platform: 'tiktok', contentType: 'video', url: 'https://www.tiktok.com/@a/video/1', ogTitle: null, ogDescription: null,
+    ogSiteName: null, pageTitle: null, metaDescription: null, jsonLd: null, handle: null, rawText: null, oembedTitle: caption,
+    oembedAuthor: null, oembedHtml: null, fetched: true, ...extra,
+  } });
+  const oceanRoyale = progress('My top 3 favourites are in the video!\n\u{1F4CD}Ocean Royale at Club Auburn!\nlocated inside Club Auburn at 12-14 Northumberland Road, Auburn, NSW 2144');
+  const palace = progress('3. The Palace restaurant in the city.\n2. Feng You in Hurstville.\n1. Golden Sands, which is also in Hurstville.');
+
+  it('does not count a venue the AI found elsewhere, even a real one', () => {
+    expect(mentionedInSource(oceanRoyale, 'Oyama Ramen')).toBe(false);
+    expect(mentionedInSource(oceanRoyale, 'Gacha Cafe')).toBe(false);
+    expect(mentionedInSource(palace, 'Ame')).toBe(false);
+    expect(mentionedInSource(palace, 'Loa')).toBe(false);
+  });
+
+  it('counts the venues the caption names, including the longer names Google gives them', () => {
+    expect(mentionedInSource(oceanRoyale, 'Ocean Royale')).toBe(true);
+    expect(mentionedInSource(oceanRoyale, 'Ocean Royale Chinese Restaurant Auburn')).toBe(true);
+    expect(mentionedInSource(palace, 'The Palace Chinese Restaurant')).toBe(true);
+    expect(mentionedInSource(palace, 'Feng You')).toBe(true);
+    expect(mentionedInSource(palace, 'Golden Sands Restaurant')).toBe(true);
+  });
+
+  it('counts a name in the joined-up creator handle', () => {
+    expect(mentionedInSource(progress('So good', { handle: 'certifiedpizzastmarys' }), 'Certified Pizza St Marys')).toBe(true);
+  });
+
+  it('accepts either the AI name or the Google name', () => {
+    expect(mentionedInSource(oceanRoyale, 'Oyama Ramen', 'Ocean Royale')).toBe(true);
+  });
+
+  it('changes nothing when there is no post text to compare with', () => {
+    expect(mentionedInSource(undefined, 'Anything')).toBe(true);
+    expect(mentionedInSource({ metadata: { ...progress('').metadata, platform: 'website' } }, 'Anything')).toBe(true);
+    expect(mentionedInSource(progress(''), 'Anything')).toBe(true);
   });
 });
 
@@ -265,6 +443,47 @@ it('does not choose one pin from a flattened multi-venue caption', async () => {
   await expect(extractVenuesFromLink(link, { verifySeparately: true })).resolves.toMatchObject([
     { name: 'Test Cafe', requiresManualCorrection: true },
   ]);
+});
+
+describe('a caption address that leaves the state off', () => {
+  const link = socialLinks.instagram;
+  const caption = 'This is a tiny family owned pizza spot.\n\n\u{1F4CD} Certified Pizza\n5 Crana St, St Marys\n\nInvite #westernsydney #pizza';
+  const meta = (ogDescription: string) => Response.json({ platform: 'instagram', url: link, fetched: true, ogDescription });
+  const evidence = () => String(JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body)).messages[1].content);
+
+  it('reads the name and street under a pin, gives them to the AI as evidence, and counts them as written by the creator', async () => {
+    const progress = {};
+    vi.mocked(fetch).mockResolvedValueOnce(meta(caption))
+      .mockResolvedValueOnce(aiVenues({ name: 'Certified Pizza', address: '5 Crana St, St Marys NSW 2760', type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true, progress })).resolves.toMatchObject([
+      { name: 'Certified Pizza', address: '5 Crana St, St Marys', type: 'food' },
+    ]);
+    expect(evidence()).toContain('Caption evidence (unverified source data): {"name":"Certified Pizza","address":"5 Crana St, St Marys"');
+    expect(hasSourceAddress(progress, '5 Crana St, St Marys')).toBe(true);
+    expect(hasSourceAddress(progress, '15 Crana St, St Marys')).toBe(false);
+  });
+
+  it('keeps the venue the caption names when the AI names a different one, and asks for a check', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(meta(caption))
+      .mockResolvedValueOnce(aiVenues({ name: 'Dandelion Garden', address: '123 Pickford St, Burwood East VIC 3151', type: 'activity' }));
+    const [venue] = await extractVenuesFromLink(link, { verifySeparately: true });
+    expect(venue).toMatchObject({ name: 'Certified Pizza', address: '5 Crana St, St Marys', requiresManualCorrection: true });
+  });
+
+  it('still ignores a second line that is only a suburb, so nothing is invented', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(meta('\u{1F4CD} Certified Pizza\nSt Marys\n#pizza'))
+      .mockResolvedValueOnce(aiVenues());
+    await extractVenuesFromLink(link, { verifySeparately: true });
+    expect(evidence()).not.toContain('Caption evidence');
+  });
+
+  it('does not pick one venue when the caption pins two', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(meta('\u{1F4CD} Test Cafe\n1 Test St, Newtown\n\u{1F4CD} Other Bar\n2 Other Rd, Enmore'))
+      .mockResolvedValueOnce(aiVenues({ name: 'Test Cafe', address: fullAddress, type: 'food' }));
+    await expect(extractVenuesFromLink(link, { verifySeparately: true })).resolves.toMatchObject([
+      { requiresManualCorrection: true },
+    ]);
+  });
 });
 
 it('keeps the source evidence in a fallback request below the staging byte limit', async () => {

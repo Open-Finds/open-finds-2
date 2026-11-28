@@ -65,12 +65,38 @@ export async function shareOrCopy(title: string, text: string, url: string): Pro
     }
   } else if (navigator.share) {
     try {
-      await navigator.share({ title, text, url });
+      await navigator.share({ title, ...(text.trim() ? { text } : {}), url });
       return 'shared';
     } catch (error) {
       if (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') return 'cancelled';
     }
   }
   if (!await copyToClipboard(full)) throw new Error('Could not open sharing or copy the link.');
+  return 'copied';
+}
+
+/**
+ * Shares words on their own, with no link. Used when a message is sent as its own bubble ahead of a link,
+ * the way a shared reel and a typed message arrive separately.
+ */
+export async function shareTextOnly(title: string, text: string): Promise<'shared' | 'copied' | 'cancelled'> {
+  const words = text.trim();
+  if (!words) throw new Error('There is no message to send.');
+  if (Capacitor.getPlatform() === 'android') {
+    try {
+      await nativeShare.send({ text: words });
+      return 'shared';
+    } catch {
+      // Fall back to the clipboard below.
+    }
+  } else if (navigator.share) {
+    try {
+      await navigator.share({ title, text: words });
+      return 'shared';
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') return 'cancelled';
+    }
+  }
+  if (!await copyToClipboard(words)) throw new Error('Could not open sharing or copy the message.');
   return 'copied';
 }

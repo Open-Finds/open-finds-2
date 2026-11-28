@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { Capacitor } from '@capacitor/core';
-import { getShareUrl, shareOrCopy } from './invite';
+import { getShareUrl, shareOrCopy, shareTextOnly } from './invite';
 const { send } = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock('./nativeShare', () => ({ nativeShare: { send } }));
 
@@ -38,4 +38,20 @@ it('copies the complete invitation if the Android chooser fails', async () => {
   const url = 'https://staging.example.test/#/plan/plan-id/rsvp';
   await expect(shareOrCopy('Plan', 'Join me', url)).resolves.toBe('copied');
   expect(writeText).toHaveBeenCalledWith('Join me\n' + url);
+});
+
+it('shares words alone on Android, with no link added', async () => {
+  vi.spyOn(Capacitor, 'getPlatform').mockReturnValue('android');
+  send.mockResolvedValue(undefined);
+  await expect(shareTextOnly('Venue', '  Down?  ')).resolves.toBe('shared');
+  expect(send).toHaveBeenCalledWith({ text: 'Down?' });
+});
+
+it('copies the words when nothing can share them, and refuses an empty message', async () => {
+  vi.spyOn(Capacitor, 'getPlatform').mockReturnValue('web');
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  await expect(shareTextOnly('Venue', 'Can we try this?')).resolves.toBe('copied');
+  expect(writeText).toHaveBeenCalledWith('Can we try this?');
+  await expect(shareTextOnly('Venue', '   ')).rejects.toThrow('no message');
 });

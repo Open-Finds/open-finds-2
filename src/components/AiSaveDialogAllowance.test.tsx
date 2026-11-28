@@ -4,12 +4,14 @@ import { AiSaveDialog } from './AiSaveDialog';
 import type { SharedVenueResult } from '../lib/aiSave';
 
 const mocks = vi.hoisted(() => ({
-  identifySharedVenue: vi.fn(), publishVenue: vi.fn(), saveSharedVenue: vi.fn(), sendRecommendation: vi.fn(),
+  identifySharedVenue: vi.fn(), publishVenue: vi.fn(), saveSharedVenue: vi.fn(), sendRecommendationLink: vi.fn(), sendRecommendationMessage: vi.fn(),
   shareRecommendationOrigin: () => 'https://www.theunsaved.app',
 }));
 vi.mock('../lib/aiSave', () => mocks);
 vi.mock('../lib/supabase', () => ({ updateSavedVenue: vi.fn() }));
-vi.mock('../lib/openai', () => ({ UserFacingError: Error }));
+vi.mock('../lib/openai', () => ({ UserFacingError: Error, captionFromShare: (text?: string) => (text ?? '').replace(/https?:\/\/\S+/g, '').trim() }));
+const results = vi.hoisted(() => ({ record: vi.fn<(input: import('../lib/aiSaveResults').AiSaveResultInput) => Promise<boolean>>(async () => true) }));
+vi.mock('../lib/aiSaveResults', async original => ({ ...(await original<typeof import('../lib/aiSaveResults')>()), recordAiSaveResult: results.record }));
 
 const link = 'https://www.instagram.com/reel/test/';
 const venue = { name: 'Test cafe', address: '1 Test St', type: 'food' as const, link, lat: 1, lon: 2 };

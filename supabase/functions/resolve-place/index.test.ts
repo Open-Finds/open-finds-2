@@ -288,6 +288,22 @@ describe('resolve-place Phase 4 verification', () => {
     expect(sent).toMatchObject({ textQuery: 'Sculpture by the Sea Bondi', pageSize: 5 });
   });
 
+  it('ranks a search near the phone (rounded to about 1 km) instead of Australia when a position is sent', async () => {
+    places(place());
+    await request({ search: true, query: 'boulangerie de saigon', near: { lat: 52.953123, lon: -1.149876 } });
+    const sent = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(sent).not.toHaveProperty('regionCode');
+    expect(sent.locationBias).toEqual({ circle: { center: { latitude: 52.95, longitude: -1.15 }, radius: 50000 } });
+  });
+
+  it.each([[{ lat: 'x', lon: 1 }], [{ lat: 95, lon: 1 }], ['52,1'], [null]])('ignores a malformed position %j', async (near) => {
+    places(place());
+    await request({ search: true, query: 'Test Cafe', near });
+    const sent = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(sent).toMatchObject({ regionCode: 'AU' });
+    expect(sent).not.toHaveProperty('locationBias');
+  });
+
   it('refuses an empty search and fails closed when the limit cannot be checked', async () => {
     expect((await request({ search: true, query: '  ' })).status).toBe(400);
     mocks.limit.mockResolvedValue({ available: false, allowed: false, remaining: 0, retryAfter: 0 });
@@ -361,5 +377,54 @@ describe('resolve-place closest results', () => {
     places(vegas);
     const body = await (await request({ ...askSydney, name: 'Seoul Garden', address: 'Seoul, South Korea' })).json();
     expect(body.candidates).toHaveLength(1);
+  });
+});
+
+/** Universal venues: each Google place carries a signed stamp so the save can link the shared venue. */
+describe('resolve-place venue stamps', () => {
+  let verify: typeof import('../_shared/venueToken').verifyVenueToken;
+  beforeEach(async () => {
+    vi.resetModules();
+    const env: Record<string, string> = { SUPABASE_SERVICE_ROLE_KEY: 'service-secret' };
+    vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] ?? '' }, serve: (fn: typeof handler) => { handler = fn; } });
+    await import('./index');
+    ({ verifyVenueToken: verify } = await import('../_shared/venueToken'));
+  });
+  const withParts = (over: Record<string, unknown> = {}) => place({
+    addressComponents: [{ longText: 'Sydney', types: ['locality', 'political'] }], ...over,
+  });
+
+  it('stamps a verified place with Google\'s details, suburb and category for this user only', async () => {
+    places(withParts());
+    const body = await (await request(details)).json();
+    expect(body).toMatchObject({ verified: true, placeId: 'ChIJtestplace01', venueToken: expect.any(String) });
+    expect(body).not.toHaveProperty('suburb');
+    expect(body).not.toHaveProperty('category');
+    expect(await verify(body.venueToken, 'user-1')).toEqual({
+      google_place_id: 'ChIJtestplace01', name: 'Test Cafe', address: '1 Test St, Sydney NSW 2000, Australia',
+      suburb: 'Sydney', lat: -33.8, lon: 151.2, category: 'cafe',
+    });
+    expect(await verify(body.venueToken, 'user-2')).toBeNull();
+    expect(new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers).get('X-Goog-FieldMask')).toContain('places.addressComponents');
+  });
+
+  it('stamps each place offered to choose from, and each search result', async () => {
+    places(withParts(), withParts({ id: 'ChIJelsewhere01', formattedAddress: '99 Other Rd, Newtown NSW 2042, Australia' }));
+    const choices = await (await request({ ...details, addressFromSource: false })).json();
+    expect(choices.candidates.length).toBeGreaterThan(0);
+    for (const candidate of choices.candidates) {
+      expect(await verify(candidate.venueToken, 'user-1')).toMatchObject({ google_place_id: candidate.placeId });
+      expect(candidate).not.toHaveProperty('suburb');
+    }
+    places(withParts());
+    const search = await (await request({ search: true, query: 'Test Cafe Sydney' })).json();
+    expect(await verify(search.candidates[0].venueToken, 'user-1')).toMatchObject({ google_place_id: 'ChIJtestplace01' });
+  });
+
+  it('does not stamp a place without a Google id', async () => {
+    places(withParts({ id: undefined }));
+    const body = await (await request(details)).json();
+    expect(body).toMatchObject({ verified: true });
+    expect(body).not.toHaveProperty('venueToken');
   });
 });

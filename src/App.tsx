@@ -6,6 +6,7 @@ import { HomeDashboard } from './pages/HomeDashboard';
 import { UnifiedPlanner } from './pages/UnifiedPlanner';
 import { EventsPage } from './pages/Events';
 import { DashboardPage } from './pages/Dashboard';
+import { useAiSaveInbox, type AiSaveItem } from './lib/aiSaveInbox';
 import { VenuesPage } from './pages/Venues';
 import { LoginPage } from './pages/Login';
 import { SettingsPage } from './pages/Settings';
@@ -118,6 +119,10 @@ function AppInner() {
   const [venueSaveVersion, setVenueSaveVersion] = useState(0);
   const [incomingShare, setIncomingShare] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  /** An AI Save result opened from Notifications. */
+  const [openAiSave, setOpenAiSave] = useState<AiSaveItem | null>(null);
+  const aiSaveWaiting = useAiSaveInbox(session?.user.id).filter(item => item.finished).length;
+  const bellCount = unreadCount + aiSaveWaiting;
   const { onboardingCompleted, setOnboardingCompleted, profileLoaded, passwordRecovery, username, dietaryPreferences, refreshProfile, premiumUnlocked } = useAuth();
   useEffect(() => {
     if (!session || incomingShare) return;
@@ -334,7 +339,7 @@ function AppInner() {
   const shellProps = {
     view,
     onChangeView: switchView,
-    unreadCount,
+    unreadCount: bellCount,
     onOpenNotifications: () => setShowNotifications(true),
     guard: <>
       <Dialog open={pendingView !== null} onOpenChange={open => { if (!open) closePlannerGuard(); }}>
@@ -351,6 +356,10 @@ function AppInner() {
       </Dialog>
       {incomingShare && <AiSaveDialog key={incomingShare} link={incomingShare}
         onClose={() => setIncomingShare(null)} onPlan={planFromShare}
+        onSaved={() => setVenueSaveVersion(version => version + 1)} />}
+      {openAiSave && <AiSaveDialog key={openAiSave.link} link={openAiSave.link} sharedText={openAiSave.sharedText} stored={openAiSave}
+        onClose={() => setOpenAiSave(null)}
+        onPlan={venue => { setOpenAiSave(null); setShowNotifications(false); planFromShare(venue); }}
         onSaved={() => setVenueSaveVersion(version => version + 1)} />}
     </>,
   };
@@ -378,6 +387,7 @@ function AppInner() {
         <NotificationsPage
           onBack={() => { setShowNotifications(false); refreshUnread(); }}
           onOpenFriends={() => { switchView('friends'); refreshUnread(); }}
+          onOpenAiSave={setOpenAiSave}
         />
       </Shell>
     );
@@ -415,7 +425,7 @@ function AppInner() {
         {view === 'home' ? (
           <HomeDashboard onPlan={(mode, seed) => startPlanner(mode, seed ? savedCandidate(seed) : undefined)} onVenues={() => switchView('venues')} onEvent={openDashboard}
             onEvents={() => switchView('events')} onSettings={() => switchView('settings')}
-            unreadCount={unreadCount} onNotifications={shellProps.onOpenNotifications} onSave={() => { setOpenSave(true); switchView('venues'); }} />
+            unreadCount={bellCount} onNotifications={shellProps.onOpenNotifications} onSave={() => { setOpenSave(true); switchView('venues'); }} />
         ) : view === 'planner' || view === 'discover' ? (
           <UnifiedPlanner key={`${view}-${homeResetKey}`} mode={view === 'discover' ? 'ai' : plannerMode} seed={view === 'discover' ? undefined : plannerSeed} collectionId={view === 'discover' ? undefined : plannerCollection}
             onDirty={setPlannerDirty} onDone={(id) => { setPlannerDirty(false); openDashboard(id); }} onCancel={() => { setPlannerDirty(false); applyView('home'); }} />

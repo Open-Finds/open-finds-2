@@ -6,3 +6,4 @@ export function validRecommendationId(id: unknown): id is string;
 export function recommendationPath(id: string, staging: boolean): string;
 export function venuePhoto(staging: boolean, id: string, venue: { name: string; address: string }): string | null;
 export function publicVenueLink(value: unknown): string | null;
+export function cleanVenueName(value: unknown): string;

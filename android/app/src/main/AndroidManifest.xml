@@ -28,7 +28,7 @@
             android:label="${appLabel}"
             android:theme="@style/AppTheme.Share"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
-            android:launchMode="singleTop"
+            android:documentLaunchMode="always"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:windowSoftInputMode="adjustResize"
@@ -38,8 +38,29 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
+            <!-- Screenshots of a post: AI Save reads the venue from the pictures (up to six). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
 
         </activity>
+
+        <!-- Opens a share screen again from its "ready" notification. -->
+        <activity
+            android:name=".AiSaveReturnActivity"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:exported="false" />
+
+        <!-- Keeps a search running for a short while after its screen is put away. -->
+        <service
+            android:name=".AiSaveService"
+            android:foregroundServiceType="shortService"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -55,4 +76,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 </manifest>

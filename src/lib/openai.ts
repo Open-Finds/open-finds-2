@@ -6,7 +6,9 @@ import { edgeAuthHeaders } from './edgeAuth';
 import { asProviderError, providerFailure } from './providerErrors';
 import { areaFromLocationTag, fillAddressEvidence, isWrittenAddress, profileBio, type TagLocation } from './venueEvidence';
 
-type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+/** A picture for the AI to read: only AI Save's slide reading sends these (Instagram picture links only, checked by ai-proxy). */
+export type ChatPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } };
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string | ChatPart[] };
 
 /** An error whose message is written for the user, so screens show it as-is. */
 export class UserFacingError extends Error {}
@@ -48,7 +50,7 @@ export function setCreditPrompt(ask: ((purpose: AIPurpose) => Promise<boolean>) 
   askToSpendCredit = ask;
 }
 
-async function callAI(
+export async function callAI(
   messages: ChatMessage[],
   opts?: { temperature?: number; responseFormat?: 'json_object'; purpose?: AIPurpose; attemptId?: string; model?: string }
 ): Promise<string> {
@@ -122,6 +124,8 @@ export type ExtractedVenueItem = {
   lat?: number | null;
   lon?: number | null;
   tags: string[];
+  /** Set only for a Google place: links the save to the shared venue (see saveSharedVenue). */
+  venueToken?: string;
 };
 
 export type VenueCandidate = {
@@ -176,6 +180,8 @@ type MetaResult = {
   location?: TagLocation | null;
   /** The page's own search keywords. */
   keywords?: string | null;
+  /** An Instagram carousel's slide pictures (Instagram's own links), for AI Save's slide reading. */
+  slides?: string[];
 };
 
 /**
@@ -314,6 +320,11 @@ type CaptionEvidence = {
 };
 
 const captionAddress = /^((?:\d+[a-z]?\/)?\d+[a-z]?(?:[-–]\d+[a-z]?)?\s+[\p{L}\p{N} .’'-]+?\s(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|place|pl|terrace|tce|way|parade|pde|crescent|cres|highway|hwy)\.?),?\s+([\p{L} .’'-]+,?\s+(?:ACT|NSW|NT|QLD|SA|TAS|VIC|WA)(?:\s+\d{4})?(?:,?\s+Australia)?)$/iu;
+/**
+ * A street and a suburb with no state ("5 Crana St, St Marys"): how many creators write an address under a 📍 name.
+ * Only a street number, a street word, a comma and a plain suburb, so it cannot swallow other text.
+ */
+const captionStreetSuburb = /^(?:\d+[a-z]?\/)?\d+[a-z]?(?:[-–]\d+[a-z]?)?\s+[\p{L}\p{N} .’'-]+?\s(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|place|pl|terrace|tce|way|parade|pde|crescent|cres|highway|hwy)\.?,\s*[\p{L}][\p{L} .’'-]{1,40}$/iu;
 const captionLocality = /^[\p{L}][\p{L} .’'-]*,?\s+(?:ACT|NSW|NT|QLD|SA|TAS|VIC|WA)(?:\s+\d{4})?$/iu;
 
 function captionKey(value: string): string {
@@ -358,7 +369,7 @@ function readSocialCaption(meta: MetaResult | null | undefined): CaptionEvidence
       if (/^(?:\d+[.)]\s|top\s+\d+\s+(?:spots|places|venues|caf[eé]s|restaurants)\b|(?:venues|locations|addresses):)/i.test(line)) ambiguous = true;
       const pin = line.match(/^📍\s*([^,]+),\s*(\d.+)$/u);
       const splitPin = line.match(/^\u{1F4CD}\s*([^\d,][^,]*)$/u);
-      const nextAddress = splitPin && lines[index + 1]?.match(captionAddress);
+      const nextAddress = splitPin && (lines[index + 1]?.match(captionAddress) ?? lines[index + 1]?.match(captionStreetSuburb));
       const label = line.match(/^(venue|address|location|type|category):\s*(.+)$/i)
         ?? line.match(/^\u{1F4CD}\s*(venue|address|location):\s*(.+)$/iu);
       const pinnedAddress = line.match(/^\u{1F4CD}\s*(\d.+)$/u);
@@ -402,8 +413,56 @@ function readSocialCaption(meta: MetaResult | null | undefined): CaptionEvidence
   };
 }
 
+/** What AI Save says when a post's caption could not be read. */
+export const NO_CAPTION_MESSAGE = "We couldn't read this post's caption. TikTok and Instagram sometimes block us, so try again, or search for the venue below.";
+
+const SOCIAL_POST = /(?:tiktok\.com|instagram\.com)/i;
+
+/**
+ * A social post (not a profile) is only worth asking the AI about when its caption, or the place the creator tagged, came through.
+ * Websites, Google Maps links and profiles are left to the usual steps.
+ */
+function readablePost(meta: MetaResult | null, link: string): boolean {
+  const platform = meta?.platform ?? (SOCIAL_POST.test(link) ? (/tiktok/i.test(link) ? 'tiktok' : 'instagram') : 'other');
+  if (platform !== 'tiktok' && platform !== 'instagram') return true;
+  if (meta && meta.contentType === 'profile') return true;
+  if (!meta && /instagram\.com\/(?!p\/|reels?\/|tv\/)[^/?#]+\/?(?:[?#]|$)/i.test(link)) return true;
+  return !!captionPlainText(meta).trim() || !!meta?.location?.name;
+}
+
+/** Words that say what kind of place it is, not which one: they cannot show that a post names a venue. */
+const GENERIC_NAME_WORDS = new Set([
+  'the', 'and', 'cafe', 'caf', 'restaurant', 'bar', 'pub', 'kitchen', 'house', 'grill', 'bakery', 'coffee', 'eatery', 'bistro',
+  'dining', 'diner', 'club', 'co', 'shop', 'store', 'ramen', 'pizza', 'pizzeria', 'sushi', 'bbq', 'dumpling', 'dumplings', 'noodle',
+  'noodles', 'thai', 'korean', 'japanese', 'chinese', 'vietnamese', 'italian', 'indian', 'yum', 'cha', 'dim', 'sum', 'tea', 'dessert',
+  'desserts', 'gelato', 'burger', 'burgers', 'bakehouse', 'patisserie', 'sydney', 'melbourne', 'street', 'st', 'road', 'rd',
+]);
+
+/**
+ * Whether the post itself names this venue: one of the name's distinctive words is in the caption, the title, the tagged place or the
+ * creator's handle. A venue the AI found elsewhere (by guessing from the creator's name, or a web search) is not, even when Google
+ * confirms that it exists. Unknown (no post text, a website, a Maps link) counts as named, so nothing changes there.
+ */
+export function mentionedInSource(progress: VenueExtractionProgress | undefined, ...names: string[]): boolean {
+  const meta = progress?.metadata;
+  if (!meta || (meta.platform !== 'tiktok' && meta.platform !== 'instagram')) return true;
+  const text = captionKey([captionPlainText(meta), meta.ogTitle, meta.pageTitle, meta.location?.name, meta.handle, meta.oembedAuthor]
+    .filter(Boolean).join(' '));
+  if (!text) return true;
+  const words = ` ${text} `;
+  const compact = text.replace(/\s+/g, '');
+  return names.some(name => {
+    const tokens = captionKey(name).split(' ').filter(token => token.length >= 2);
+    const distinctive = tokens.filter(token => !GENERIC_NAME_WORDS.has(token));
+    const check = distinctive.length ? distinctive : tokens;
+    if (!check.length) return true;
+    // A whole word anywhere, or (for longer words) inside a joined-up handle such as "certifiedpizzastmarys".
+    return check.some(token => words.includes(` ${token} `) || (token.length >= 5 && compact.includes(token)));
+  });
+}
+
 /** Everything the creator wrote about the post, as plain text: the source for descriptive tags. */
-function captionPlainText(meta: MetaResult | null | undefined): string {
+export function captionPlainText(meta: MetaResult | null | undefined): string {
   return [...new Set([meta?.ogDescription, meta?.oembedTitle, meta?.metaDescription])]
     .filter((value): value is string => !!value && !/^https?:\/\//i.test(value)).map(decodeCaption).join(' ');
 }
@@ -411,8 +470,14 @@ function captionPlainText(meta: MetaResult | null | undefined): string {
 function reconcileCaption(caption: CaptionEvidence, name: string, items: ExtractedVenueItem[], text = ''): ExtractedVenueItem[] {
   const address = caption.address ?? caption.locality ?? '';
   const match = items.find(item => captionKey(item.name) === captionKey(name));
+  // The AI may add the state or postcode to a street the caption wrote without them ("5 Crana St, St Marys" and "... NSW 2760").
+  const extendsCaption = (found: string, written: string) => {
+    const a = addressKey(found);
+    const b = addressKey(written);
+    return a === b || a.startsWith(b + ' ');
+  };
   const matchesLocation = !address || !match?.address || (caption.address
-    ? addressKey(match.address) === addressKey(address)
+    ? extendsCaption(match.address, address)
     : (' ' + addressKey(match.address) + ' ').includes(' ' + addressKey(address) + ' '));
   if (items.length === 1 && match && matchesLocation) {
     return [{ ...match, name, address: caption.address ?? (match.address || address), type: caption.type ?? match.type,
@@ -431,6 +496,20 @@ function reconcileCaption(caption: CaptionEvidence, name: string, items: Extract
  * address: it would be searched on Google as one. It counts as no address, so the next step (a search or the web AI) runs.
  */
 const NOT_AN_ADDRESS = /\b(?:not (?:explicitly |specifically )?(?:provided|specified|available|stated|given|mentioned|known)|externally known|no address|if known)\b/i;
+/**
+ * Text that reads like a sentence or a headline, not a venue's name ("ONE OF THE BEST PIZZAS I'VE HAD IN SYDNEY?!"). A post's
+ * title is not the place it is about; keeping it as the name fills the form with something that has to be deleted, and sends
+ * Google off to find unrelated places. Real names with a "!" or "?" ("Which Wich?") are short, so a long phrase is needed.
+ */
+export function looksLikeSentence(name: string): boolean {
+  const text = name.trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length >= 9 || text.length > 80) return true;
+  if (words.length >= 4 && /[?!]/.test(text)) return true;
+  // "I've had", "my favourite", "we tried": a person talking, not a place.
+  return words.length >= 4 && /\b(?:i|i'm|i've|i'd|my|me|we|we've|you|your|our)\b/i.test(text.replace(/[’]/g, "'"));
+}
+
 /** A bare placeholder: the whole value says "no address". A street that merely contains such a word is a real address. */
 const PLACEHOLDER = /^\s*(?:unknown|n\/?a|unspecified|none|null|undefined|-+)\s*\.?\s*$/i;
 export function usableAddress(address: string): string {
@@ -442,7 +521,36 @@ export type VenueExtractionProgress = {
   structuredAddress?: boolean;
   /** Addresses read from a venue's own profile bio: written by the venue, so source-backed. */
   sourceAddresses?: string[];
+  /**
+   * Text that came with the link from the phone: what TikTok puts beside the link when you tap Share ("Korean fusion burgers 🍔
+   * https://vt.tiktok.com/…"), or a caption the user pasted. It comes from the phone, so TikTok cannot turn it away.
+   */
+  sharedText?: string;
 };
+
+/** The caption part of shared text: the text without its links. Empty when only a link was shared. */
+export function captionFromShare(text: string | undefined): string {
+  return (text ?? '').replace(/https?:\/\/[^\s<>"']+/gi, ' ').replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+}
+
+/**
+ * Fills a missing caption from the shared text, for a TikTok or Instagram post. A caption the server did read always wins
+ * (it is the whole caption); the shared text is used only when the server got none, which is what happens when TikTok
+ * turns the server away. Other links are left as they are.
+ */
+function withSharedCaption(meta: MetaResult | null, sharedText: string | undefined, link: string): MetaResult | null {
+  const shared = captionFromShare(sharedText);
+  if (shared.length < 3) return meta;
+  const platform = meta?.platform ?? (/tiktok\.com/i.test(link) ? 'tiktok' : /instagram\.com/i.test(link) ? 'instagram' : 'other');
+  if (platform !== 'tiktok' && platform !== 'instagram') return meta;
+  if (meta && captionPlainText(meta).trim()) return meta;
+  const base: MetaResult = meta ?? {
+    platform, contentType: platform === 'tiktok' ? 'video' : 'reel', url: link, ogTitle: null, ogDescription: null, ogSiteName: null,
+    pageTitle: null, metaDescription: null, jsonLd: null, handle: null, rawText: null, oembedTitle: null, oembedAuthor: null,
+    oembedHtml: null, fetched: false,
+  };
+  return platform === 'tiktok' ? { ...base, oembedTitle: shared } : { ...base, ogDescription: shared };
+}
 
 export function hasSourceAddress(progress: VenueExtractionProgress | undefined, address: string): boolean {
   if (progress?.structuredAddress) return true;
@@ -492,8 +600,22 @@ export async function extractVenuesFromLink(
   }
 
   // Step 1: Fetch real page metadata via edge function
-  const meta = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately, attemptId);
+  const sharedText = options?.progress?.sharedText;
+  let fetched: MetaResult | null;
+  try {
+    fetched = options?.progress?.metadata ?? await fetchPageMeta(link, !!options?.verifySeparately, attemptId);
+  } catch (error) {
+    // The server could not read the post, but the phone already has its caption: carry on with that.
+    if (captionFromShare(sharedText).length < 3) throw error;
+    fetched = null;
+  }
+  const meta = withSharedCaption(fetched, sharedText, link);
   if (options?.progress && meta && (meta.fetched || meta.oembedTitle || meta.ogDescription || meta.metaDescription)) options.progress.metadata = meta;
+  // A TikTok or Instagram post whose caption could not be read (TikTok turns some requests away) gives the AI nothing
+  // but the link and the creator's name, and it then guesses venues the post never mentions. Stop and say so instead.
+  if (options?.verifySeparately && !readablePost(meta, link)) {
+    throw new UserFacingError(NO_CAPTION_MESSAGE);
+  }
   const caption = options?.verifySeparately ? readSocialCaption(meta) : undefined;
   if (caption?.name && caption.address && caption.type) {
     return [{ name: caption.name, address: caption.address, type: caption.type, order: 1, tags: tagsFromText(caption.name + ' ' + captionPlainText(meta)) }];
@@ -529,6 +651,7 @@ export async function extractVenuesFromLink(
     const name = typeof obj.name === 'string' ? obj.name.trim() : '';
     const address = usableAddress(typeof obj.address === 'string' ? obj.address.trim() : '');
     if (!name || (!address && !options?.verifySeparately)) continue;
+    if (looksLikeSentence(name)) continue;
     const type = normalizeType(obj.type);
     if (!type) continue;
     const order = typeof obj.order === 'number' ? obj.order : items.length + 1;

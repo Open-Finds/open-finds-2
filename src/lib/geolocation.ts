@@ -33,6 +33,23 @@ function toFailure(err: GeolocationPositionError): GeolocationFailure {
 }
 
 /**
+ * The phone's rough position, only if the user has already allowed location for the app: never asks, never waits long,
+ * and is rounded to about 1 km. Null otherwise. Used to rank place searches near the user (a hint, not a filter).
+ */
+export async function quietLocation(): Promise<Coord | null> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.geolocation || !navigator.permissions?.query) return null;
+    const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+    if (status.state !== 'granted') return null;
+    const pos = await ask({ enableHighAccuracy: false, timeout: 3000, maximumAge: 30 * 60 * 1000 });
+    const round = (value: number) => Math.round(value * 100) / 100;
+    return { lat: round(pos.coords.latitude), lon: round(pos.coords.longitude) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Where the user is, to suburb accuracy — all a travel-time origin needs.
  *
  * A coarse fix (Wi-Fi / IP) comes back in a second or two on laptops and phones

@@ -1,7 +1,7 @@
 import { displayTags, tagLabel } from '../lib/taxonomy';
 import { UnconfirmedAddressMark } from './UnconfirmedAddressMark';
 import { useState } from 'react';
-import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2, Trash2, BookmarkCheck } from 'lucide-react';
+import { MapPin, Pencil, Save, X, Plus, Tag, Folder, Check, Star, CheckCircle2, Trash2 } from 'lucide-react';
 import {
   deleteSavedVenue,
   updateSavedVenue,
@@ -350,7 +350,6 @@ export function SavedVenueCard({
           <MapPin size={13} className="mt-1 shrink-0 text-muted-foreground" /> {venue.address}{(venue.lat == null || venue.lon == null) && <UnconfirmedAddressMark />}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {!readOnly && <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2.5 py-0.5 text-xs font-medium text-info"><BookmarkCheck size={11} />Saved</span>}
           {/* Visited, rating and note are the owner's own; other members don't see them. */}
           {!readOnly && venue.visited && (
             <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success-soft px-2.5 py-0.5 text-xs font-medium text-success"><CheckCircle2 size={11} /> Visited</span>

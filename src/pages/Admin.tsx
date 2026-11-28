@@ -6,8 +6,8 @@ import {
 import {
   fetchAdminPartners, adminUpdatePartner, adminDeletePartner,
   fetchTeam, setTeamRole, setCommission, fetchVisitRate, setVisitRate, fetchPayouts, recordPayout, deletePayout,
-  partnerStatus, isManagerRole, ROLE_LABELS,
-  type AdminPartner, type AppRole, type Payout, type TeamMember, type PartnerStatus,
+  partnerStatus, isManagerRole, ROLE_LABELS, fetchAiUsageSummary,
+  type AiUsageSummary, type AdminPartner, type AppRole, type Payout, type TeamMember, type PartnerStatus,
 } from '../lib/supabase';
 import { navigate } from '../lib/router';
 import { useAuth } from '../context/AuthContext';
@@ -15,17 +15,19 @@ import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { AppSelect } from '../components/ui/select';
 import { PartnerForm } from '../components/PartnerForm';
+import { AiSaveResultsPanel } from '../components/AiSaveResultsPanel';
 import { MyVenuesPage } from './MyVenues';
 import { Badge, Figure, RatingLine, Stat, StatusBadge } from '../components/PartnerBits';
 import { money, typeWithIcon } from '../lib/partners';
 import { cn } from '../lib/utils';
 
-type Tab = 'overview' | 'approvals' | 'venues' | 'team';
+type Tab = 'overview' | 'approvals' | 'venues' | 'team' | 'results';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'approvals', label: 'Approvals' },
   { key: 'venues', label: 'Venues' },
   { key: 'team', label: 'Team' },
+  { key: 'results', label: 'AI Save results' },
 ];
 const goTab = (t: Tab) => navigate(t === 'overview' ? '/admin' : `/admin/${t}`);
 
@@ -53,7 +55,9 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
   const { role, profileLoaded } = useAuth();
   const isAdmin = role === 'admin';
   const canManage = isManagerRole(role);
-  const tab: Tab = TABS.some((t) => t.key === tabParam) ? (tabParam as Tab) : 'overview';
+  // The AI Save results are for admins only (the database enforces it too).
+  const tabs = TABS.filter((t) => t.key !== 'results' || isAdmin);
+  const tab: Tab = tabs.some((t) => t.key === tabParam) ? (tabParam as Tab) : 'overview';
 
   const [partners, setPartners] = useState<AdminPartner[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -139,7 +143,7 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
             {/* Sections. Sticky so they're always one tap away. */}
             <nav aria-label="Admin sections" className="sticky top-0 z-30 -mx-4 mb-6 overflow-x-auto bg-background px-4 py-3 sm:-mx-6 sm:px-6">
               <div className="flex gap-2">
-                {TABS.map((t) => (
+                {tabs.map((t) => (
                   <button
                     key={t.key}
                     onClick={() => goTab(t.key)}
@@ -186,6 +190,8 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
                 onTogglePause={(p) => act(p.id, () => adminUpdatePartner(p.id, { active: !p.active }))}
                 onDelete={(p) => act(p.id, () => adminDeletePartner(p.id))}
               />
+            ) : tab === 'results' ? (
+              <AiSaveResultsPanel />
             ) : (
               <TeamTab team={team} payouts={payouts} isAdmin={isAdmin} onChanged={load} />
             )}
@@ -220,6 +226,40 @@ export function AdminPage({ tab: tabParam, onBack }: { tab?: string; onBack: () 
 
 /* ── Overview ─────────────────────────────────────────────── */
 
+/** Admin only: what the AI calls have used and cost, for pricing decisions. */
+function AiUsagePanel() {
+  const [usage, setUsage] = useState<AiUsageSummary | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    fetchAiUsageSummary(30).then(setUsage).catch(() => setFailed(true));
+  }, []);
+  const usd = (value: number) => `$${value.toFixed(2)}`;
+  return (
+    <section className="mb-6 rounded-lg border border-border bg-card p-5">
+      <h2 className="mb-3 text-sm font-bold text-foreground">AI usage, last 30 days</h2>
+      {failed ? <p className="text-sm text-destructive-text">Could not load AI usage.</p>
+        : !usage ? <p className="text-sm text-muted-foreground">Loading…</p> : <>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat label="AI calls" value={String(usage.totals.calls)} hint={`${usage.totals.users} people`} />
+            <Stat label="Tokens used" value={usage.totals.tokens.toLocaleString()} />
+            <Stat label="Cost (estimate)" value={usd(usage.totals.cost_usd)} hint="Check against OpenRouter" />
+            <Stat label="Cost per call" value={usd(usage.totals.calls ? usage.totals.cost_usd / usage.totals.calls : 0)} />
+          </div>
+          {usage.by_purpose.length === 0 ? <p className="text-sm text-muted-foreground">No AI calls in this period.</p> : (
+            <ul className="divide-y divide-border text-sm">
+              {usage.by_purpose.map((row) => (
+                <li key={`${row.purpose}-${row.model}`} className="flex flex-wrap justify-between gap-2 py-2">
+                  <span className="font-semibold">{row.purpose} <span className="font-normal text-muted-foreground">· {row.model}</span></span>
+                  <span className="tabular-nums text-muted-foreground">{row.calls} calls · {row.tokens.toLocaleString()} tokens · {usd(row.cost_usd)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>}
+    </section>
+  );
+}
+
 function Overview({ partners, team, isAdmin, onRateChanged }: { partners: AdminPartner[]; team: TeamMember[]; isAdmin: boolean; onRateChanged: () => Promise<void> }) {
   const counts = useMemo(() => {
     const c = { live: 0, pending: 0, rejected: 0, paused: 0 };
@@ -243,6 +283,8 @@ function Overview({ partners, team, isAdmin, onRateChanged }: { partners: AdminP
       </div>
 
       <RateSetting isAdmin={isAdmin} onChanged={onRateChanged} />
+
+      {isAdmin && <AiUsagePanel />}
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5">
         <h2 className="mb-3 text-sm font-bold text-foreground">Pending, approved and rejected</h2>

@@ -327,6 +327,11 @@ function claimAttempt(ctx: Context): Promise<void> {
  * passed. Adds the burst guard, a required attempt id, and the duplicate guard,
  * then runs the handler; paid provider calls claim the attempt inside providerFetch.
  */
+/** Request bodies are small, except AI Save sending up to six shared screenshots (each under 1.5 MB as text). */
+function bodyLimit(operation: string): number {
+  return operation === "ai-proxy" ? 9_500_000 : 65536;
+}
+
 async function openRequest(v: StagingVariant, operation: string, handler: Handler, req: Request, userId: string): Promise<Response> {
   const testing = {
     attempts: setting("STAGING_TESTING_ATTEMPTS", 20, 100, 1),
@@ -340,7 +345,7 @@ async function openRequest(v: StagingVariant, operation: string, handler: Handle
   if (!minute.allowed) {
     throw visibleFailure(429, "user_rate_limit", "You're sending requests too quickly. Try again in a moment.", Math.max(1, minute.retryAfter));
   }
-  const bytes = await boundedBody(req.clone().body, 65536, AbortSignal.timeout(5_000));
+  const bytes = await boundedBody(req.clone().body, bodyLimit(operation), AbortSignal.timeout(operation === "ai-proxy" ? 20_000 : 5_000));
   let body: Record<string, unknown>;
   try {
     body = JSON.parse(new TextDecoder().decode(bytes));
@@ -418,7 +423,7 @@ export function withStagingProviderControls(operation: string, handler: Handler)
       );
       if (!minute.available) throw failure(503, "usage_control_unavailable");
       if (!minute.allowed) throw failure(429, "user_rate_limit");
-      const bytes = await boundedBody(req.clone().body, 65536, AbortSignal.timeout(5_000));
+      const bytes = await boundedBody(req.clone().body, bodyLimit(operation), AbortSignal.timeout(operation === "ai-proxy" ? 20_000 : 5_000));
       let body: Record<string, unknown>;
       try {
         body = JSON.parse(new TextDecoder().decode(bytes));
@@ -485,6 +490,43 @@ function classify(url: URL): Kind {
   return "metadata";
 }
 
+/** One inline screenshot shared to the app: JPEG/PNG/WebP data, already shrunk by the phone. */
+const INLINE_PICTURE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+const MAX_INLINE_PICTURE_CHARS = 1_500_000;
+
+/**
+ * A picture part from AI Save: an https link on Instagram's picture hosts (carousel slides), or an inline screenshot
+ * the user shared (nothing to fetch).
+ */
+function isPicture(part: unknown): boolean {
+  const p = part as { type?: unknown; image_url?: { url?: unknown } } | null;
+  if (!p || p.type !== "image_url" || typeof p.image_url?.url !== "string") return false;
+  const raw = p.image_url.url;
+  if (raw.startsWith("data:")) return raw.length <= MAX_INLINE_PICTURE_CHARS && INLINE_PICTURE.test(raw);
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" && [".cdninstagram.com", ".fbcdn.net"].some((host) => url.hostname.endsWith(host));
+  } catch {
+    return false;
+  }
+}
+
+/** Text, or (a user message only) text parts and pictures. */
+function allowedContent(role: unknown, content: unknown): boolean {
+  if (typeof content === "string") return true;
+  return role === "user" && Array.isArray(content) && content.length > 0 && content.every((part) =>
+    isPicture(part) || (!!part && (part as { type?: unknown }).type === "text" && typeof (part as { text?: unknown }).text === "string"));
+}
+
+/** The messages as sent, with inline screenshots left out: the 8 KB input cap is for text, not pictures. */
+function textSize(messages: unknown[]): number {
+  const strip = (m: { role?: unknown; content?: unknown }) => Array.isArray(m.content)
+    ? { ...m, content: m.content.map((part) => isPicture(part) && String((part as { image_url: { url: string } }).image_url.url).startsWith("data:")
+      ? { type: "image_url" } : part) }
+    : m;
+  return new TextEncoder().encode(JSON.stringify(messages.map((m) => strip(m as { content?: unknown })))).length;
+}
+
 function aiBody(v: StagingVariant, init: RequestInit): string {
   let payload: { messages?: unknown; response_format?: unknown; model?: unknown };
   try {
@@ -494,8 +536,9 @@ function aiBody(v: StagingVariant, init: RequestInit): string {
   }
   const messages = payload.messages;
   if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20 ||
-    messages.some((m) => !m || !["user", "system", "assistant"].includes(m.role) || typeof m.content !== "string") ||
-    new TextEncoder().encode(JSON.stringify(messages)).length > 8e3) throw failure(413, "ai_input_limit");
+    messages.some((m) => !m || !["user", "system", "assistant"].includes(m.role) || !allowedContent(m.role, m.content)) ||
+    messages.reduce((n: number, m: { content: unknown }) => n + (Array.isArray(m.content) ? m.content.filter(isPicture).length : 0), 0) > 6 ||
+    textSize(messages) > 8e3) throw failure(413, "ai_input_limit");
   const responseFormat = payload.response_format ? { response_format: { type: "json_object" } } : {};
   // A request for the plain model (no web search) is the cheap first try: it is sent as asked, never upgraded to a search.
   // Every other request keeps the function's own rewrite.
